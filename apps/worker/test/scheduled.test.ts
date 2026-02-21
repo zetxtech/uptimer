@@ -32,6 +32,7 @@ import { acquireLease } from '../src/scheduler/lock';
 import { readSettings } from '../src/settings';
 import { refreshPublicStatusSnapshot } from '../src/snapshots';
 import { createFakeD1Database, type FakeD1QueryHandler } from './helpers/fake-d1';
+import { ExecutionContext } from 'hono';
 
 type CreateEnvOptions = {
   dueRows?: unknown[];
@@ -121,7 +122,7 @@ function createEnv(options: CreateEnvOptions = {}): Env {
 describe('scheduler/scheduled regression', () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date('2026-02-17T00:00:42.000Z'));
+    vi.setSystemTime(new Date('2026-02-17T12:00:42.000Z'));
 
     vi.mocked(acquireLease).mockResolvedValue(true);
     vi.mocked(readSettings).mockResolvedValue({

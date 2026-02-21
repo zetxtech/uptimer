@@ -4,8 +4,6 @@ import type { Env } from './env';
 import { handleError, handleNotFound } from './middleware/errors';
 import { adminRoutes } from './routes/admin';
 import { publicRoutes } from './routes/public';
-import { runDailyRollup } from './scheduler/daily-rollup';
-import { runRetention } from './scheduler/retention';
 import { runScheduledTick } from './scheduler/scheduled';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -55,12 +53,7 @@ app.route('/api/v1/admin', adminRoutes);
 const worker = {
   fetch: app.fetch,
   scheduled: async (controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
-    if (controller.cron === '0 0 * * *') {
-      await runRetention(env, controller);
-      await runDailyRollup(env, controller, ctx);
-      return;
-    }
-
+    // Note: Retention and daily-rollup are now automatically triggered from inside runScheduledTick
     await runScheduledTick(env, ctx);
   },
 };
@@ -73,19 +66,18 @@ app.get('/_cron/:cronKey', async (c) => {
     return c.json({ error: { code: 'UNAUTHORIZED', message: 'Invalid or missing CRON_KEY' } }, 401);
   }
 
-  const type = c.req.query('type');
   const ctx = c.executionCtx;
 
   // We mock a ScheduledController to reuse the existing scheduler functions
   const controller: ScheduledController = {
-    cron: type === 'daily' ? '0 0 * * *' : '* * * * *',
+    cron: 'manual',
     scheduledTime: Date.now(),
     noRetry: () => {},
   };
 
   await worker.scheduled(controller, c.env, ctx);
 
-  return c.json({ ok: true, type: type === 'daily' ? 'daily' : 'tick' });
+  return c.json({ ok: true });
 });
 
 export default worker;

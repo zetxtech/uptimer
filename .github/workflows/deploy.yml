@@ -231,6 +231,13 @@ jobs:
           if n < 1:
               raise SystemExit("Expected a `name = \"...\"` entry in apps/worker/wrangler.toml")
 
+          import os
+          no_cron = os.environ.get("NO_CRON", "").strip().lower() in ("true", "1", "yes")
+          if no_cron:
+              # Remove crons = [...] line completely
+              text = re.sub(r'(?m)^crons\s*=\s*\[.*?\]\s*$', '', text)
+              print("NO_CRON is set. Removed cron triggers from generated wrangler.toml")
+
           # 2) Patch the first [[d1_databases]] block that matches binding.
           #    Keep other blocks untouched for forward-compat (future resources/envs).
           block_re = re.compile(r'(?ms)^\[\[d1_databases\]\]\s*$.*?(?=^\[\[|^\[[a-zA-Z]|\Z)')

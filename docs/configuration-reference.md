@@ -30,6 +30,7 @@ Source: `.github/workflows/deploy.yml`
 | `UPTIMER_API_ORIGIN`    | Auto-derived              | API origin (e.g. `https://my-worker.example.com`); `/api/v1` appended automatically |
 | `VITE_ADMIN_PATH`       | —                         | Admin dashboard path (overridden by Secret if set)                                  |
 | `UPTIMER_ADMIN_PATH`    | —                         | Fallback variable for `VITE_ADMIN_PATH`                                             |
+| `NO_CRON`               | —                         | If set (e.g., `true`), cron triggers won't be configured on the Worker |
 
 > **API address**: Usually no configuration needed — the workflow detects the Worker URL automatically. Set `UPTIMER_API_BASE` or `UPTIMER_API_ORIGIN` only if the API is on a custom domain. Both accept the same information in different formats; setting one is enough.
 

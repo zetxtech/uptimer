@@ -30,6 +30,7 @@ Uptimer 所有可配置参数，按部署时、运行时、本地开发分类。
 | `UPTIMER_API_ORIGIN`    | 自动推导             | API 源地址（如 `https://my-worker.example.com`）；自动拼接 `/api/v1` |
 | `VITE_ADMIN_PATH`       | —                    | 管理后台路径（可被 Secret 覆盖）                                     |
 | `UPTIMER_ADMIN_PATH`    | —                    | 兼容变量名（`VITE_ADMIN_PATH` 的 fallback）                          |
+| `NO_CRON`               | —                    | 若设置此变量（如 `true`），部署 Worker 时将不会配置 Cron Triggers    |
 
 > **API 地址**：通常无需配置——工作流会自动从 Worker URL 推导。仅当 API 使用自定义域名时，设置 `UPTIMER_API_BASE` 或 `UPTIMER_API_ORIGIN` 其中一个即可，两者只是格式不同。
 

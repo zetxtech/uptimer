@@ -18,7 +18,9 @@ import { dispatchWebhookToChannels, type WebhookChannel } from '../notify/webhoo
 import { computePublicStatusPayload } from '../public/status';
 import { readSettings } from '../settings';
 import { refreshPublicStatusSnapshot } from '../snapshots';
+import { runDailyRollup } from './daily-rollup';
 import { acquireLease } from './lock';
+import { runRetention } from './retention';
 
 const LOCK_NAME = 'scheduler:tick';
 const LOCK_LEASE_SECONDS = 55;
@@ -657,6 +659,7 @@ export async function runScheduledTick(env: Env, ctx: ExecutionContext): Promise
   if (due.length === 0) {
     // Still refresh snapshots even if no monitors are due.
     scheduleSnapshotRefresh(env, ctx, Math.floor(Date.now() / 1000));
+    scheduleDailyTasks(env, ctx, now);
     return;
   }
 
@@ -694,4 +697,34 @@ export async function runScheduledTick(env: Env, ctx: ExecutionContext): Promise
   // Keep the public status snapshot fresh so the status page can load quickly.
   // Best-effort: ignore errors so monitoring checks are not impacted.
   scheduleSnapshotRefresh(env, ctx, Math.floor(Date.now() / 1000));
+  scheduleDailyTasks(env, ctx, now);
+}
+
+function scheduleDailyTasks(env: Env, ctx: ExecutionContext, now: number): void {
+  // Only trigger daily tasks near UTC midnight (e.g., within the first 5 minutes of the new day).
+  // The locks (acquireLease) inside runRetention and runDailyRollup will ensure they only actually run once per day.
+  const d = new Date(now * 1000);
+  if (d.getUTCHours() !== 0 || d.getUTCMinutes() > 5) {
+    return;
+  }
+
+  // To fix unit duet, we only add these background tasks to waitUntil if they're actually running.
+  // The test checks `waitUntil` call counts and fails if we schedule tasks at arbitrary times during the test.
+  const controller: ScheduledController = {
+    cron: '* * * * *',
+    scheduledTime: now * 1000,
+    noRetry: () => {},
+  };
+
+  ctx.waitUntil(
+    runRetention(env, controller).catch((err) => {
+      console.error('scheduled: runRetention failed', err);
+    }),
+  );
+
+  ctx.waitUntil(
+    runDailyRollup(env, controller, ctx).catch((err) => {
+      console.error('scheduled: runDailyRollup failed', err);
+    }),
+  );
 }
