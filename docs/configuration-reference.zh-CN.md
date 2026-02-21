@@ -19,17 +19,17 @@ Uptimer 所有可配置参数，按部署时、运行时、本地开发分类。
 
 ### Variables
 
-| 名称                    | 默认值               | 说明                                        |
-| ----------------------- | -------------------- | ------------------------------------------- |
-| `UPTIMER_PREFIX`        | 仓库名 slug          | 统一资源名前缀                              |
-| `UPTIMER_WORKER_NAME`   | `${UPTIMER_PREFIX}`  | Worker 名称                                 |
-| `UPTIMER_PAGES_PROJECT` | `${UPTIMER_PREFIX}`  | Pages 项目名                                |
-| `UPTIMER_D1_NAME`       | `${UPTIMER_PREFIX}`  | D1 数据库名                                 |
-| `UPTIMER_D1_BINDING`    | `DB`                 | Worker 中 D1 binding 名称                   |
-| `UPTIMER_API_BASE`      | 自动推导或 `/api/v1` | API 地址（如 `https://my-worker.example.com/api/v1` 或 `/api/v1`） |
+| 名称                    | 默认值               | 说明                                                                 |
+| ----------------------- | -------------------- | -------------------------------------------------------------------- |
+| `UPTIMER_PREFIX`        | 仓库名 slug          | 统一资源名前缀                                                       |
+| `UPTIMER_WORKER_NAME`   | `${UPTIMER_PREFIX}`  | Worker 名称                                                          |
+| `UPTIMER_PAGES_PROJECT` | `${UPTIMER_PREFIX}`  | Pages 项目名                                                         |
+| `UPTIMER_D1_NAME`       | `${UPTIMER_PREFIX}`  | D1 数据库名                                                          |
+| `UPTIMER_D1_BINDING`    | `DB`                 | Worker 中 D1 binding 名称                                            |
+| `UPTIMER_API_BASE`      | 自动推导或 `/api/v1` | API 地址（如 `https://my-worker.example.com/api/v1` 或 `/api/v1`）   |
 | `UPTIMER_API_ORIGIN`    | 自动推导             | API 源地址（如 `https://my-worker.example.com`）；自动拼接 `/api/v1` |
-| `VITE_ADMIN_PATH`       | —                    | 管理后台路径（可被 Secret 覆盖）            |
-| `UPTIMER_ADMIN_PATH`    | —                    | 兼容变量名（`VITE_ADMIN_PATH` 的 fallback） |
+| `VITE_ADMIN_PATH`       | —                    | 管理后台路径（可被 Secret 覆盖）                                     |
+| `UPTIMER_ADMIN_PATH`    | —                    | 兼容变量名（`VITE_ADMIN_PATH` 的 fallback）                          |
 
 > **API 地址**：通常无需配置——工作流会自动从 Worker URL 推导。仅当 API 使用自定义域名时，设置 `UPTIMER_API_BASE` 或 `UPTIMER_API_ORIGIN` 其中一个即可，两者只是格式不同。
 
@@ -37,9 +37,14 @@ Uptimer 所有可配置参数，按部署时、运行时、本地开发分类。
 
 ### Secrets
 
-| 名称          | 必需 | 说明                    |
-| ------------- | ---- | ----------------------- |
-| `ADMIN_TOKEN` | 是   | 管理员 API Bearer Token |
+| 名称          | 必需 | 说明                                                             |
+| ------------- | ---- | ---------------------------------------------------------------- |
+| `ADMIN_TOKEN` | 是   | 管理员 API Bearer Token                                          |
+| `CRON_KEY`    | 否   | 用于手动触发 HTTP Cron 的安全密钥，为空则无法通过 HTTP 触发 Cron |
+
+如果设置了 `CRON_KEY`，你可以通过 HTTP 请求手动触发调度任务（例如结合第三方监控使用，或者绕过 Cloudflare 的 Cron 限制）：
+- **触发常规探测**（相当于每分钟执行）：`GET /_cron/<你的_CRON_KEY>`
+- **触发每日清理与统计**（相当于每天 00:00 执行）：`GET /_cron/<你的_CRON_KEY>?type=daily`
 
 ### 环境变量
 

@@ -52,7 +52,7 @@ app.get('/', (c) => c.text('ok'));
 app.route('/api/v1/public', publicRoutes);
 app.route('/api/v1/admin', adminRoutes);
 
-export default {
+const worker = {
   fetch: app.fetch,
   scheduled: async (controller: ScheduledController, env: Env, ctx: ExecutionContext) => {
     if (controller.cron === '0 0 * * *') {
@@ -64,3 +64,28 @@ export default {
     await runScheduledTick(env, ctx);
   },
 };
+
+app.get('/_cron/:cronKey', async (c) => {
+  const cronKey = c.req.param('cronKey');
+  const envCronKey = c.env.CRON_KEY;
+
+  if (!envCronKey || cronKey !== envCronKey) {
+    return c.json({ error: { code: 'UNAUTHORIZED', message: 'Invalid or missing CRON_KEY' } }, 401);
+  }
+
+  const type = c.req.query('type');
+  const ctx = c.executionCtx;
+
+  // We mock a ScheduledController to reuse the existing scheduler functions
+  const controller: ScheduledController = {
+    cron: type === 'daily' ? '0 0 * * *' : '* * * * *',
+    scheduledTime: Date.now(),
+    noRetry: () => {},
+  };
+
+  await worker.scheduled(controller, c.env, ctx);
+
+  return c.json({ ok: true, type: type === 'daily' ? 'daily' : 'tick' });
+});
+
+export default worker;

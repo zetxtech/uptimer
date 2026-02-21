@@ -19,17 +19,17 @@ Source: `.github/workflows/deploy.yml`
 
 ### Variables
 
-| Name                    | Default                   | Description                                        |
-| ----------------------- | ------------------------- | -------------------------------------------------- |
-| `UPTIMER_PREFIX`        | Repository name slug      | Unified resource name prefix                       |
-| `UPTIMER_WORKER_NAME`   | `${UPTIMER_PREFIX}`       | Worker name                                        |
-| `UPTIMER_PAGES_PROJECT` | `${UPTIMER_PREFIX}`       | Pages project name                                 |
-| `UPTIMER_D1_NAME`       | `${UPTIMER_PREFIX}`       | D1 database name                                   |
-| `UPTIMER_D1_BINDING`    | `DB`                      | D1 binding name in Worker                          |
-| `UPTIMER_API_BASE`      | Auto-derived or `/api/v1` | API address (e.g. `https://my-worker.example.com/api/v1` or `/api/v1`) |
+| Name                    | Default                   | Description                                                                         |
+| ----------------------- | ------------------------- | ----------------------------------------------------------------------------------- |
+| `UPTIMER_PREFIX`        | Repository name slug      | Unified resource name prefix                                                        |
+| `UPTIMER_WORKER_NAME`   | `${UPTIMER_PREFIX}`       | Worker name                                                                         |
+| `UPTIMER_PAGES_PROJECT` | `${UPTIMER_PREFIX}`       | Pages project name                                                                  |
+| `UPTIMER_D1_NAME`       | `${UPTIMER_PREFIX}`       | D1 database name                                                                    |
+| `UPTIMER_D1_BINDING`    | `DB`                      | D1 binding name in Worker                                                           |
+| `UPTIMER_API_BASE`      | Auto-derived or `/api/v1` | API address (e.g. `https://my-worker.example.com/api/v1` or `/api/v1`)              |
 | `UPTIMER_API_ORIGIN`    | Auto-derived              | API origin (e.g. `https://my-worker.example.com`); `/api/v1` appended automatically |
-| `VITE_ADMIN_PATH`       | —                         | Admin dashboard path (overridden by Secret if set) |
-| `UPTIMER_ADMIN_PATH`    | —                         | Fallback variable for `VITE_ADMIN_PATH`            |
+| `VITE_ADMIN_PATH`       | —                         | Admin dashboard path (overridden by Secret if set)                                  |
+| `UPTIMER_ADMIN_PATH`    | —                         | Fallback variable for `VITE_ADMIN_PATH`                                             |
 
 > **API address**: Usually no configuration needed — the workflow detects the Worker URL automatically. Set `UPTIMER_API_BASE` or `UPTIMER_API_ORIGIN` only if the API is on a custom domain. Both accept the same information in different formats; setting one is enough.
 
@@ -37,9 +37,14 @@ Source: `.github/workflows/deploy.yml`
 
 ### Secrets
 
-| Name          | Required | Description            |
-| ------------- | -------- | ---------------------- |
-| `ADMIN_TOKEN` | Yes      | Admin API Bearer Token |
+| Name          | Required | Description                                                                                 |
+| ------------- | -------- | ------------------------------------------------------------------------------------------- |
+| `ADMIN_TOKEN` | Yes      | Admin API Bearer Token                                                                      |
+| `CRON_KEY`    | No       | Security key for manually triggering HTTP crons. If empty, HTTP cron triggers are disabled. |
+
+If `CRON_KEY` is set, you can manually trigger scheduled tasks via HTTP requests (e.g., using third-party monitoring or bypassing Cloudflare's cron limits):
+- **Trigger routine checks** (equivalent to minutely tick): `GET /_cron/<YOUR_CRON_KEY>`
+- **Trigger daily retention & rollup** (equivalent to daily 00:00 tick): `GET /_cron/<YOUR_CRON_KEY>?type=daily`
 
 ### Environment Variables
 

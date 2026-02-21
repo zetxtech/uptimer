@@ -1,6 +1,9 @@
 # Copy to .dev.vars and fill in your admin token for local development.
 ADMIN_TOKEN=changeme
 
+# Secret key for HTTP cron triggers. Only needed if you plan to manually trigger crons.
+CRON_KEY=changeme_cron_key
+
 # Best-effort, in-memory rate limit for /api/v1/admin/*
 ADMIN_RATE_LIMIT_MAX=60
 ADMIN_RATE_LIMIT_WINDOW_SEC=60
