@@ -21,6 +21,12 @@ vi.mock('../src/snapshots', () => ({
 vi.mock('../src/notify/webhook', () => ({
   dispatchWebhookToChannels: vi.fn(),
 }));
+vi.mock('../src/scheduler/daily-rollup', () => ({
+  runDailyRollup: vi.fn(),
+}));
+vi.mock('../src/scheduler/retention', () => ({
+  runRetention: vi.fn(),
+}));
 
 import type { Env } from '../src/env';
 import { runHttpCheck } from '../src/monitor/http';
@@ -29,6 +35,8 @@ import { dispatchWebhookToChannels } from '../src/notify/webhook';
 import { computePublicStatusPayload } from '../src/public/status';
 import { runScheduledTick } from '../src/scheduler/scheduled';
 import { acquireLease } from '../src/scheduler/lock';
+import { runDailyRollup } from '../src/scheduler/daily-rollup';
+import { runRetention } from '../src/scheduler/retention';
 import { readSettings } from '../src/settings';
 import { refreshPublicStatusSnapshot } from '../src/snapshots';
 import { createFakeD1Database, type FakeD1QueryHandler } from './helpers/fake-d1';
@@ -139,6 +147,8 @@ describe('scheduler/scheduled regression', () => {
     });
     vi.mocked(refreshPublicStatusSnapshot).mockResolvedValue(undefined);
     vi.mocked(dispatchWebhookToChannels).mockResolvedValue(undefined);
+    vi.mocked(runDailyRollup).mockResolvedValue(undefined);
+    vi.mocked(runRetention).mockResolvedValue(undefined);
     vi.mocked(runHttpCheck).mockResolvedValue({
       status: 'up',
       latencyMs: 21,
@@ -594,5 +604,175 @@ describe('scheduler/scheduled regression', () => {
         channels: [expect.objectContaining({ id: 10 })],
       }),
     );
+  });
+
+  it('schedules daily tasks at UTC midnight and handles their errors', async () => {
+    vi.setSystemTime(new Date('2026-02-18T00:02:42.000Z'));
+    const env = createEnv({ dueRows: [] });
+    const waitUntil = vi.fn();
+
+    vi.mocked(runRetention).mockRejectedValue(new Error('retention failed'));
+    vi.mocked(runDailyRollup).mockRejectedValue(new Error('rollup failed'));
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await runScheduledTick(env, { waitUntil } as unknown as ExecutionContext);
+
+    // 1 call for refreshPublicStatusSnapshot, 2 for daily tasks
+    expect(waitUntil).toHaveBeenCalledTimes(3);
+
+    // Call noRetry to cover the empty function
+    const controller = vi.mocked(runRetention).mock.calls[0]?.[1];
+    expect(controller).toBeDefined();
+    if (controller && controller.noRetry) {
+      controller.noRetry();
+    }
+
+    // Await the promises passed to waitUntil to trigger the catch blocks
+    for (const call of waitUntil.mock.calls) {
+      const p = call[0];
+      if (p instanceof Promise) {
+        await p;
+      }
+    }
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith('scheduled: runRetention failed', expect.any(Error));
+    expect(consoleErrorSpy).toHaveBeenCalledWith('scheduled: runDailyRollup failed', expect.any(Error));
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('handles errors in background tasks and checks', async () => {
+    vi.setSystemTime(new Date('2026-02-17T12:00:42.000Z'));
+    const env = createEnv({
+      dueRows: [
+        {
+          id: 501,
+          name: 'Error Monitor',
+          type: 'http',
+          target: 'https://error.example.com',
+          interval_sec: 60,
+          timeout_ms: 5000,
+          http_method: 'GET',
+          http_headers_json: null,
+          http_body: null,
+          expected_status_json: null,
+          response_keyword: null,
+          response_forbidden_keyword: null,
+          state_status: 'up',
+          state_last_error: null,
+          last_changed_at: 1700000000,
+          consecutive_failures: 1,
+          consecutive_successes: 0,
+        },
+      ],
+      channels: [
+        {
+          id: 20,
+          name: 'err_channel',
+          config_json: JSON.stringify({ url: 'http://err' }),
+          created_at: 0,
+        },
+      ],
+      startedWindows: [
+        {
+          id: 2,
+          title: 'Err Window Started',
+          message: null,
+          starts_at: 0,
+          ends_at: 10000000000,
+          created_at: 0,
+        },
+      ],
+      endedWindows: [
+        {
+          id: 3,
+          title: 'Err Window Ended',
+          message: null,
+          starts_at: 0,
+          ends_at: 0,
+          created_at: 0,
+        },
+      ],
+    });
+
+    const waitUntil = vi.fn();
+
+    vi.mocked(runHttpCheck).mockResolvedValue({
+      status: 'down',
+      latencyMs: 120,
+      httpStatus: 500,
+      error: 'down error',
+      attempts: 1,
+    });
+    vi.mocked(refreshPublicStatusSnapshot).mockRejectedValue(new Error('snapshot refresh err'));
+    vi.mocked(dispatchWebhookToChannels).mockRejectedValue(new Error('webhook dispatch err'));
+
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    await runScheduledTick(env, { waitUntil } as unknown as ExecutionContext);
+
+    // Wait for all background tasks triggered by waitUntil
+    for (const call of waitUntil.mock.calls) {
+      const p = call[0];
+      if (p instanceof Promise) {
+        await p;
+      }
+    }
+
+    expect(consoleWarnSpy).toHaveBeenCalledWith('scheduled: status snapshot refresh failed', expect.any(Error));
+    expect(consoleErrorSpy).toHaveBeenCalledWith('notify: failed to dispatch maintenance.started', expect.any(Error));
+    expect(consoleErrorSpy).toHaveBeenCalledWith('notify: failed to dispatch maintenance.ended', expect.any(Error));
+    
+    // Also since monitor check fails, it should emit down, triggering a webhook dispatch error
+    expect(consoleErrorSpy).toHaveBeenCalledWith('notify: failed to dispatch webhooks', expect.any(Error));
+
+    consoleErrorSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
+  });
+
+  it('handles runDueMonitor rejection', async () => {
+    vi.setSystemTime(new Date('2026-02-17T12:00:42.000Z'));
+    const env = createEnv({
+      dueRows: [
+        {
+          id: 601,
+          name: 'Crash Monitor',
+          type: 'http',
+          target: 'https://crash.example.com',
+          interval_sec: 60,
+          timeout_ms: 5000,
+          http_method: 'GET',
+          http_headers_json: null,
+          http_body: null,
+          expected_status_json: null,
+          response_keyword: null,
+          response_forbidden_keyword: null,
+          state_status: 'up',
+          state_last_error: null,
+          last_changed_at: 1700000000,
+          consecutive_failures: 1,
+          consecutive_successes: 0,
+        },
+      ],
+      // Use an interceptor to cause DB batch to fail, 
+      // which will cause persistCheckAndState and thus runDueMonitor to reject.
+      onRun: () => {
+        throw new Error('db err');
+      }
+    });
+
+    const waitUntil = vi.fn();
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await runScheduledTick(env, { waitUntil } as unknown as ExecutionContext);
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('scheduled: 1/1 monitors failed'),
+      expect.objectContaining({ reason: expect.any(Error) })
+    );
+
+    consoleErrorSpy.mockRestore();
   });
 });
