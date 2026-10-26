@@ -99,6 +99,16 @@ const UPTIME_DAYS = 30;
 
 const HEARTBEAT_POINTS = 60;
 
+// The (monitor_id, checked_at) index lets SQLite walk the newest rows of one monitor and stop
+// at the limit, so the read cost stays proportional to HEARTBEAT_POINTS.
+const HEARTBEAT_QUERY = `
+  SELECT monitor_id, checked_at, status, latency_ms
+  FROM check_results
+  WHERE monitor_id = ?1
+  ORDER BY checked_at DESC, id DESC
+  LIMIT ?2
+`;
+
 function appendMapValue<K, V>(map: Map<K, V[]>, key: K, value: V): void {
   const existing = map.get(key);
   if (existing) {
@@ -211,39 +221,21 @@ async function listHeartbeatsByMonitorId(
   const ids = [...new Set(monitorIds)].filter((id) => Number.isFinite(id));
   if (ids.length === 0) return byMonitor;
 
-  // Use a window function to cap each monitor partition to N rows.
-  // NOTE: check_results has an index (monitor_id, checked_at) to keep this efficient.
-  const placeholders = ids.map((_, idx) => `?${idx + 2}`).join(', ');
-  const sql = `
-    SELECT monitor_id, checked_at, status, latency_ms
-    FROM (
-      SELECT
-        id,
-        monitor_id,
-        checked_at,
-        status,
-        latency_ms,
-        ROW_NUMBER() OVER (
-          PARTITION BY monitor_id
-          ORDER BY checked_at DESC, id DESC
-        ) AS rn
-      FROM check_results
-      WHERE monitor_id IN (${placeholders})
-    )
-    WHERE rn <= ?1
-    ORDER BY monitor_id, checked_at DESC, id DESC
-  `;
+  // One capped, index-backed query per monitor instead of a single ROW_NUMBER() partition scan.
+  // A window function has to materialize every historical row of each monitor partition before
+  // `rn <= N` can filter anything, so its cost grew with the retention window instead of with
+  // HEARTBEAT_POINTS and dominated the D1 read quota on the per-minute snapshot refresh.
+  const statements = ids.map((id) => db.prepare(HEARTBEAT_QUERY).bind(id, limitPerMonitor));
 
-  const { results } = await db
-    .prepare(sql)
-    .bind(limitPerMonitor, ...ids)
-    .all<HeartbeatRow>();
-  for (const r of results ?? []) {
-    appendMapValue(byMonitor, r.monitor_id, {
-      checked_at: r.checked_at,
-      status: toCheckStatus(r.status),
-      latency_ms: r.latency_ms,
-    });
+  const results = await db.batch<HeartbeatRow>(statements);
+  for (const result of results) {
+    for (const r of result.results ?? []) {
+      appendMapValue(byMonitor, r.monitor_id, {
+        checked_at: r.checked_at,
+        status: toCheckStatus(r.status),
+        latency_ms: r.latency_ms,
+      });
+    }
   }
 
   return byMonitor;

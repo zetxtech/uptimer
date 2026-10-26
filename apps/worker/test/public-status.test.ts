@@ -3,6 +3,19 @@ import { describe, expect, it } from 'vitest';
 import { computePublicStatusPayload } from '../src/public/status';
 import { createFakeD1Database, type FakeD1QueryHandler } from './helpers/fake-d1';
 
+type HeartbeatSeedRow = {
+  monitor_id: number;
+  checked_at: number;
+  status: string;
+  latency_ms: number | null;
+};
+
+// Heartbeats are read with one capped query per monitor, so the fake answers per monitor_id
+// instead of handing every partition to whichever query matched first.
+function heartbeatsFor(rows: HeartbeatSeedRow[]) {
+  return (args: unknown[]) => rows.filter((row) => row.monitor_id === Number(args[0]));
+}
+
 describe('public/status payload regression', () => {
   it('keeps monitor heartbeats and uptime data stable when parallel reads are used', async () => {
     const now = 1_728_000_000;
@@ -35,11 +48,11 @@ describe('public/status payload regression', () => {
         first: (args) => (args[0] === 'uptime_rating_level' ? { value: '4' } : null),
       },
       {
-        match: 'row_number() over',
-        all: () => [
+        match: 'from check_results where monitor_id = ?1',
+        all: heartbeatsFor([
           { monitor_id: 11, checked_at: now - 60, status: 'up', latency_ms: 80 },
           { monitor_id: 11, checked_at: now - 120, status: 'down', latency_ms: null },
-        ],
+        ]),
       },
       {
         match: 'from monitor_daily_rollups',
@@ -243,11 +256,11 @@ describe('public/status payload regression', () => {
         first: (args) => (args[0] === 'uptime_rating_level' ? { value: '3' } : null),
       },
       {
-        match: 'row_number() over',
-        all: () => [
+        match: 'from check_results where monitor_id = ?1',
+        all: heartbeatsFor([
           { monitor_id: 11, checked_at: now - 60, status: 'up', latency_ms: 50 },
           { monitor_id: 12, checked_at: now - 120, status: 'up', latency_ms: 70 },
-        ],
+        ]),
       },
       {
         match: 'from monitor_daily_rollups',
@@ -340,8 +353,10 @@ describe('public/status payload regression', () => {
         first: (args) => (args[0] === 'uptime_rating_level' ? { value: '3' } : null),
       },
       {
-        match: 'row_number() over',
-        all: () => [{ monitor_id: 11, checked_at: now - 60, status: 'up', latency_ms: 50 }],
+        match: 'from check_results where monitor_id = ?1',
+        all: heartbeatsFor([
+          { monitor_id: 11, checked_at: now - 60, status: 'up', latency_ms: 50 },
+        ]),
       },
       {
         match: 'from monitor_daily_rollups',
@@ -420,8 +435,10 @@ describe('public/status payload regression', () => {
         first: (args) => (args[0] === 'uptime_rating_level' ? { value: '3' } : null),
       },
       {
-        match: 'row_number() over',
-        all: () => [{ monitor_id: 12, checked_at: now - 60, status: 'up', latency_ms: 50 }],
+        match: 'from check_results where monitor_id = ?1',
+        all: heartbeatsFor([
+          { monitor_id: 12, checked_at: now - 60, status: 'up', latency_ms: 50 },
+        ]),
       },
       {
         match: 'from monitor_daily_rollups',
@@ -518,11 +535,11 @@ describe('public/status payload regression', () => {
         first: (args) => (args[0] === 'uptime_rating_level' ? { value: '3' } : null),
       },
       {
-        match: 'row_number() over',
-        all: () => [
+        match: 'from check_results where monitor_id = ?1',
+        all: heartbeatsFor([
           { monitor_id: 11, checked_at: now - 60, status: 'up', latency_ms: 50 },
           { monitor_id: 12, checked_at: roundedPreCreationCheckAt, status: 'up', latency_ms: 70 },
-        ],
+        ]),
       },
       {
         match: 'from monitor_daily_rollups',
@@ -615,13 +632,13 @@ describe('public/status payload regression', () => {
         first: (args) => (args[0] === 'uptime_rating_level' ? { value: '3' } : null),
       },
       {
-        match: 'row_number() over',
-        all: () => [
+        match: 'from check_results where monitor_id = ?1',
+        all: heartbeatsFor([
           { monitor_id: 11, checked_at: now - 60, status: 'up', latency_ms: 50 },
           { monitor_id: 12, checked_at: newMonitorCreatedAt + 270, status: 'up', latency_ms: 70 },
           { monitor_id: 12, checked_at: newMonitorCreatedAt + 150, status: 'up', latency_ms: 70 },
           { monitor_id: 12, checked_at: newMonitorCreatedAt + 90, status: 'up', latency_ms: 70 },
-        ],
+        ]),
       },
       {
         match: 'from monitor_daily_rollups',

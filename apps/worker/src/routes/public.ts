@@ -442,19 +442,9 @@ publicRoutes.get('/status', async (c) => {
     const res = c.json(snapshot.data);
     applyStatusCacheHeaders(res, snapshot.age);
 
-    // If we're close to the freshness boundary, trigger a background refresh.
-    if (snapshot.age >= 30) {
-      c.executionCtx.waitUntil(
-        (async () => {
-          const refreshedAt = Math.floor(Date.now() / 1000);
-          const payload = await computePublicStatusPayload(c.env.DB, refreshedAt);
-          await writeStatusSnapshot(c.env.DB, refreshedAt, payload);
-        })().catch((err) => {
-          console.warn('public snapshot: refresh failed', err);
-        }),
-      );
-    }
-
+    // Snapshot refreshes are owned by the scheduled tick. Readers must not trigger their own
+    // recomputation: a busy status page would otherwise multiply full payload computes and
+    // their D1 read cost. Missing or stale snapshots are handled below.
     return res;
   }
   try {
@@ -865,7 +855,10 @@ publicRoutes.get('/monitors/:id/uptime', async (c) => {
     .bind(id, checksStart, rangeEnd)
     .all<{ checked_at: number; status: string }>();
 
-  const checks = (checkRows ?? []).map((r) => ({ checked_at: r.checked_at, status: toCheckStatus(r.status) }));
+  const checks = (checkRows ?? []).map((r) => ({
+    checked_at: r.checked_at,
+    status: toCheckStatus(r.status),
+  }));
   const effectiveRangeStart = resolveUptimeRangeStart(
     rangeStart,
     rangeEnd,
@@ -975,7 +968,10 @@ async function computePartialUptimeTotals(
     .bind(monitorId, checksStart, rangeEnd)
     .all<{ checked_at: number; status: string }>();
 
-  const checks = (checkRows ?? []).map((r) => ({ checked_at: r.checked_at, status: toCheckStatus(r.status) }));
+  const checks = (checkRows ?? []).map((r) => ({
+    checked_at: r.checked_at,
+    status: toCheckStatus(r.status),
+  }));
   const effectiveRangeStart = resolveUptimeRangeStart(
     rangeStart,
     rangeEnd,

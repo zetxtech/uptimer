@@ -55,7 +55,9 @@ class FakePreparedStatement {
   }
 
   async all<T = unknown>(): Promise<{ results: T[] }> {
-    const handler = this.handlers.find((item) => item.all && matchesQuery(this.normalizedSql, item.match));
+    const handler = this.handlers.find(
+      (item) => item.all && matchesQuery(this.normalizedSql, item.match),
+    );
     if (!handler || !handler.all) {
       throw new Error(`No fake D1 all() handler matched SQL: ${this.sql}`);
     }
@@ -74,8 +76,35 @@ class FakePreparedStatement {
     return (row ?? null) as T | null;
   }
 
+  /**
+   * batch() resolves a statement without help from the caller: handlers with run() keep the
+   * write path, SELECT statements fall back to their all() handler.
+   */
+  async batchResult<T = unknown>(): Promise<D1Result<T>> {
+    const runHandler = this.handlers.find(
+      (item) => item.run && matchesQuery(this.normalizedSql, item.match),
+    );
+    if (runHandler) return this.run<T>();
+
+    const allHandler = this.handlers.find(
+      (item) => item.all && matchesQuery(this.normalizedSql, item.match),
+    );
+    if (!allHandler || !allHandler.all) {
+      throw new Error(`No fake D1 batch() handler matched SQL: ${this.sql}`);
+    }
+
+    const rows = await allHandler.all(this.args, this.normalizedSql);
+    return {
+      success: true,
+      results: (rows ?? []) as T[],
+      meta: {},
+    } as unknown as D1Result<T>;
+  }
+
   async run<T = unknown>(): Promise<D1Result<T>> {
-    const handler = this.handlers.find((item) => item.run && matchesQuery(this.normalizedSql, item.match));
+    const handler = this.handlers.find(
+      (item) => item.run && matchesQuery(this.normalizedSql, item.match),
+    );
     if (!handler || !handler.run) {
       throw new Error(`No fake D1 run() handler matched SQL: ${this.sql}`);
     }
@@ -89,10 +118,7 @@ class FakePreparedStatement {
       } as unknown as D1Result<T>;
     }
 
-    const meta =
-      outcome?.meta !== undefined
-        ? { ...outcome.meta }
-        : {};
+    const meta = outcome?.meta !== undefined ? { ...outcome.meta } : {};
 
     return {
       success: outcome?.success ?? true,
@@ -110,6 +136,12 @@ export function createFakeD1Database(handlers: FakeD1QueryHandler[]): D1Database
     async batch<T = unknown>(statements: D1PreparedStatement[]) {
       const results: D1Result<T>[] = [];
       for (const statement of statements) {
+        const prepared = statement as unknown as { batchResult?: <R>() => Promise<D1Result<R>> };
+        if (typeof prepared.batchResult === 'function') {
+          results.push(await prepared.batchResult<T>());
+          continue;
+        }
+
         const run = (statement as { run?: () => Promise<D1Result<T>> }).run;
         if (!run) {
           throw new Error('Fake D1 batch() received a statement without run()');
