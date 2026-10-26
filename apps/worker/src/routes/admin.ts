@@ -4,7 +4,9 @@ import { z } from 'zod';
 import {
   asc,
   eq,
+  type CustomWebhookChannelConfig,
   expectedStatusJsonSchema,
+  forbiddenStatusJsonSchema,
   getDb,
   httpHeadersJsonSchema,
   monitors,
@@ -13,6 +15,8 @@ import {
   parseDbJsonNullable,
   serializeDbJson,
   serializeDbJsonNullable,
+  type TelegramChannelConfig,
+  type WebhookChannelConfig,
   webhookChannelConfigSchema,
 } from '@uptimer/db';
 
@@ -20,9 +24,19 @@ import type { Env } from '../env';
 import { requireAdmin } from '../middleware/auth';
 import { AppError } from '../middleware/errors';
 import { requireAdminRateLimit } from '../middleware/rate-limit';
-import { computePublicStatusPayload } from '../public/status';
-import { refreshPublicStatusSnapshot } from '../snapshots';
+import { computePublicHomepagePayload } from '../public/homepage';
+import {
+  bumpHomepageIncidentGuardVersion,
+  bumpHomepageMaintenanceGuardVersion,
+  bumpHomepageMonitorGuardVersions,
+  bumpHomepageSettingsGuardVersion,
+} from '../public/homepage-guard-state';
+import { refreshPublicHomepageSnapshotIfNeeded } from '../snapshots';
 import { runHttpCheck } from '../monitor/http';
+import {
+  validateHttpResponseAssertionConfig,
+  type HttpResponseMatchMode,
+} from '../monitor/http-assertions';
 import { validateHttpTarget, validateTcpTarget } from '../monitor/targets';
 import { runTcpCheck } from '../monitor/tcp';
 import {
@@ -30,6 +44,7 @@ import {
   dispatchWebhookToChannels,
   type WebhookChannel,
 } from '../notify/webhook';
+import { encryptTelegramBotToken } from '../notify/telegram-token';
 import { adminAnalyticsRoutes } from './admin-analytics';
 import { adminExportsRoutes } from './admin-exports';
 import { adminSettingsRoutes } from './admin-settings';
@@ -51,6 +66,8 @@ import {
 import {
   createNotificationChannelInputSchema,
   patchNotificationChannelInputSchema,
+  type TelegramChannelCreateInput,
+  type TelegramChannelPatchInput,
 } from '../schemas/notification-channels';
 
 export const adminRoutes = new Hono<{ Bindings: Env }>();
@@ -73,15 +90,17 @@ adminRoutes.route('/analytics', adminAnalyticsRoutes);
 adminRoutes.route('/exports', adminExportsRoutes);
 adminRoutes.route('/settings', adminSettingsRoutes);
 
-function queuePublicStatusSnapshotRefresh(c: { env: Env; executionCtx: ExecutionContext }) {
+function queuePublicHomepageSnapshotRefresh(c: { env: Env; executionCtx: ExecutionContext }) {
   const now = Math.floor(Date.now() / 1000);
   c.executionCtx.waitUntil(
-    refreshPublicStatusSnapshot({
+    refreshPublicHomepageSnapshotIfNeeded({
       db: c.env.DB,
       now,
-      compute: () => computePublicStatusPayload(c.env.DB, Math.floor(Date.now() / 1000)),
+      force: true,
+      seedDataSnapshot: true,
+      compute: () => computePublicHomepagePayload(c.env.DB, Math.floor(Date.now() / 1000)),
     }).catch((err) => {
-      console.warn('public snapshot: refresh failed', err);
+      console.warn('homepage snapshot: refresh failed', err);
     }),
   );
 }
@@ -89,6 +108,25 @@ function queuePublicStatusSnapshotRefresh(c: { env: Env; executionCtx: Execution
 function normalizeMonitorGroupName(groupName: string | null | undefined): string | null {
   const trimmed = groupName?.trim() ?? '';
   return trimmed.length > 0 ? trimmed : null;
+}
+
+function normalizeAssertionModeForStorage(
+  value: string | null | undefined,
+  mode: HttpResponseMatchMode | null | undefined,
+): HttpResponseMatchMode | null {
+  return typeof value === 'string' ? (mode ?? null) : null;
+}
+
+function throwOnInvalidHttpResponseAssertionConfig(input: {
+  responseKeyword: string | null | undefined;
+  responseKeywordMode: HttpResponseMatchMode | null | undefined;
+  responseForbiddenKeyword: string | null | undefined;
+  responseForbiddenKeywordMode: HttpResponseMatchMode | null | undefined;
+}) {
+  const issues = validateHttpResponseAssertionConfig(input);
+  if (issues.length === 0) return;
+
+  throw new AppError(400, 'INVALID_ARGUMENT', issues[0]!.message);
 }
 
 async function findGroupSortOrder(
@@ -230,6 +268,7 @@ function monitorRowToApi(
     name: row.name,
     type: row.type,
     target: row.target,
+    display_url: row.displayUrl,
     interval_sec: row.intervalSec,
     timeout_ms: row.timeoutMs,
     http_method: row.httpMethod,
@@ -237,14 +276,21 @@ function monitorRowToApi(
       field: 'http_headers_json',
     }),
     http_body: row.httpBody,
+    follow_redirects: row.followRedirects,
     expected_status_json: parseDbJsonNullable(expectedStatusJsonSchema, row.expectedStatusJson, {
       field: 'expected_status_json',
     }),
+    forbidden_status_json: parseDbJsonNullable(forbiddenStatusJsonSchema, row.forbiddenStatusJson, {
+      field: 'forbidden_status_json',
+    }),
     response_keyword: row.responseKeyword,
+    response_keyword_mode: row.responseKeywordMode,
     response_forbidden_keyword: row.responseForbiddenKeyword,
+    response_forbidden_keyword_mode: row.responseForbiddenKeywordMode,
     group_name: groupName,
     group_sort_order: row.groupSortOrder,
     sort_order: row.sortOrder,
+    show_on_status_page: row.showOnStatusPage,
     is_active: row.isActive,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
@@ -297,7 +343,8 @@ adminRoutes.post('/monitors/groups/reorder', async (c) => {
     .bind(...binds)
     .run();
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageMonitorGuardVersions(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({
     updated_groups: groups.length,
@@ -334,7 +381,8 @@ adminRoutes.post('/monitors/groups/assign', async (c) => {
     await syncGroupSortOrder(c.env.DB, targetGroupName, targetGroupSortOrder, now);
   }
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageMonitorGuardVersions(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({
     group_name: targetGroupName,
@@ -371,7 +419,8 @@ adminRoutes.put('/settings/uptime-rating', async (c) => {
     .bind('uptime_rating_level', String(input.uptime_rating_level))
     .run();
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageSettingsGuardVersion(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ uptime_rating_level: input.uptime_rating_level });
 });
@@ -394,6 +443,7 @@ adminRoutes.post('/monitors', async (c) => {
       name: input.name,
       type: input.type,
       target: input.target,
+      displayUrl: input.display_url ?? null,
       intervalSec: input.interval_sec ?? 60,
       timeoutMs: input.timeout_ms ?? 10000,
 
@@ -405,19 +455,45 @@ adminRoutes.post('/monitors', async (c) => {
             })
           : null,
       httpBody: input.type === 'http' ? (input.http_body ?? null) : null,
+      followRedirects: input.type === 'http' ? (input.follow_redirects ?? true) : true,
       expectedStatusJson:
         input.type === 'http'
           ? serializeDbJsonNullable(expectedStatusJsonSchema, input.expected_status_json ?? null, {
               field: 'expected_status_json',
             })
           : null,
+      forbiddenStatusJson:
+        input.type === 'http'
+          ? serializeDbJsonNullable(
+              forbiddenStatusJsonSchema,
+              input.forbidden_status_json ?? null,
+              {
+                field: 'forbidden_status_json',
+              },
+            )
+          : null,
       responseKeyword: input.type === 'http' ? (input.response_keyword ?? null) : null,
+      responseKeywordMode:
+        input.type === 'http'
+          ? normalizeAssertionModeForStorage(
+              input.response_keyword ?? null,
+              input.response_keyword_mode,
+            )
+          : null,
       responseForbiddenKeyword:
         input.type === 'http' ? (input.response_forbidden_keyword ?? null) : null,
+      responseForbiddenKeywordMode:
+        input.type === 'http'
+          ? normalizeAssertionModeForStorage(
+              input.response_forbidden_keyword ?? null,
+              input.response_forbidden_keyword_mode,
+            )
+          : null,
 
       groupName,
       groupSortOrder,
       sortOrder: input.sort_order ?? 0,
+      showOnStatusPage: input.show_on_status_page ?? true,
       isActive: input.is_active ?? true,
       createdAt: now,
       updatedAt: now,
@@ -429,7 +505,8 @@ adminRoutes.post('/monitors', async (c) => {
     await syncGroupSortOrder(c.env.DB, groupName, groupSortOrder, now, inserted.id);
   }
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageMonitorGuardVersions(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ monitor: monitorRowToApi(inserted, null) }, 201);
 });
@@ -464,9 +541,13 @@ adminRoutes.patch('/monitors/:id', async (c) => {
       'http_method',
       'http_headers_json',
       'http_body',
+      'follow_redirects',
       'expected_status_json',
+      'forbidden_status_json',
       'response_keyword',
+      'response_keyword_mode',
       'response_forbidden_keyword',
+      'response_forbidden_keyword_mode',
     ] as const;
     for (const field of httpFields) {
       if (input[field] !== undefined) {
@@ -488,12 +569,38 @@ adminRoutes.patch('/monitors/:id', async (c) => {
     input.group_sort_order !== undefined
       ? input.group_sort_order
       : ((await findGroupSortOrder(c.env.DB, nextGroupName)) ?? existing.groupSortOrder);
+  const nextResponseKeyword =
+    input.response_keyword !== undefined ? input.response_keyword : existing.responseKeyword;
+  const nextResponseKeywordMode = normalizeAssertionModeForStorage(
+    nextResponseKeyword,
+    input.response_keyword_mode !== undefined
+      ? input.response_keyword_mode
+      : existing.responseKeywordMode,
+  );
+  const nextResponseForbiddenKeyword =
+    input.response_forbidden_keyword !== undefined
+      ? input.response_forbidden_keyword
+      : existing.responseForbiddenKeyword;
+  const nextResponseForbiddenKeywordMode = normalizeAssertionModeForStorage(
+    nextResponseForbiddenKeyword,
+    input.response_forbidden_keyword_mode !== undefined
+      ? input.response_forbidden_keyword_mode
+      : existing.responseForbiddenKeywordMode,
+  );
+
+  throwOnInvalidHttpResponseAssertionConfig({
+    responseKeyword: nextResponseKeyword,
+    responseKeywordMode: nextResponseKeywordMode,
+    responseForbiddenKeyword: nextResponseForbiddenKeyword,
+    responseForbiddenKeywordMode: nextResponseForbiddenKeywordMode,
+  });
 
   const updated = await db
     .update(monitors)
     .set({
       name: input.name ?? existing.name,
       target: input.target ?? existing.target,
+      displayUrl: input.display_url !== undefined ? input.display_url : existing.displayUrl,
       intervalSec: input.interval_sec ?? existing.intervalSec,
       timeoutMs: input.timeout_ms ?? existing.timeoutMs,
       httpMethod: input.http_method !== undefined ? input.http_method : existing.httpMethod,
@@ -504,21 +611,28 @@ adminRoutes.patch('/monitors/:id', async (c) => {
             })
           : existing.httpHeadersJson,
       httpBody: input.http_body !== undefined ? input.http_body : existing.httpBody,
+      followRedirects:
+        input.follow_redirects !== undefined ? input.follow_redirects : existing.followRedirects,
       expectedStatusJson:
         input.expected_status_json !== undefined
           ? serializeDbJsonNullable(expectedStatusJsonSchema, input.expected_status_json, {
               field: 'expected_status_json',
             })
           : existing.expectedStatusJson,
-      responseKeyword:
-        input.response_keyword !== undefined ? input.response_keyword : existing.responseKeyword,
-      responseForbiddenKeyword:
-        input.response_forbidden_keyword !== undefined
-          ? input.response_forbidden_keyword
-          : existing.responseForbiddenKeyword,
+      forbiddenStatusJson:
+        input.forbidden_status_json !== undefined
+          ? serializeDbJsonNullable(forbiddenStatusJsonSchema, input.forbidden_status_json, {
+              field: 'forbidden_status_json',
+            })
+          : existing.forbiddenStatusJson,
+      responseKeyword: nextResponseKeyword,
+      responseKeywordMode: nextResponseKeywordMode,
+      responseForbiddenKeyword: nextResponseForbiddenKeyword,
+      responseForbiddenKeywordMode: nextResponseForbiddenKeywordMode,
       groupName: nextGroupName,
       groupSortOrder: nextGroupSortOrder,
       sortOrder: input.sort_order ?? existing.sortOrder,
+      showOnStatusPage: input.show_on_status_page ?? existing.showOnStatusPage,
       isActive: input.is_active ?? existing.isActive,
       updatedAt: now,
     })
@@ -534,7 +648,8 @@ adminRoutes.patch('/monitors/:id', async (c) => {
     await syncGroupSortOrder(c.env.DB, nextGroupName, nextGroupSortOrder, now, updated.id);
   }
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageMonitorGuardVersions(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ monitor: monitorRowToApi(updated, null) });
 });
@@ -562,7 +677,8 @@ adminRoutes.delete('/monitors/:id', async (c) => {
     c.env.DB.prepare('DELETE FROM monitors WHERE id = ?1').bind(id),
   ]);
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageMonitorGuardVersions(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ deleted: true });
 });
@@ -587,11 +703,17 @@ adminRoutes.post('/monitors/:id/test', async (c) => {
         field: 'http_headers_json',
       }),
       body: monitor.httpBody,
+      followRedirects: monitor.followRedirects,
       expectedStatus: parseDbJsonNullable(expectedStatusJsonSchema, monitor.expectedStatusJson, {
         field: 'expected_status_json',
       }),
+      forbiddenStatus: parseDbJsonNullable(forbiddenStatusJsonSchema, monitor.forbiddenStatusJson, {
+        field: 'forbidden_status_json',
+      }),
       responseKeyword: monitor.responseKeyword,
+      responseKeywordMode: monitor.responseKeywordMode,
       responseForbiddenKeyword: monitor.responseForbiddenKeyword,
+      responseForbiddenKeywordMode: monitor.responseForbiddenKeywordMode,
     });
   } else {
     outcome = await runTcpCheck({
@@ -660,7 +782,8 @@ adminRoutes.post('/monitors/:id/pause', async (c) => {
 
   const state = await db.select().from(monitorState).where(eq(monitorState.monitorId, id)).get();
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageMonitorGuardVersions(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ monitor: monitorRowToApi(monitor, state ?? null) });
 });
@@ -702,7 +825,8 @@ adminRoutes.post('/monitors/:id/resume', async (c) => {
 
   const state = await db.select().from(monitorState).where(eq(monitorState.monitorId, id)).get();
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageMonitorGuardVersions(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ monitor: monitorRowToApi(monitor, state ?? null) });
 });
@@ -716,12 +840,106 @@ type NotificationChannelRow = {
   created_at: number;
 };
 
+type NotificationChannelInputConfig =
+  | CustomWebhookChannelConfig
+  | TelegramChannelCreateInput
+  | TelegramChannelPatchInput;
+
+type TelegramApiChannelConfig = Omit<TelegramChannelConfig, 'bot_token_encrypted'> & {
+  bot_token_configured: boolean;
+  bot_token_source: 'stored' | 'secret_ref';
+};
+
+type NotificationChannelApiConfig = CustomWebhookChannelConfig | TelegramApiChannelConfig;
+
+function isTelegramInputConfig(
+  config: NotificationChannelInputConfig,
+): config is TelegramChannelCreateInput | TelegramChannelPatchInput {
+  return config.preset === 'telegram';
+}
+
+function isTelegramStoredConfig(
+  config: WebhookChannelConfig | undefined,
+): config is TelegramChannelConfig {
+  return config?.preset === 'telegram';
+}
+
+async function normalizeNotificationConfigForStorage(
+  env: Env,
+  inputConfig: NotificationChannelInputConfig,
+  existingConfig?: WebhookChannelConfig,
+): Promise<WebhookChannelConfig> {
+  if (!isTelegramInputConfig(inputConfig)) {
+    return inputConfig;
+  }
+
+  const {
+    bot_token: botToken,
+    bot_token_secret_ref: botTokenSecretRef,
+    ...telegramConfig
+  } = inputConfig;
+  const baseTelegramConfig = isTelegramStoredConfig(existingConfig) ? existingConfig : undefined;
+
+  if (botToken) {
+    const adminToken = env.ADMIN_TOKEN?.trim();
+    if (!adminToken) {
+      throw new AppError(500, 'INTERNAL', 'Admin token not configured');
+    }
+
+    return {
+      ...telegramConfig,
+      bot_token_encrypted: await encryptTelegramBotToken(adminToken, botToken),
+    };
+  }
+
+  if (botTokenSecretRef) {
+    return {
+      ...telegramConfig,
+      bot_token_secret_ref: botTokenSecretRef,
+    };
+  }
+
+  if (baseTelegramConfig?.bot_token_encrypted) {
+    return {
+      ...telegramConfig,
+      bot_token_encrypted: baseTelegramConfig.bot_token_encrypted,
+    };
+  }
+
+  if (baseTelegramConfig?.bot_token_secret_ref) {
+    return {
+      ...telegramConfig,
+      bot_token_secret_ref: baseTelegramConfig.bot_token_secret_ref,
+    };
+  }
+
+  throw new AppError(400, 'INVALID_ARGUMENT', 'Telegram bot token is required');
+}
+
+function sanitizeNotificationConfigForApi(
+  config: WebhookChannelConfig,
+): NotificationChannelApiConfig {
+  if (!isTelegramStoredConfig(config)) {
+    return config;
+  }
+
+  const { bot_token_encrypted: encryptedToken, ...telegramConfig } = config;
+
+  return {
+    ...telegramConfig,
+    bot_token_configured: Boolean(encryptedToken || telegramConfig.bot_token_secret_ref),
+    bot_token_source: telegramConfig.bot_token_secret_ref ? 'secret_ref' : 'stored',
+  };
+}
+
 function notificationChannelRowToApi(row: NotificationChannelRow) {
+  const config = parseDbJson(webhookChannelConfigSchema, row.config_json, { field: 'config_json' });
+
   return {
     id: row.id,
     name: row.name,
     type: row.type,
-    config_json: parseDbJson(webhookChannelConfigSchema, row.config_json, { field: 'config_json' }),
+    config_json: sanitizeNotificationConfigForApi(config),
     is_active: row.is_active === 1,
     created_at: row.created_at,
   };
@@ -759,7 +977,8 @@ adminRoutes.post('/notification-channels', async (c) => {
 
   const now = Math.floor(Date.now() / 1000);
   const isActive = input.is_active ?? true;
-  const configJson = serializeDbJson(webhookChannelConfigSchema, input.config_json, {
+  const storageConfig = await normalizeNotificationConfigForStorage(c.env, input.config_json);
+  const configJson = serializeDbJson(webhookChannelConfigSchema, storageConfig, {
     field: 'config_json',
   });
 
@@ -805,9 +1024,16 @@ adminRoutes.patch('/notification-channels/:id', async (c) => {
   const nextName = input.name ?? existing.name;
   const nextIsActive =
     input.is_active !== undefined ? (input.is_active ? 1 : 0) : existing.is_active;
+  const existingConfig = parseDbJson(webhookChannelConfigSchema, existing.config_json, {
+    field: 'config_json',
+  });
   const nextConfigJson =
     input.config_json !== undefined
-      ? serializeDbJson(webhookChannelConfigSchema, input.config_json, { field: 'config_json' })
+      ? serializeDbJson(
+          webhookChannelConfigSchema,
+          await normalizeNotificationConfigForStorage(c.env, input.config_json, existingConfig),
+          { field: 'config_json' },
+        )
       : existing.config_json;
 
   const updated = await c.env.DB.prepare(
@@ -1299,7 +1525,8 @@ adminRoutes.post('/incidents', async (c) => {
     }),
   );
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageIncidentGuardVersion(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ incident: incidentRowToApi(row, [], monitorIds) }, 201);
 });
@@ -1400,7 +1627,8 @@ adminRoutes.post('/incidents/:id/updates', async (c) => {
     }),
   );
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageIncidentGuardVersion(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({
     incident: incidentRowToApi(incidentRow, [], monitorIds),
@@ -1506,7 +1734,8 @@ adminRoutes.patch('/incidents/:id/resolve', async (c) => {
     }),
   );
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageIncidentGuardVersion(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({
     incident: incidentRowToApi(incidentRow, [], monitorIds),
@@ -1552,7 +1781,8 @@ adminRoutes.delete('/incidents/:id', async (c) => {
     ).bind(id),
   ]);
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageIncidentGuardVersion(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ deleted: true });
 });
@@ -1627,7 +1857,8 @@ adminRoutes.post('/maintenance-windows', async (c) => {
     await c.env.DB.batch(linkStatements);
   }
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageMaintenanceGuardVersion(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ maintenance_window: maintenanceWindowRowToApi(row, monitorIds) }, 201);
 });
@@ -1710,7 +1941,8 @@ adminRoutes.patch('/maintenance-windows/:id', async (c) => {
 
   const monitorIdsByWindowId = await listMaintenanceWindowMonitorIdsByWindowId(c.env.DB, [id]);
   const monitorIds = monitorIdsByWindowId.get(id) ?? [];
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageMaintenanceGuardVersion(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ maintenance_window: maintenanceWindowRowToApi(updated, monitorIds) });
 });
@@ -1747,7 +1979,8 @@ adminRoutes.delete('/maintenance-windows/:id', async (c) => {
     ).bind(id),
   ]);
 
-  queuePublicStatusSnapshotRefresh(c);
+  await bumpHomepageMaintenanceGuardVersion(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ deleted: true });
 });

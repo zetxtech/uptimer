@@ -1,6 +1,15 @@
 export type TimeZone = string;
 export type Locale = string;
 
+export function getBrowserTimeZone(): TimeZone | undefined {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone?.trim();
+    return tz ? tz : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 function resolveLocale(locale?: Locale): Locale | undefined {
   if (locale && locale.trim().length > 0) return locale;
   if (typeof document === 'undefined') return undefined;

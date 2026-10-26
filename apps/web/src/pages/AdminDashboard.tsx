@@ -217,7 +217,10 @@ function formatMonitorDisplayName(monitor: Pick<AdminMonitor, 'id' | 'name'>): s
   return `${monitor.name} (#${monitor.id})`;
 }
 
-function formatMonitorDisplayNameById(monitorId: number, monitorNameById: Map<number, string>): string {
+function formatMonitorDisplayNameById(
+  monitorId: number,
+  monitorNameById: Map<number, string>,
+): string {
   const monitorName = monitorNameById.get(monitorId);
   return monitorName ? `${monitorName} (#${monitorId})` : `#${monitorId}`;
 }
@@ -1101,10 +1104,7 @@ export function AdminDashboard() {
               <Card className="p-3 border-red-200 bg-red-50/70 dark:bg-red-500/10 dark:border-red-400/30">
                 <div className="text-sm font-medium text-red-700 dark:text-red-300">
                   {t('admin_dashboard.monitor_test_failed', {
-                    name: formatMonitorDisplayNameById(
-                      monitorTestError.monitorId,
-                      monitorNameById,
-                    ),
+                    name: formatMonitorDisplayNameById(monitorTestError.monitorId, monitorNameById),
                   })}
                 </div>
                 <div className="mt-1 text-xs text-red-600 dark:text-red-400">
@@ -1499,11 +1499,16 @@ export function AdminDashboard() {
                                       />
                                     </td>
                                     <td className="px-3 sm:px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-100">
-                                      <div className="flex items-center gap-1.5">
+                                      <div className="flex flex-wrap items-center gap-1.5">
                                         <span className="truncate">{m.name}</span>
                                         <span className="text-xs font-normal text-slate-500 dark:text-slate-400">
                                           #{m.id}
                                         </span>
+                                        {!m.show_on_status_page && (
+                                          <Badge variant="unknown">
+                                            {t('admin_dashboard.monitor_visibility_hidden')}
+                                          </Badge>
+                                        )}
                                       </div>
                                     </td>
                                     <td className="px-3 sm:px-4 py-3 text-xs text-slate-600 dark:text-slate-300">
@@ -1518,8 +1523,19 @@ export function AdminDashboard() {
                                     <td className="px-3 sm:px-4 py-3">
                                       <Badge variant="info">{m.type}</Badge>
                                     </td>
-                                    <td className="max-w-[160px] truncate px-3 py-3 text-sm text-slate-500 dark:text-slate-400 sm:max-w-[220px] sm:px-4">
-                                      {m.target}
+                                    <td className="max-w-[160px] px-3 py-3 text-sm text-slate-500 dark:text-slate-400 sm:max-w-[220px] sm:px-4">
+                                      <div className="truncate">{m.target}</div>
+                                      {m.display_url && (
+                                        <a
+                                          href={m.display_url}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="mt-0.5 block truncate text-xs text-slate-700 underline decoration-slate-300 underline-offset-2 hover:text-slate-950 dark:text-slate-300 dark:decoration-slate-600 dark:hover:text-slate-50"
+                                          title={m.display_url}
+                                        >
+                                          {t('common.display_url')}: {m.display_url}
+                                        </a>
+                                      )}
                                     </td>
                                     <td className="px-3 sm:px-4 py-3">
                                       <div className="flex items-center gap-2">
@@ -1763,7 +1779,7 @@ export function AdminDashboard() {
                           {t('common.type')}
                         </th>
                         <th className="px-3 sm:px-4 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
-                          {t('common.url')}
+                          {t('common.target')}
                         </th>
                         <th className="px-3 sm:px-4 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide">
                           {t('common.actions')}
@@ -1780,10 +1796,16 @@ export function AdminDashboard() {
                             {ch.name}
                           </td>
                           <td className="px-3 sm:px-4 py-3">
-                            <Badge variant="info">{ch.type}</Badge>
+                            <Badge variant="info">
+                              {ch.config_json.preset === 'telegram'
+                                ? t('notification_form.preset_telegram')
+                                : ch.type}
+                            </Badge>
                           </td>
                           <td className="px-3 sm:px-4 py-3 text-sm text-slate-500 dark:text-slate-400 truncate max-w-[200px]">
-                            {ch.config_json.url}
+                            {ch.config_json.preset === 'telegram'
+                              ? `${t('notification_form.preset_telegram')}: ${ch.config_json.chat_id}`
+                              : ch.config_json.url}
                           </td>
                           <td className="px-3 sm:px-4 py-3 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1 sm:gap-0">

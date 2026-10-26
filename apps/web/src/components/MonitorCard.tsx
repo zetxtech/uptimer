@@ -1,6 +1,11 @@
 import { useMemo } from 'react';
 
-import type { PublicMonitor } from '../api/types';
+import type {
+  HomepageHeartbeatStrip,
+  HomepageMonitorCard,
+  PublicMonitor,
+  UptimeRatingLevel,
+} from '../api/types';
 import { useI18n } from '../app/I18nContext';
 import { statusLabel } from '../i18n/labels';
 import { HeartbeatBar } from './HeartbeatBar';
@@ -18,14 +23,56 @@ import {
 const HEARTBEAT_BARS = 60;
 const AVAILABILITY_BARS = 60;
 
+type PublicMonitorLike = Pick<
+  PublicMonitor,
+  | 'id'
+  | 'name'
+  | 'type'
+  | 'display_url'
+  | 'status'
+  | 'is_stale'
+  | 'last_checked_at'
+  | 'heartbeats'
+  | 'uptime_30d'
+  | 'uptime_days'
+>;
+
+type HomepageMonitorLike = Pick<
+  HomepageMonitorCard,
+  | 'id'
+  | 'name'
+  | 'type'
+  | 'display_url'
+  | 'status'
+  | 'is_stale'
+  | 'last_checked_at'
+  | 'heartbeat_strip'
+  | 'uptime_30d'
+  | 'uptime_day_strip'
+>;
+
+type MonitorLike = PublicMonitorLike | HomepageMonitorLike;
+
 export interface MonitorCardProps {
-  monitor: PublicMonitor;
+  monitor: MonitorLike;
+  ratingLevel: UptimeRatingLevel;
   timeZone: string;
   onSelect: () => void;
   onDayClick: (dayStartAt: number) => void;
 }
 
-function getHeartbeatLatencyStats(heartbeats: PublicMonitor['heartbeats']): {
+function hasHomepageStrips(monitor: MonitorLike): monitor is HomepageMonitorLike {
+  return 'heartbeat_strip' in monitor && 'uptime_day_strip' in monitor;
+}
+
+function hasPublicTimeseries(monitor: MonitorLike): monitor is PublicMonitorLike {
+  return 'heartbeats' in monitor && 'uptime_days' in monitor;
+}
+
+function getHeartbeatLatencyStats(
+  heartbeats: PublicMonitor['heartbeats'] | undefined,
+  heartbeatStrip: HomepageHeartbeatStrip | undefined,
+): {
   fastestMs: number | null;
   avgMs: number | null;
   slowestMs: number | null;
@@ -35,15 +82,28 @@ function getHeartbeatLatencyStats(heartbeats: PublicMonitor['heartbeats']): {
   let latencySum = 0;
   let latencyCount = 0;
 
-  for (const hb of heartbeats) {
-    if (hb.status !== 'up') continue;
-    if (typeof hb.latency_ms !== 'number' || !Number.isFinite(hb.latency_ms)) continue;
+  if (Array.isArray(heartbeats)) {
+    for (const hb of heartbeats) {
+      if (hb.status !== 'up') continue;
+      if (typeof hb.latency_ms !== 'number' || !Number.isFinite(hb.latency_ms)) continue;
 
-    const latency = hb.latency_ms;
-    if (latency < fastestMs) fastestMs = latency;
-    if (latency > slowestMs) slowestMs = latency;
-    latencySum += latency;
-    latencyCount++;
+      const latency = hb.latency_ms;
+      if (latency < fastestMs) fastestMs = latency;
+      if (latency > slowestMs) slowestMs = latency;
+      latencySum += latency;
+      latencyCount++;
+    }
+  } else if (heartbeatStrip) {
+    for (let index = 0; index < heartbeatStrip.status_codes.length; index += 1) {
+      if (heartbeatStrip.status_codes[index] !== 'u') continue;
+      const latency = heartbeatStrip.latency_ms[index];
+      if (typeof latency !== 'number' || !Number.isFinite(latency)) continue;
+
+      if (latency < fastestMs) fastestMs = latency;
+      if (latency > slowestMs) slowestMs = latency;
+      latencySum += latency;
+      latencyCount++;
+    }
   }
 
   if (latencyCount === 0) {
@@ -55,7 +115,13 @@ function getHeartbeatLatencyStats(heartbeats: PublicMonitor['heartbeats']): {
   return { fastestMs, avgMs, slowestMs };
 }
 
-export function MonitorCard({ monitor, onSelect, onDayClick, timeZone }: MonitorCardProps) {
+export function MonitorCard({
+  monitor,
+  ratingLevel,
+  onSelect,
+  onDayClick,
+  timeZone,
+}: MonitorCardProps) {
   const { locale, t } = useI18n();
   const uptime30d = monitor.uptime_30d;
   const checkedAt = monitor.last_checked_at
@@ -63,12 +129,16 @@ export function MonitorCard({ monitor, onSelect, onDayClick, timeZone }: Monitor
       ? formatTime(monitor.last_checked_at, { timeZone, locale })
       : formatTime(monitor.last_checked_at, { locale })
     : t('monitor_card.never_checked');
+  const heartbeatStrip = hasHomepageStrips(monitor) ? monitor.heartbeat_strip : undefined;
+  const uptimeDayStrip = hasHomepageStrips(monitor) ? monitor.uptime_day_strip : undefined;
+  const heartbeats = hasPublicTimeseries(monitor) ? monitor.heartbeats : undefined;
+  const uptimeDays = hasPublicTimeseries(monitor) ? monitor.uptime_days : undefined;
   const latencyStats = useMemo(
-    () => getHeartbeatLatencyStats(monitor.heartbeats ?? []),
-    [monitor.heartbeats],
+    () => getHeartbeatLatencyStats(heartbeats, heartbeatStrip),
+    [heartbeatStrip, heartbeats],
   );
 
-  const tier = uptime30d ? getUptimeTier(uptime30d.uptime_pct, monitor.uptime_rating_level) : null;
+  const tier = uptime30d ? getUptimeTier(uptime30d.uptime_pct, ratingLevel) : null;
 
   return (
     <Card hover onClick={onSelect} className="p-3 sm:p-4">
@@ -80,6 +150,18 @@ export function MonitorCard({ monitor, onSelect, onDayClick, timeZone }: Monitor
             <h3 className="truncate text-base font-semibold leading-tight text-slate-900 dark:text-slate-100">
               {monitor.name}
             </h3>
+            {monitor.display_url && (
+              <a
+                href={monitor.display_url}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) => event.stopPropagation()}
+                className="mt-0.5 block truncate text-xs text-slate-500 underline decoration-slate-300 underline-offset-2 hover:text-slate-900 dark:text-slate-400 dark:decoration-slate-600 dark:hover:text-slate-100"
+                title={monitor.display_url}
+              >
+                {monitor.display_url}
+              </a>
+            )}
             <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
               <span>{monitor.type}</span>
               {monitor.is_stale && (
@@ -107,14 +189,15 @@ export function MonitorCard({ monitor, onSelect, onDayClick, timeZone }: Monitor
         </div>
       </div>
 
-      {/* Availability (30d) */}
+      {/* Availability (60d) */}
       <div>
         <div className="mb-2 text-[11px] text-slate-400 dark:text-slate-500">
           {t('monitor_card.availability_30d')}
         </div>
         <UptimeBar30d
-          days={monitor.uptime_days}
-          ratingLevel={monitor.uptime_rating_level}
+          days={uptimeDays}
+          strip={uptimeDayStrip}
+          ratingLevel={ratingLevel}
           maxBars={AVAILABILITY_BARS}
           timeZone={timeZone}
           onDayClick={onDayClick}
@@ -128,7 +211,8 @@ export function MonitorCard({ monitor, onSelect, onDayClick, timeZone }: Monitor
           {t('monitor_card.last_checks', { count: HEARTBEAT_BARS })}
         </div>
         <HeartbeatBar
-          heartbeats={monitor.heartbeats ?? []}
+          heartbeats={heartbeats}
+          strip={heartbeatStrip}
           maxBars={HEARTBEAT_BARS}
           density="compact"
         />

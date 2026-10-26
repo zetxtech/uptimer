@@ -417,7 +417,7 @@ VALUES
     CAST(strftime('%s','now') AS INTEGER) - 2400
   );
 
--- 7) Settings + 30-day rollup samples (status page/admin analytics warm start).
+-- 7) Settings + 60-day rollup samples (status page/admin analytics warm start).
 INSERT OR REPLACE INTO settings (key, value) VALUES ('site_title', 'Uptimer Local Demo');
 INSERT OR REPLACE INTO settings (key, value) VALUES ('site_description', '');
 INSERT OR REPLACE INTO settings (key, value) VALUES ('site_timezone', 'UTC');
@@ -437,7 +437,7 @@ WITH RECURSIVE day_seq(i, day_start) AS (
     i + 1,
     day_start - 86400
   FROM day_seq
-  WHERE i < 29
+  WHERE i < 59
 )
 INSERT INTO monitor_daily_rollups (
   monitor_id,
@@ -487,7 +487,7 @@ WITH RECURSIVE day_seq(i, day_start) AS (
     i + 1,
     day_start - 86400
   FROM day_seq
-  WHERE i < 29
+  WHERE i < 59
 )
 INSERT INTO monitor_daily_rollups (
   monitor_id,

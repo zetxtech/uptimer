@@ -8,7 +8,7 @@ import { ApiError, fetchPublicMaintenanceWindows, fetchStatus } from '../api/cli
 import type { MaintenanceWindow } from '../api/types';
 import { Markdown } from '../components/Markdown';
 import { Button, Card, ThemeToggle } from '../components/ui';
-import { formatDateTime } from '../utils/datetime';
+import { formatDateTime, getBrowserTimeZone } from '../utils/datetime';
 
 function formatError(err: unknown): string | undefined {
   if (!err) return undefined;
@@ -24,7 +24,7 @@ export function MaintenanceHistoryPage() {
   const [nextCursor, setNextCursor] = useState<number | null>(null);
 
   const statusQuery = useQuery({ queryKey: ['status'], queryFn: fetchStatus });
-  const timeZone = statusQuery.data?.site_timezone ?? 'UTC';
+  const timeZone = getBrowserTimeZone() ?? statusQuery.data?.site_timezone ?? 'UTC';
   useApplyServerLocaleSetting(statusQuery.data?.site_locale);
   const monitorNames = useMemo(
     () => new Map((statusQuery.data?.monitors ?? []).map((m) => [m.id, m.name] as const)),

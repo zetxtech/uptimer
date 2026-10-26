@@ -3,14 +3,30 @@ import {
   useContext,
   useState,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   type ReactNode,
 } from 'react';
 
 import { verifyAdminToken } from '../api/client';
+import { queryClient } from './queryClient';
 
 const LS_ADMIN_TOKEN_KEY = 'admin_token';
+const AUTH_SENSITIVE_PUBLIC_QUERY_KEYS = [
+  ['status'],
+  ['latency'],
+  ['public-incidents'],
+  ['public-maintenance-windows'],
+  ['public-day-context'],
+  ['public-monitor-outages'],
+] as const;
+
+function resetAuthSensitivePublicQueries() {
+  for (const key of AUTH_SENSITIVE_PUBLIC_QUERY_KEYS) {
+    queryClient.resetQueries({ queryKey: key });
+  }
+}
 
 type AuthStatus = 'unauthenticated' | 'checking' | 'authenticated';
 
@@ -33,6 +49,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>(() => (token ? 'checking' : 'unauthenticated'));
 
   const verifyInFlight = useRef<Promise<boolean> | null>(null);
+  const didInitTokenSync = useRef(false);
+
+  useEffect(() => {
+    if (!didInitTokenSync.current) {
+      didInitTokenSync.current = true;
+      if (!token) return;
+    }
+
+    resetAuthSensitivePublicQueries();
+  }, [token]);
 
   const logout = useCallback(() => {
     localStorage.removeItem(LS_ADMIN_TOKEN_KEY);

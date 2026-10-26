@@ -4,6 +4,7 @@ export type FakeD1QueryHandler = {
   match: QueryMatcher;
   all?: (args: unknown[], normalizedSql: string) => unknown[] | Promise<unknown[]>;
   first?: (args: unknown[], normalizedSql: string) => unknown | null | Promise<unknown | null>;
+  raw?: (args: unknown[], normalizedSql: string) => unknown[] | Promise<unknown[]>;
   run?: (
     args: unknown[],
     normalizedSql: string,
@@ -45,24 +46,51 @@ class FakePreparedStatement {
   constructor(
     private readonly sql: string,
     private readonly handlers: FakeD1QueryHandler[],
+    normalizedSql?: string,
   ) {
-    this.normalizedSql = normalizeSql(sql);
+    this.normalizedSql = normalizedSql ?? normalizeSql(sql);
   }
 
-  bind(...args: unknown[]): this {
-    this.args = args;
-    return this;
+  bind(...args: unknown[]): FakePreparedStatement {
+    const bound = new FakePreparedStatement(this.sql, this.handlers, this.normalizedSql);
+    bound.args = args;
+    return bound;
   }
 
   async all<T = unknown>(): Promise<{ results: T[] }> {
     const handler = this.handlers.find(
       (item) => item.all && matchesQuery(this.normalizedSql, item.match),
     );
-    if (!handler || !handler.all) {
+    if (handler?.all) {
+      const rows = await handler.all(this.args, this.normalizedSql);
+      return { results: (rows ?? []) as T[] };
+    }
+
+    const firstHandler = this.handlers.find(
+      (item) => item.first && matchesQuery(this.normalizedSql, item.match),
+    );
+    if (!firstHandler?.first) {
       throw new Error(`No fake D1 all() handler matched SQL: ${this.sql}`);
     }
-    const rows = await handler.all(this.args, this.normalizedSql);
-    return { results: (rows ?? []) as T[] };
+
+    const rows: unknown[] = [];
+    if (this.args.length > 0) {
+      for (const arg of this.args) {
+        const row = withSyntheticKey(await firstHandler.first([arg], this.normalizedSql), arg);
+        if (row !== null && row !== undefined) {
+          rows.push(row);
+        }
+      }
+      if (rows.length > 0) {
+        return { results: rows as T[] };
+      }
+    }
+
+    const row = withSyntheticKey(
+      await firstHandler.first(this.args, this.normalizedSql),
+      this.args[0],
+    );
+    return { results: row === null || row === undefined ? [] : ([row] as T[]) };
   }
 
   async first<T = unknown>(): Promise<T | null> {
@@ -76,29 +104,32 @@ class FakePreparedStatement {
     return (row ?? null) as T | null;
   }
 
-  /**
-   * batch() resolves a statement without help from the caller: handlers with run() keep the
-   * write path, SELECT statements fall back to their all() handler.
-   */
-  async batchResult<T = unknown>(): Promise<D1Result<T>> {
-    const runHandler = this.handlers.find(
-      (item) => item.run && matchesQuery(this.normalizedSql, item.match),
+  async raw<T = unknown>(): Promise<T[]> {
+    const rawHandler = this.handlers.find(
+      (item) => item.raw && matchesQuery(this.normalizedSql, item.match),
     );
-    if (runHandler) return this.run<T>();
+    if (rawHandler?.raw) {
+      const rows = await rawHandler.raw(this.args, this.normalizedSql);
+      return (rows ?? []) as T[];
+    }
 
     const allHandler = this.handlers.find(
       (item) => item.all && matchesQuery(this.normalizedSql, item.match),
     );
-    if (!allHandler || !allHandler.all) {
-      throw new Error(`No fake D1 batch() handler matched SQL: ${this.sql}`);
+    if (allHandler?.all) {
+      const rows = await allHandler.all(this.args, this.normalizedSql);
+      return (rows ?? []).map(toRawRow) as T[];
     }
 
-    const rows = await allHandler.all(this.args, this.normalizedSql);
-    return {
-      success: true,
-      results: (rows ?? []) as T[],
-      meta: {},
-    } as unknown as D1Result<T>;
+    const firstHandler = this.handlers.find(
+      (item) => item.first && matchesQuery(this.normalizedSql, item.match),
+    );
+    if (firstHandler?.first) {
+      const row = await firstHandler.first(this.args, this.normalizedSql);
+      return row === null ? [] : ([toRawRow(row)] as T[]);
+    }
+
+    throw new Error(`No fake D1 raw() handler matched SQL: ${this.sql}`);
   }
 
   async run<T = unknown>(): Promise<D1Result<T>> {
@@ -128,6 +159,29 @@ class FakePreparedStatement {
   }
 }
 
+function toRawRow(row: unknown): unknown {
+  if (Array.isArray(row)) {
+    return row;
+  }
+  if (row && typeof row === 'object') {
+    return Object.values(row);
+  }
+  return [row];
+}
+
+function withSyntheticKey(row: unknown, key: unknown): unknown {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) {
+    return row;
+  }
+  if (!('key' in row) && typeof key === 'string') {
+    return {
+      key,
+      ...row,
+    };
+  }
+  return row;
+}
+
 export function createFakeD1Database(handlers: FakeD1QueryHandler[]): D1Database {
   return {
     prepare(sql: string) {
@@ -136,17 +190,36 @@ export function createFakeD1Database(handlers: FakeD1QueryHandler[]): D1Database
     async batch<T = unknown>(statements: D1PreparedStatement[]) {
       const results: D1Result<T>[] = [];
       for (const statement of statements) {
-        const prepared = statement as unknown as { batchResult?: <R>() => Promise<D1Result<R>> };
-        if (typeof prepared.batchResult === 'function') {
-          results.push(await prepared.batchResult<T>());
-          continue;
+        const typed = statement as {
+          run?: () => Promise<D1Result<T>>;
+          all?: () => Promise<{ results: T[] }>;
+        };
+        const run = typed.run;
+        if (run) {
+          try {
+            results.push(await run.call(statement));
+            continue;
+          } catch (err) {
+            if (
+              !(err instanceof Error) ||
+              !err.message.startsWith('No fake D1 run() handler matched SQL:')
+            ) {
+              throw err;
+            }
+          }
         }
 
-        const run = (statement as { run?: () => Promise<D1Result<T>> }).run;
-        if (!run) {
-          throw new Error('Fake D1 batch() received a statement without run()');
+        const all = typed.all;
+        if (!all) {
+          throw new Error('Fake D1 batch() received a statement without run()/all()');
         }
-        results.push(await run.call(statement));
+
+        const outcome = await all.call(statement);
+        results.push({
+          success: true,
+          results: outcome.results ?? [],
+          meta: { changes: 0 },
+        } as unknown as D1Result<T>);
       }
       return results;
     },

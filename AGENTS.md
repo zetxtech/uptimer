@@ -13,8 +13,9 @@ Before making any changes (code, config, or destructive commands), read and unde
 - `Develop/Structure.md` (directory structure & module boundaries)
 - `Develop/Plan.md` (milestones & acceptance criteria)
 - `Develop/API-Reference.md` (Cloudflare / D1 / outbound API reference)
+- `Develop/Local-Development-Experience.md` (local-only, gitignored; required when present; contains operational notes such as token locations, `.env` usage, Tail/Trace sample-rate rules, and Dev/Production workflow caveats)
 
-If documentation conflicts with the current task, stop and align before proceeding.
+If documentation conflicts with the current task, stop and align before proceeding. Never copy secret values from the local-only experience document into tracked files, chat, logs, PRs, or issues.
 
 ---
 
@@ -22,7 +23,8 @@ If documentation conflicts with the current task, stop and align before proceedi
 
 Do not introduce alternative technologies without explicit approval.
 
-- **Frontend (Pages)**: React + Vite + TypeScript + Tailwind + React Router + TanStack Query + Recharts
+- **Frontend**: React + Vite + TypeScript + Tailwind + React Router + TanStack Query + Recharts（默认由 Cloudflare Pages 托管；可选 `UPTIMER_DEPLOY_MODE=single_worker` 时作为 Worker `[assets]` 与 API 同源）
+
 - **Backend (Workers)**: TypeScript + Hono + Zod
 - **Database**: Cloudflare D1 + Drizzle ORM; migrations via Wrangler D1 (SQL)
 - **Auth**: Admin Bearer Token (stored in Workers Secret)
@@ -33,7 +35,8 @@ Any new dependency or service (Queues, DO, R2, etc.) requires a written justific
 
 ## 3. Repository Rules
 
-- **Do not modify** `UptimeFlare/` (reference project, read-only).
+- **Do not modify** the read-only reference project directory.
+- Dual-repo default: `origin` is Main Repo, `dev` is Dev Repo. Main Repo writes (`push`, PR merge, issue comment/close, release edits) and production Cloudflare writes require explicit user authorization. Never push directly to `origin/master`; Main releases must go through PR.
 - All external APIs must follow `Develop/Application.md` conventions (paths, time fields, error format).
 - All input must be validated with Zod at runtime — never trust client or DB JSON fields.
 - All DB writes must use parameterized queries (Drizzle or D1 prepared statements). No SQL concatenation.
@@ -68,6 +71,8 @@ Every change must:
 
 - Monitor targets are controlled SSRF: restrict protocols, deny private/reserved IP ranges by default. Port range 1-65535 is allowed. See `Develop/Application.md` for specifics.
 - Admin Token goes only in Workers Secrets or `.dev.vars` (local). Never in Git, D1, or frontend code.
+- Cloudflare API credentials for local Dev operations are stored in `.env` (gitignored). Load them only for required Wrangler commands; never print, commit, copy into docs, or expose token values in tool output.
+- Local operational notes belong in `Develop/Local-Development-Experience.md` (gitignored) and must record only paths/procedures, never actual secret values.
 - Webhook signing secrets must reference Worker secrets — never store in the database.
 
 ---

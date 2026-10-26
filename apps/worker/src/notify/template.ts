@@ -90,7 +90,7 @@ function toTemplateString(value: unknown): string {
 export function renderStringTemplate(template: string, vars: Record<string, unknown>): string {
   const msg = typeof vars.message === 'string' ? vars.message : '';
 
-  // UptimeFlare compatibility: replace $MSG.
+  // Legacy compatibility: replace $MSG.
   if (template === '$MSG') return msg;
   const withMsg = msg ? template.split('$MSG').join(msg) : template;
 
@@ -149,14 +149,14 @@ export function defaultMessageForEvent(
   switch (eventType) {
     case 'monitor.down': {
       const name = asString(vars, 'monitor.name');
-      const target = asString(vars, 'monitor.target');
+      const displayUrl = asString(vars, 'monitor.display_url');
       const err = asString(vars, 'state.error');
-      return `Monitor DOWN: ${name}${target ? ` (${target})` : ''}${err ? `\nError: ${err}` : ''}`;
+      return `Monitor DOWN: ${name}${displayUrl ? ` (${displayUrl})` : ''}${err ? `\nError: ${err}` : ''}`;
     }
     case 'monitor.up': {
       const name = asString(vars, 'monitor.name');
-      const target = asString(vars, 'monitor.target');
-      return `Monitor UP: ${name}${target ? ` (${target})` : ''}`;
+      const displayUrl = asString(vars, 'monitor.display_url');
+      return `Monitor UP: ${name}${displayUrl ? ` (${displayUrl})` : ''}`;
     }
     case 'incident.created': {
       const title = asString(vars, 'incident.title');

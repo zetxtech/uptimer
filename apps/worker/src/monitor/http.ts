@@ -1,3 +1,11 @@
+import { evaluateHttpStatusCode, type StatusCodeRule } from '@uptimer/db';
+
+import {
+  evaluateHttpResponseAssertions,
+  prepareHttpResponseAssertions,
+  type HttpResponseMatchMode,
+  type PreparedHttpResponseAssertion,
+} from './http-assertions';
 import { validateHttpTarget } from './targets';
 import type { CheckOutcome } from './types';
 
@@ -7,9 +15,13 @@ export type HttpCheckConfig = {
   method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD';
   headers: Record<string, string> | null;
   body: string | null;
-  expectedStatus: number[] | null;
+  followRedirects: boolean;
+  expectedStatus: StatusCodeRule[] | null;
+  forbiddenStatus: StatusCodeRule[] | null;
   responseKeyword: string | null;
+  responseKeywordMode: HttpResponseMatchMode | null;
   responseForbiddenKeyword: string | null;
+  responseForbiddenKeywordMode: HttpResponseMatchMode | null;
 };
 
 const USER_AGENT = 'Uptimer/0.1';
@@ -37,6 +49,16 @@ async function fetchWithTimeout(
   timeoutMs: number,
   init: RequestInit,
 ): Promise<Response> {
+  // Prefer AbortSignal.timeout when available (avoids setTimeout + event listener overhead).
+  const timeoutFn = (AbortSignal as unknown as { timeout?: (ms: number) => AbortSignal }).timeout;
+  const isWorkersRuntime =
+    typeof navigator !== 'undefined' &&
+    typeof navigator.userAgent === 'string' &&
+    navigator.userAgent === 'Cloudflare-Workers';
+  if (isWorkersRuntime && !init.signal && typeof timeoutFn === 'function') {
+    return fetch(url, { ...init, signal: timeoutFn(timeoutMs) });
+  }
+
   const controller = new AbortController();
 
   // If the caller also passes a signal, forward abort.
@@ -97,14 +119,10 @@ async function readTextUpTo(
   return { text, truncated };
 }
 
-function statusOk(httpStatus: number, expectedStatus: number[] | null): boolean {
-  if (expectedStatus && expectedStatus.length > 0) {
-    return expectedStatus.includes(httpStatus);
-  }
-  return httpStatus >= 200 && httpStatus < 300;
-}
-
-async function attemptHttpCheck(config: HttpCheckConfig): Promise<Omit<CheckOutcome, 'attempts'>> {
+async function attemptHttpCheck(
+  config: HttpCheckConfig,
+  assertions: PreparedHttpResponseAssertion[],
+): Promise<Omit<CheckOutcome, 'attempts'>> {
   const started = performance.now();
 
   try {
@@ -116,6 +134,7 @@ async function attemptHttpCheck(config: HttpCheckConfig): Promise<Omit<CheckOutc
     const init: RequestInit = {
       method: config.method,
       headers,
+      redirect: config.followRedirects ? 'follow' : 'manual',
       cache: 'no-store',
       cf: {
         cacheTtlByStatus: { '100-599': -1 },
@@ -131,19 +150,24 @@ async function attemptHttpCheck(config: HttpCheckConfig): Promise<Omit<CheckOutc
     const latencyMs = Math.round(performance.now() - started);
     const httpStatus = res.status;
 
-    if (!statusOk(httpStatus, config.expectedStatus)) {
+    const statusEval = evaluateHttpStatusCode(httpStatus, {
+      expected: config.expectedStatus,
+      forbidden: config.forbiddenStatus,
+    });
+    if (!statusEval.ok) {
       res.body?.cancel();
       return {
         status: 'down',
         latencyMs,
         httpStatus,
-        error: `Unexpected HTTP status: ${httpStatus}`,
+        error:
+          statusEval.reason === 'forbidden'
+            ? `Forbidden HTTP status: ${httpStatus}`
+            : `Unexpected HTTP status: ${httpStatus}`,
       };
     }
 
-    const mustContain = config.responseKeyword;
-    const mustNotContain = config.responseForbiddenKeyword;
-    if (!mustContain && !mustNotContain) {
+    if (assertions.length === 0) {
       res.body?.cancel();
       return { status: 'up', latencyMs, httpStatus, error: null };
     }
@@ -153,47 +177,24 @@ async function attemptHttpCheck(config: HttpCheckConfig): Promise<Omit<CheckOutc
         status: 'unknown',
         latencyMs,
         httpStatus,
-        error: 'Response body is not readable for keyword assertions',
+        error: 'Response body is not readable for response assertions',
       };
     }
 
     const { text, truncated } = await readTextUpTo(res.body, MAX_ASSERTION_BODY_BYTES);
+    const assertionResult = evaluateHttpResponseAssertions({
+      assertions,
+      text,
+      truncated,
+      maxBytes: MAX_ASSERTION_BODY_BYTES,
+    });
 
-    if (mustContain) {
-      const found = text.includes(mustContain);
-      if (!found) {
-        return {
-          status: truncated ? 'unknown' : 'down',
-          latencyMs,
-          httpStatus,
-          error: truncated
-            ? `Response body exceeded ${MAX_ASSERTION_BODY_BYTES} bytes; cannot assert required keyword`
-            : 'Response keyword not found',
-        };
-      }
-    }
-
-    if (mustNotContain) {
-      const found = text.includes(mustNotContain);
-      if (found) {
-        return {
-          status: 'down',
-          latencyMs,
-          httpStatus,
-          error: 'Forbidden response keyword found',
-        };
-      }
-      if (truncated) {
-        return {
-          status: 'unknown',
-          latencyMs,
-          httpStatus,
-          error: `Response body exceeded ${MAX_ASSERTION_BODY_BYTES} bytes; cannot assert forbidden keyword absence`,
-        };
-      }
-    }
-
-    return { status: 'up', latencyMs, httpStatus, error: null };
+    return {
+      status: assertionResult.status,
+      latencyMs,
+      httpStatus,
+      error: assertionResult.error,
+    };
   } catch (err) {
     const latencyMs = Math.round(performance.now() - started);
     if (isAbortError(err)) {
@@ -220,11 +221,27 @@ export async function runHttpCheck(config: HttpCheckConfig): Promise<CheckOutcom
     return { status: 'unknown', latencyMs: null, httpStatus: null, error: targetErr, attempts: 1 };
   }
 
+  const preparedAssertions = prepareHttpResponseAssertions({
+    responseKeyword: config.responseKeyword,
+    responseKeywordMode: config.responseKeywordMode,
+    responseForbiddenKeyword: config.responseForbiddenKeyword,
+    responseForbiddenKeywordMode: config.responseForbiddenKeywordMode,
+  });
+  if (!preparedAssertions.ok) {
+    return {
+      status: 'unknown',
+      latencyMs: null,
+      httpStatus: null,
+      error: preparedAssertions.error,
+      attempts: 1,
+    };
+  }
+
   const maxAttempts = 1 + RETRY_DELAYS_MS.length;
   let last: CheckOutcome | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const r = await attemptHttpCheck(config);
+    const r = await attemptHttpCheck(config, preparedAssertions.assertions);
     const outcome: CheckOutcome = { ...r, attempts: attempt };
 
     if (outcome.status === 'up') {

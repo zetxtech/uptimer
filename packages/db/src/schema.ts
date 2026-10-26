@@ -11,6 +11,7 @@ import {
 export type MonitorType = 'http' | 'tcp';
 export type MonitorStatus = 'up' | 'down' | 'maintenance' | 'paused' | 'unknown';
 export type CheckStatus = 'up' | 'down' | 'maintenance' | 'unknown';
+export type HttpResponseMatchMode = 'contains' | 'regex';
 export type IncidentStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved';
 export type IncidentImpact = 'none' | 'minor' | 'major' | 'critical';
 export type NotificationChannelType = 'webhook';
@@ -23,6 +24,7 @@ export const monitors = sqliteTable(
     name: text('name').notNull(),
     type: text('type').$type<MonitorType>().notNull(),
     target: text('target').notNull(),
+    displayUrl: text('display_url'),
 
     intervalSec: integer('interval_sec').notNull().default(60),
     timeoutMs: integer('timeout_ms').notNull().default(10000),
@@ -30,13 +32,20 @@ export const monitors = sqliteTable(
     httpMethod: text('http_method'),
     httpHeadersJson: text('http_headers_json'),
     httpBody: text('http_body'),
+    followRedirects: integer('follow_redirects', { mode: 'boolean' }).notNull().default(true),
     expectedStatusJson: text('expected_status_json'),
+    forbiddenStatusJson: text('forbidden_status_json'),
     responseKeyword: text('response_keyword'),
+    responseKeywordMode: text('response_keyword_mode').$type<HttpResponseMatchMode>(),
     responseForbiddenKeyword: text('response_forbidden_keyword'),
+    responseForbiddenKeywordMode: text(
+      'response_forbidden_keyword_mode',
+    ).$type<HttpResponseMatchMode>(),
 
     groupName: text('group_name'),
     groupSortOrder: integer('group_sort_order').notNull().default(0),
     sortOrder: integer('sort_order').notNull().default(0),
+    showOnStatusPage: integer('show_on_status_page', { mode: 'boolean' }).notNull().default(true),
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
     createdAt: integer('created_at')
       .notNull()
@@ -211,6 +220,13 @@ export const publicSnapshots = sqliteTable('public_snapshots', {
   updatedAt: integer('updated_at')
     .notNull()
     .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
+});
+
+export const publicSnapshotGuardVersions = sqliteTable('public_snapshot_guard_versions', {
+  key: text('key').primaryKey(),
+  version: integer('version').notNull(),
+  updatedAt: integer('updated_at').notNull(),
+  stateJson: text('state_json'),
 });
 
 export const locks = sqliteTable('locks', {

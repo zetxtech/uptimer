@@ -1,8 +1,13 @@
 import pLimit from 'p-limit';
 
-import type { WebhookChannelConfig } from '@uptimer/db';
+import type {
+  CustomWebhookChannelConfig,
+  TelegramChannelConfig,
+  WebhookChannelConfig,
+} from '@uptimer/db';
 
 import { claimNotificationDelivery, finalizeNotificationDelivery } from './dedupe';
+import { decryptTelegramBotToken } from './telegram-token';
 import { defaultMessageForEvent, renderJsonTemplate, renderStringTemplate } from './template';
 
 export type WebhookChannel = {
@@ -19,6 +24,7 @@ export type WebhookDispatchResult = {
 
 const DEFAULT_TIMEOUT_MS = 5000;
 const WEBHOOK_CONCURRENCY = 5;
+const TELEGRAM_TEXT_MAX_LENGTH = 4096;
 
 function isAbortError(err: unknown): boolean {
   if (err && typeof err === 'object' && 'name' in err) {
@@ -52,6 +58,15 @@ async function hmacSha256Hex(secret: string, message: string): Promise<string> {
 function readEnvSecret(env: Record<string, unknown>, ref: string): string | null {
   const v = env[ref];
   return typeof v === 'string' && v.length > 0 ? v : null;
+}
+
+function readAdminToken(env: Record<string, unknown>): string | null {
+  const token = readEnvSecret(env, 'ADMIN_TOKEN');
+  return token;
+}
+
+function isTelegramChannelConfig(config: WebhookChannelConfig): config is TelegramChannelConfig {
+  return config.preset === 'telegram';
 }
 
 function shouldSendEvent(config: WebhookChannelConfig, eventType: string): boolean {
@@ -97,13 +112,13 @@ function appendQueryParams(url: string, params: Record<string, string>): string 
   return u.toString();
 }
 
-function buildTemplateVars(args: {
+function buildTemplateContext(args: {
   channel: WebhookChannel;
   eventType: string;
   eventKey: string;
   payload: unknown;
   now: number;
-}): { vars: Record<string, unknown>; message: string; payload: unknown } {
+}): { vars: Record<string, unknown>; message: string; defaultMessage: string } {
   const rawPayloadForVars = args.payload;
   const payloadRecord =
     rawPayloadForVars && typeof rawPayloadForVars === 'object' && !Array.isArray(rawPayloadForVars)
@@ -135,6 +150,18 @@ function buildTemplateVars(args: {
     default_message: defaultMessage,
   };
 
+  return { vars, message, defaultMessage };
+}
+
+function buildWebhookTemplatePayload(args: {
+  channel: WebhookChannel & { config: CustomWebhookChannelConfig };
+  eventType: string;
+  eventKey: string;
+  payload: unknown;
+  now: number;
+}): { vars: Record<string, unknown>; payload: unknown } {
+  const { vars, message } = buildTemplateContext(args);
+
   let payload: unknown;
   if (args.channel.config.payload_template !== undefined) {
     payload = renderJsonTemplate(args.channel.config.payload_template, vars);
@@ -151,7 +178,267 @@ function buildTemplateVars(args: {
     };
   }
 
-  return { vars, message, payload };
+  return { vars, payload };
+}
+
+function truncateTelegramText(text: string): string {
+  if (text.length <= TELEGRAM_TEXT_MAX_LENGTH) return text;
+  return `${text.slice(0, TELEGRAM_TEXT_MAX_LENGTH - 3)}...`;
+}
+
+function redactSecret(message: string, secret: string): string {
+  return secret ? message.split(secret).join('[redacted]') : message;
+}
+
+function parseJsonObject(text: string): Record<string, unknown> | null {
+  if (!text) return null;
+  try {
+    const parsed = JSON.parse(text) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function describeTelegramFailure(parsed: Record<string, unknown> | null, fallback: string): string {
+  if (!parsed) return fallback;
+
+  const description = typeof parsed.description === 'string' ? parsed.description : null;
+  const errorCode = typeof parsed.error_code === 'number' ? parsed.error_code : null;
+  const parameters =
+    parsed.parameters && typeof parsed.parameters === 'object' && !Array.isArray(parsed.parameters)
+      ? (parsed.parameters as Record<string, unknown>)
+      : null;
+  const retryAfter =
+    parameters && typeof parameters.retry_after === 'number' ? parameters.retry_after : null;
+
+  const base =
+    description && errorCode !== null
+      ? `Telegram ${errorCode}: ${description}`
+      : (description ?? fallback);
+
+  return retryAfter === null ? base : `${base} (retry_after=${retryAfter}s)`;
+}
+
+async function dispatchCustomWebhookRequest(args: {
+  env: Record<string, unknown>;
+  channel: WebhookChannel & { config: CustomWebhookChannelConfig };
+  eventType: string;
+  eventKey: string;
+  payload: unknown;
+  now: number;
+}): Promise<WebhookDispatchResult> {
+  const config = args.channel.config;
+  const method = config.method.toUpperCase();
+  const canHaveBody = method !== 'GET' && method !== 'HEAD';
+
+  const { vars, payload } = buildWebhookTemplatePayload({
+    channel: args.channel,
+    eventType: args.eventType,
+    eventKey: args.eventKey,
+    payload: args.payload,
+    now: args.now,
+  });
+
+  // Allow magic vars in header values.
+  const headers = new Headers();
+  for (const [k, v] of Object.entries(config.headers ?? {})) {
+    headers.set(k, renderStringTemplate(v, vars));
+  }
+
+  let url = config.url;
+  let rawBody = '';
+
+  switch (config.payload_type) {
+    case 'param': {
+      const params = coerceFlatParams(payload);
+      url = appendQueryParams(url, params);
+      break;
+    }
+    case 'x-www-form-urlencoded': {
+      const params = coerceFlatParams(payload);
+      if (canHaveBody) {
+        rawBody = new URLSearchParams(params).toString();
+        if (!headers.has('content-type')) {
+          headers.set('Content-Type', 'application/x-www-form-urlencoded');
+        }
+      } else {
+        // Cannot send a body (GET/HEAD). Fall back to query params.
+        url = appendQueryParams(url, params);
+      }
+      break;
+    }
+    case 'json':
+    default: {
+      if (canHaveBody) {
+        rawBody = JSON.stringify(payload === undefined ? null : payload);
+        if (!headers.has('content-type')) {
+          // Some webhook receivers (e.g. Apprise wrappers) strictly require an exact content-type value.
+          headers.set('Content-Type', 'application/json');
+        }
+      }
+      break;
+    }
+  }
+
+  if (config.signing?.enabled) {
+    const secret = readEnvSecret(args.env, config.signing.secret_ref);
+    if (!secret) {
+      return {
+        status: 'failed',
+        httpStatus: null,
+        error: `Signing secret not configured: ${config.signing.secret_ref}`,
+      };
+    }
+
+    const timestamp = args.now;
+    const sig = await hmacSha256Hex(secret, `${timestamp}.${rawBody}`);
+    headers.set('X-Uptimer-Timestamp', String(timestamp));
+    headers.set('X-Uptimer-Signature', `sha256=${sig}`);
+  }
+
+  const timeoutMs = config.timeout_ms ?? DEFAULT_TIMEOUT_MS;
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const init: RequestInit = {
+      method,
+      headers,
+      signal: controller.signal,
+      cache: 'no-store',
+    };
+
+    if (canHaveBody && rawBody) {
+      init.body = rawBody;
+    }
+
+    const res = await fetch(url, init);
+    res.body?.cancel();
+
+    return res.ok
+      ? { status: 'success', httpStatus: res.status, error: null }
+      : { status: 'failed', httpStatus: res.status, error: `HTTP ${res.status}` };
+  } catch (err) {
+    return {
+      status: 'failed',
+      httpStatus: null,
+      error: isAbortError(err) ? `Timeout after ${timeoutMs}ms` : toErrorMessage(err),
+    };
+  } finally {
+    clearTimeout(t);
+  }
+}
+
+async function dispatchTelegramPresetRequest(args: {
+  env: Record<string, unknown>;
+  channel: WebhookChannel & { config: TelegramChannelConfig };
+  eventType: string;
+  eventKey: string;
+  payload: unknown;
+  now: number;
+}): Promise<WebhookDispatchResult> {
+  const config = args.channel.config;
+  let token: string | null = null;
+
+  if (config.bot_token_encrypted) {
+    const adminToken = readAdminToken(args.env);
+    if (!adminToken) {
+      return {
+        status: 'failed',
+        httpStatus: null,
+        error: 'Telegram bot token is encrypted but ADMIN_TOKEN is not configured',
+      };
+    }
+
+    try {
+      token = await decryptTelegramBotToken(adminToken, config.bot_token_encrypted);
+    } catch {
+      return {
+        status: 'failed',
+        httpStatus: null,
+        error: 'Telegram bot token could not be decrypted',
+      };
+    }
+  } else if (config.bot_token_secret_ref) {
+    token = readEnvSecret(args.env, config.bot_token_secret_ref);
+  }
+
+  if (!token) {
+    const ref = config.bot_token_secret_ref ?? 'bot_token_encrypted';
+    return {
+      status: 'failed',
+      httpStatus: null,
+      error: `Telegram bot token not configured: ${ref}`,
+    };
+  }
+
+  const { message, defaultMessage } = buildTemplateContext({
+    channel: args.channel,
+    eventType: args.eventType,
+    eventKey: args.eventKey,
+    payload: args.payload,
+    now: args.now,
+  });
+
+  const text = truncateTelegramText(message.trim().length > 0 ? message : defaultMessage);
+  const body: Record<string, unknown> = {
+    chat_id: config.chat_id,
+    text,
+  };
+
+  if (config.message_thread_id !== undefined) {
+    body.message_thread_id = config.message_thread_id;
+  }
+  if (config.parse_mode) {
+    body.parse_mode = config.parse_mode;
+  }
+  if (config.disable_notification !== undefined) {
+    body.disable_notification = config.disable_notification;
+  }
+  if (config.protect_content !== undefined) {
+    body.protect_content = config.protect_content;
+  }
+
+  const timeoutMs = config.timeout_ms ?? DEFAULT_TIMEOUT_MS;
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+      cache: 'no-store',
+    });
+    const responseText = await res.text().catch(() => '');
+    const parsed = parseJsonObject(responseText);
+
+    if (res.ok && parsed?.ok === true) {
+      return { status: 'success', httpStatus: res.status, error: null };
+    }
+
+    const fallback = res.ok
+      ? 'Telegram API response did not include ok=true'
+      : `HTTP ${res.status}`;
+    return {
+      status: 'failed',
+      httpStatus: res.status,
+      error: describeTelegramFailure(parsed, fallback),
+    };
+  } catch (err) {
+    const error = isAbortError(err) ? `Timeout after ${timeoutMs}ms` : toErrorMessage(err);
+    return {
+      status: 'failed',
+      httpStatus: null,
+      error: redactSecret(error, token),
+    };
+  } finally {
+    clearTimeout(t);
+  }
 }
 
 export async function dispatchWebhookToChannel(args: {
@@ -173,110 +460,26 @@ export async function dispatchWebhookToChannel(args: {
   }
 
   const config = args.channel.config;
-  const method = config.method.toUpperCase();
-  const canHaveBody = method !== 'GET' && method !== 'HEAD';
 
   let outcome: WebhookDispatchResult;
   try {
-    const { vars, payload } = buildTemplateVars({
-      channel: args.channel,
-      eventType: args.eventType,
-      eventKey: args.eventKey,
-      payload: args.payload,
-      now,
-    });
-
-    // Allow magic vars in header values.
-    const headers = new Headers();
-    for (const [k, v] of Object.entries(config.headers ?? {})) {
-      headers.set(k, renderStringTemplate(v, vars));
-    }
-
-    let url = config.url;
-    let rawBody = '';
-
-    switch (config.payload_type) {
-      case 'param': {
-        const params = coerceFlatParams(payload);
-        url = appendQueryParams(url, params);
-        break;
-      }
-      case 'x-www-form-urlencoded': {
-        const params = coerceFlatParams(payload);
-        if (canHaveBody) {
-          rawBody = new URLSearchParams(params).toString();
-          if (!headers.has('content-type')) {
-            headers.set('Content-Type', 'application/x-www-form-urlencoded');
-          }
-        } else {
-          // Cannot send a body (GET/HEAD). Fall back to query params.
-          url = appendQueryParams(url, params);
-        }
-        break;
-      }
-      case 'json':
-      default: {
-        if (canHaveBody) {
-          rawBody = JSON.stringify(payload === undefined ? null : payload);
-          if (!headers.has('content-type')) {
-            // Some webhook receivers (e.g. Apprise wrappers) strictly require an exact content-type value.
-            headers.set('Content-Type', 'application/json');
-          }
-        }
-        break;
-      }
-    }
-
-    if (config.signing?.enabled) {
-      const secret = readEnvSecret(args.env, config.signing.secret_ref);
-      if (!secret) {
-        await finalizeNotificationDelivery(args.db, args.eventKey, args.channel.id, {
-          status: 'failed',
-          httpStatus: null,
-          error: `Signing secret not configured: ${config.signing.secret_ref}`,
+    outcome = isTelegramChannelConfig(config)
+      ? await dispatchTelegramPresetRequest({
+          env: args.env,
+          channel: { ...args.channel, config },
+          eventType: args.eventType,
+          eventKey: args.eventKey,
+          payload: args.payload,
+          now,
+        })
+      : await dispatchCustomWebhookRequest({
+          env: args.env,
+          channel: { ...args.channel, config },
+          eventType: args.eventType,
+          eventKey: args.eventKey,
+          payload: args.payload,
+          now,
         });
-        return 'sent';
-      }
-
-      const timestamp = now;
-      const sig = await hmacSha256Hex(secret, `${timestamp}.${rawBody}`);
-      headers.set('X-Uptimer-Timestamp', String(timestamp));
-      headers.set('X-Uptimer-Signature', `sha256=${sig}`);
-    }
-
-    const timeoutMs = config.timeout_ms ?? DEFAULT_TIMEOUT_MS;
-    const controller = new AbortController();
-    const t = setTimeout(() => controller.abort(), timeoutMs);
-
-    try {
-      const init: RequestInit = {
-        method,
-        headers,
-        signal: controller.signal,
-        cache: 'no-store',
-      };
-
-      if (canHaveBody && rawBody) {
-        init.body = rawBody;
-      }
-
-      const res = await fetch(url, init);
-      res.body?.cancel();
-
-      if (res.ok) {
-        outcome = { status: 'success', httpStatus: res.status, error: null };
-      } else {
-        outcome = { status: 'failed', httpStatus: res.status, error: `HTTP ${res.status}` };
-      }
-    } catch (err) {
-      outcome = {
-        status: 'failed',
-        httpStatus: null,
-        error: isAbortError(err) ? `Timeout after ${timeoutMs}ms` : toErrorMessage(err),
-      };
-    } finally {
-      clearTimeout(t);
-    }
   } catch (err) {
     outcome = { status: 'failed', httpStatus: null, error: toErrorMessage(err) };
   }

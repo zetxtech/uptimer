@@ -16,7 +16,7 @@ import {
   ThemeToggle,
 } from '../components/ui';
 import { incidentImpactLabel, incidentStatusLabel } from '../i18n/labels';
-import { formatDateTime } from '../utils/datetime';
+import { formatDateTime, getBrowserTimeZone } from '../utils/datetime';
 
 function formatError(err: unknown): string | undefined {
   if (!err) return undefined;
@@ -175,7 +175,7 @@ export function IncidentHistoryPage() {
   const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
 
   const statusQuery = useQuery({ queryKey: ['status'], queryFn: fetchStatus });
-  const timeZone = statusQuery.data?.site_timezone ?? 'UTC';
+  const timeZone = getBrowserTimeZone() ?? statusQuery.data?.site_timezone ?? 'UTC';
   useApplyServerLocaleSetting(statusQuery.data?.site_locale);
 
   const query = useQuery({
