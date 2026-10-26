@@ -2,7 +2,15 @@ import { AppError } from '../middleware/errors';
 import { publicStatusResponseSchema, type PublicStatusResponse } from '../schemas/public-status';
 
 const SNAPSHOT_KEY = 'status';
-const MAX_AGE_SECONDS = 60;
+
+// How long a stored snapshot is served before readers fall back to a live computation, and the
+// budget the cache headers may spend on it. Recomputing the payload scans check_results, so the
+// window is measured in minutes instead of seconds.
+const MAX_AGE_SECONDS = 5 * 60;
+
+// The scheduler ticks every minute. Refresh a little before the freshness window closes so that
+// readers never find an expired snapshot in between two ticks.
+export const SNAPSHOT_REFRESH_AGE_SECONDS = MAX_AGE_SECONDS - 30;
 
 export function getSnapshotKey() {
   return SNAPSHOT_KEY;
@@ -75,8 +83,37 @@ export async function writeStatusSnapshot(
     .run();
 }
 
+/**
+ * Cheap freshness probe for the scheduler: reads the generation timestamp only, without parsing
+ * and validating the stored payload.
+ */
+export async function readStatusSnapshotAgeSeconds(
+  db: D1Database,
+  now: number,
+): Promise<number | null> {
+  try {
+    const row = await db
+      .prepare(
+        `
+        SELECT generated_at
+        FROM public_snapshots
+        WHERE key = ?1
+      `,
+      )
+      .bind(SNAPSHOT_KEY)
+      .first<{ generated_at: number }>();
+
+    if (!row) return null;
+    return Math.max(0, now - row.generated_at);
+  } catch (err) {
+    // A missing table or a D1 hiccup must not stop the scheduler from refreshing.
+    console.warn('public snapshot: age read failed, refreshing anyway', err);
+    return null;
+  }
+}
+
 export function applyStatusCacheHeaders(res: Response, ageSeconds: number): void {
-  // Guarantee freshness bound <= 60s. Prefer <= 30s in normal cases.
+  // Guarantee freshness bound <= MAX_AGE_SECONDS. Prefer <= 30s in normal cases.
   //
   // We ensure (max-age + stale-*) never exceeds MAX_AGE_SECONDS.
   const remaining = Math.max(0, MAX_AGE_SECONDS - ageSeconds);

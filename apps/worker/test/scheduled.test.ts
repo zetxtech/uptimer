@@ -16,7 +16,9 @@ vi.mock('../src/settings', () => ({
   readSettings: vi.fn(),
 }));
 vi.mock('../src/snapshots', () => ({
+  readStatusSnapshotAgeSeconds: vi.fn(),
   refreshPublicStatusSnapshot: vi.fn(),
+  SNAPSHOT_REFRESH_AGE_SECONDS: 270,
 }));
 vi.mock('../src/notify/webhook', () => ({
   dispatchWebhookToChannels: vi.fn(),
@@ -38,7 +40,7 @@ import { acquireLease } from '../src/scheduler/lock';
 import { runDailyRollup } from '../src/scheduler/daily-rollup';
 import { runRetention } from '../src/scheduler/retention';
 import { readSettings } from '../src/settings';
-import { refreshPublicStatusSnapshot } from '../src/snapshots';
+import { readStatusSnapshotAgeSeconds, refreshPublicStatusSnapshot } from '../src/snapshots';
 import { createFakeD1Database, type FakeD1QueryHandler } from './helpers/fake-d1';
 import { ExecutionContext } from 'hono';
 
@@ -146,6 +148,7 @@ describe('scheduler/scheduled regression', () => {
       uptime_rating_level: 3,
     });
     vi.mocked(refreshPublicStatusSnapshot).mockResolvedValue(undefined);
+    vi.mocked(readStatusSnapshotAgeSeconds).mockResolvedValue(null);
     vi.mocked(dispatchWebhookToChannels).mockResolvedValue(undefined);
     vi.mocked(runDailyRollup).mockResolvedValue(undefined);
     vi.mocked(runRetention).mockResolvedValue(undefined);
@@ -214,6 +217,23 @@ describe('scheduler/scheduled regression', () => {
 
     const scheduledPromise = waitUntil.mock.calls[0]?.[0];
     expect(scheduledPromise).toBeInstanceOf(Promise);
+    await expect(scheduledPromise as Promise<unknown>).resolves.toBeUndefined();
+  });
+
+  it('skips the snapshot refresh while the stored snapshot is still fresh', async () => {
+    const env = createEnv({ dueRows: [] });
+    const waitUntil = vi.fn();
+
+    // Well inside the refresh window, so this tick must not recompute the payload.
+    vi.mocked(readStatusSnapshotAgeSeconds).mockResolvedValue(60);
+
+    await runScheduledTick(env, { waitUntil } as unknown as ExecutionContext);
+
+    expect(readStatusSnapshotAgeSeconds).toHaveBeenCalledTimes(1);
+    expect(refreshPublicStatusSnapshot).not.toHaveBeenCalled();
+    expect(computePublicStatusPayload).not.toHaveBeenCalled();
+
+    const scheduledPromise = waitUntil.mock.calls[0]?.[0];
     await expect(scheduledPromise as Promise<unknown>).resolves.toBeUndefined();
   });
 
@@ -636,8 +656,14 @@ describe('scheduler/scheduled regression', () => {
       }
     }
 
-    expect(consoleErrorSpy).toHaveBeenCalledWith('scheduled: runRetention failed', expect.any(Error));
-    expect(consoleErrorSpy).toHaveBeenCalledWith('scheduled: runDailyRollup failed', expect.any(Error));
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'scheduled: runRetention failed',
+      expect.any(Error),
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'scheduled: runDailyRollup failed',
+      expect.any(Error),
+    );
 
     consoleErrorSpy.mockRestore();
   });
@@ -721,12 +747,24 @@ describe('scheduler/scheduled regression', () => {
       }
     }
 
-    expect(consoleWarnSpy).toHaveBeenCalledWith('scheduled: status snapshot refresh failed', expect.any(Error));
-    expect(consoleErrorSpy).toHaveBeenCalledWith('notify: failed to dispatch maintenance.started', expect.any(Error));
-    expect(consoleErrorSpy).toHaveBeenCalledWith('notify: failed to dispatch maintenance.ended', expect.any(Error));
-    
+    expect(consoleWarnSpy).toHaveBeenCalledWith(
+      'scheduled: status snapshot refresh failed',
+      expect.any(Error),
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'notify: failed to dispatch maintenance.started',
+      expect.any(Error),
+    );
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'notify: failed to dispatch maintenance.ended',
+      expect.any(Error),
+    );
+
     // Also since monitor check fails, it should emit down, triggering a webhook dispatch error
-    expect(consoleErrorSpy).toHaveBeenCalledWith('notify: failed to dispatch webhooks', expect.any(Error));
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      'notify: failed to dispatch webhooks',
+      expect.any(Error),
+    );
 
     consoleErrorSpy.mockRestore();
     consoleWarnSpy.mockRestore();
@@ -756,11 +794,11 @@ describe('scheduler/scheduled regression', () => {
           consecutive_successes: 0,
         },
       ],
-      // Use an interceptor to cause DB batch to fail, 
+      // Use an interceptor to cause DB batch to fail,
       // which will cause persistCheckAndState and thus runDueMonitor to reject.
       onRun: () => {
         throw new Error('db err');
-      }
+      },
     });
 
     const waitUntil = vi.fn();
@@ -770,7 +808,7 @@ describe('scheduler/scheduled regression', () => {
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       expect.stringContaining('scheduled: 1/1 monitors failed'),
-      expect.objectContaining({ reason: expect.any(Error) })
+      expect.objectContaining({ reason: expect.any(Error) }),
     );
 
     consoleErrorSpy.mockRestore();

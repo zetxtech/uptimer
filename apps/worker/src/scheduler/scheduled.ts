@@ -17,7 +17,11 @@ import type { CheckOutcome } from '../monitor/types';
 import { dispatchWebhookToChannels, type WebhookChannel } from '../notify/webhook';
 import { computePublicStatusPayload } from '../public/status';
 import { readSettings } from '../settings';
-import { refreshPublicStatusSnapshot } from '../snapshots';
+import {
+  readStatusSnapshotAgeSeconds,
+  refreshPublicStatusSnapshot,
+  SNAPSHOT_REFRESH_AGE_SECONDS,
+} from '../snapshots';
 import { runDailyRollup } from './daily-rollup';
 import { acquireLease } from './lock';
 import { runRetention } from './retention';
@@ -67,11 +71,18 @@ type NotifyContext = {
 
 function scheduleSnapshotRefresh(env: Env, ctx: ExecutionContext, now: number): void {
   ctx.waitUntil(
-    refreshPublicStatusSnapshot({
-      db: env.DB,
-      now,
-      compute: () => computePublicStatusPayload(env.DB, now),
-    }).catch((err) => {
+    (async () => {
+      // Every tick used to recompute the whole status payload, which costs thousands of D1 rows
+      // per run. Refresh on the snapshot's own schedule instead.
+      const age = await readStatusSnapshotAgeSeconds(env.DB, now);
+      if (age !== null && age < SNAPSHOT_REFRESH_AGE_SECONDS) return;
+
+      await refreshPublicStatusSnapshot({
+        db: env.DB,
+        now,
+        compute: () => computePublicStatusPayload(env.DB, now),
+      });
+    })().catch((err) => {
       console.warn('scheduled: status snapshot refresh failed', err);
     }),
   );

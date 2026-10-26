@@ -1,4 +1,6 @@
-const SNAPSHOT_MAX_AGE_SECONDS = 60;
+// The worker refreshes the status snapshot every 5 minutes; keep the preloaded HTML cacheable
+// within that same budget.
+const SNAPSHOT_MAX_AGE_SECONDS = 5 * 60;
 const PREFERRED_MAX_AGE_SECONDS = 30;
 
 function acceptsHtml(request) {

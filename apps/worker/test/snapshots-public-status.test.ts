@@ -6,6 +6,8 @@ import {
   getSnapshotKey,
   getSnapshotMaxAgeSeconds,
   readStatusSnapshot,
+  readStatusSnapshotAgeSeconds,
+  SNAPSHOT_REFRESH_AGE_SECONDS,
   toSnapshotPayload,
   writeStatusSnapshot,
 } from '../src/snapshots/public-status';
@@ -45,7 +47,9 @@ function samplePayload(now = 1_728_000_000) {
 describe('snapshots/public-status', () => {
   it('exposes stable snapshot key and max-age constants', () => {
     expect(getSnapshotKey()).toBe('status');
-    expect(getSnapshotMaxAgeSeconds()).toBe(60);
+    expect(getSnapshotMaxAgeSeconds()).toBe(300);
+    expect(SNAPSHOT_REFRESH_AGE_SECONDS).toBe(270);
+    expect(SNAPSHOT_REFRESH_AGE_SECONDS).toBeLessThan(getSnapshotMaxAgeSeconds());
   });
 
   it('reads a fresh and valid snapshot payload', async () => {
@@ -77,7 +81,7 @@ describe('snapshots/public-status', () => {
         first: () => ({ generated_at: 0, body_json: JSON.stringify(samplePayload(0)) }),
       },
     ]);
-    await expect(readStatusSnapshot(staleDb, 200)).resolves.toBeNull();
+    await expect(readStatusSnapshot(staleDb, 20 * 60)).resolves.toBeNull();
 
     const invalidJsonDb = createFakeD1Database([
       {
@@ -87,6 +91,33 @@ describe('snapshots/public-status', () => {
     ]);
     await expect(readStatusSnapshot(invalidJsonDb, 200)).resolves.toBeNull();
     expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it('reports the stored snapshot age without parsing the payload', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+    const db = createFakeD1Database([
+      {
+        match: 'from public_snapshots',
+        first: () => ({ generated_at: 900 }),
+      },
+    ]);
+    await expect(readStatusSnapshotAgeSeconds(db, 1000)).resolves.toBe(100);
+
+    const emptyDb = createFakeD1Database([
+      {
+        match: 'from public_snapshots',
+        first: () => null,
+      },
+    ]);
+    await expect(readStatusSnapshotAgeSeconds(emptyDb, 1000)).resolves.toBeNull();
+
+    // A missing table or a D1 error must not stop the scheduler from refreshing.
+    const brokenDb = createFakeD1Database([]);
+    await expect(readStatusSnapshotAgeSeconds(brokenDb, 1000)).resolves.toBeNull();
+    expect(warn).toHaveBeenCalled();
+
     warn.mockRestore();
   });
 
@@ -113,12 +144,18 @@ describe('snapshots/public-status', () => {
     const young = new Response('ok');
     applyStatusCacheHeaders(young, 10);
     expect(young.headers.get('Cache-Control')).toBe(
-      'public, max-age=30, stale-while-revalidate=20, stale-if-error=20',
+      'public, max-age=30, stale-while-revalidate=260, stale-if-error=260',
     );
 
-    const tooOld = new Response('ok');
-    applyStatusCacheHeaders(tooOld, 120);
-    expect(tooOld.headers.get('Cache-Control')).toBe(
+    const nearlyExpired = new Response('ok');
+    applyStatusCacheHeaders(nearlyExpired, 290);
+    expect(nearlyExpired.headers.get('Cache-Control')).toBe(
+      'public, max-age=10, stale-while-revalidate=0, stale-if-error=0',
+    );
+
+    const expired = new Response('ok');
+    applyStatusCacheHeaders(expired, 300);
+    expect(expired.headers.get('Cache-Control')).toBe(
       'public, max-age=0, stale-while-revalidate=0, stale-if-error=0',
     );
   });
