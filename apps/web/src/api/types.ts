@@ -342,6 +342,10 @@ export interface PublicUptimeOverviewResponse {
 
 // Admin Types
 
+export type MonitorProbeMode = 'worker' | 'multi_region';
+export type ProbeKind = 'edgeone' | 'durable_object' | 'worker' | 'server';
+export type ProbeScope = 'domestic' | 'overseas';
+
 export interface AdminMonitor {
   id: number;
   name: string;
@@ -365,6 +369,7 @@ export interface AdminMonitor {
   response_forbidden_keyword: string | null;
   response_forbidden_keyword_mode: HttpResponseMatchMode | null;
   is_active: boolean;
+  probe_mode: MonitorProbeMode;
   created_at: number;
   updated_at: number;
 
@@ -397,6 +402,7 @@ export interface CreateMonitorInput {
   response_forbidden_keyword?: string;
   response_forbidden_keyword_mode?: HttpResponseMatchMode;
   is_active?: boolean;
+  probe_mode?: MonitorProbeMode;
 }
 
 export interface PatchMonitorInput {
@@ -420,6 +426,54 @@ export interface PatchMonitorInput {
   response_forbidden_keyword?: string | null;
   response_forbidden_keyword_mode?: HttpResponseMatchMode | null;
   is_active?: boolean;
+  probe_mode?: MonitorProbeMode;
+}
+
+export interface AdminProbe {
+  id: string;
+  name: string;
+  kind: ProbeKind;
+  scope: ProbeScope;
+  region: string;
+  is_enabled: boolean;
+  is_required: boolean;
+  config_version: number;
+  last_seen_at: number | null;
+  last_result_at: number | null;
+  created_at: number;
+  updated_at: number;
+}
+
+export interface AdminProbesResponse {
+  probes: AdminProbe[];
+}
+
+export interface CreateAdminProbeInput {
+  id: string;
+  name: string;
+  kind: ProbeKind;
+  scope: ProbeScope;
+  region: string;
+  is_required?: boolean;
+}
+
+export interface PatchAdminProbeInput {
+  name?: string;
+  scope?: ProbeScope;
+  region?: string;
+  is_enabled?: boolean;
+  is_required?: boolean;
+}
+
+export interface AdminProbeWithToken {
+  probe: AdminProbe | null;
+  token: string;
+}
+
+export interface AdminProbeTokenRotation {
+  ok: true;
+  probe_id: string;
+  token: string;
 }
 
 export interface ReorderMonitorGroupsInput {

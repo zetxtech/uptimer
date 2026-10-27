@@ -14,7 +14,6 @@ import type { Env } from '../src/env';
 import { sha256Hex } from '../src/probes/auth';
 import { handleProbeIngest } from '../src/probes/ingest';
 import { createFakeD1Database, type FakeD1QueryHandler } from './helpers/fake-d1';
-
 const PROBE_ID = 'edgeone-cn-gz';
 const TOKEN = `upt_probe_${'a'.repeat(43)}`;
 
@@ -102,7 +101,8 @@ describe('handleProbeIngest', () => {
     const tokenSha256 = await sha256Hex(TOKEN);
     const monitorStateRuns: unknown[][] = [];
     const probeStateRuns: unknown[][] = [];
-    const checkResultRuns: unknown[][] = [];
+    const probeResultRuns: unknown[][] = [];
+    const aggregatedRuns: unknown[][] = [];
 
     const env = createEnv([
       probeAuthHandler(tokenSha256),
@@ -130,9 +130,16 @@ describe('handleProbeIngest', () => {
       { match: 'from monitor_probe_state where probe_id', all: () => [] },
       { match: 'select key, value from settings', all: () => [] },
       {
+        match: 'insert into probe_check_results',
+        run: (args) => {
+          probeResultRuns.push(args);
+          return 1;
+        },
+      },
+      {
         match: 'insert into check_results',
         run: (args) => {
-          checkResultRuns.push(args);
+          aggregatedRuns.push(args);
           return 1;
         },
       },
@@ -192,20 +199,24 @@ describe('handleProbeIngest', () => {
       applied: [{ monitor_id: 1, status: 'up', reason: 'any_up', changed: true }],
     });
 
-    expect(checkResultRuns).toHaveLength(1);
-    // monitor_id, checked_at, status, latency, http_status, error, location, attempt, probe, batch
-    expect(checkResultRuns[0]?.slice(0, 10)).toEqual([
+    expect(probeResultRuns).toHaveLength(1);
+    // monitor_id, probe_id, batch_id, checked_at, status, latency, http_status, error, attempt
+    expect(probeResultRuns[0]?.slice(0, 9)).toEqual([
       1,
+      PROBE_ID,
+      'batch-2',
       now,
       'up',
       42,
       200,
       null,
-      null,
       1,
-      PROBE_ID,
-      'batch-2',
     ]);
+
+    // History keeps a single aggregated series: domestic + overseas merged into one row.
+    expect(aggregatedRuns).toHaveLength(1);
+    // monitor_id, checked_at, status, latency, http_status, error, location, attempt
+    expect(aggregatedRuns[0]?.slice(0, 8)).toEqual([1, now, 'up', 42, 200, null, null, 1]);
 
     expect(probeStateRuns).toHaveLength(1);
     expect(probeStateRuns[0]?.slice(0, 3)).toEqual([1, PROBE_ID, 'up']);

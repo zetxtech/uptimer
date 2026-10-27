@@ -5,7 +5,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../app/AuthContext';
 import { useI18n, type MessageKey } from '../app/I18nContext';
 import { useApplyServerLocaleSetting } from '../app/useApplyServerLocaleSetting';
-import { ADMIN_ANALYTICS_PATH } from '../app/adminPaths';
+import { ADMIN_ANALYTICS_PATH, ADMIN_PROBES_PATH } from '../app/adminPaths';
 import {
   ApiError,
   fetchAdminMonitors,
@@ -915,6 +915,28 @@ export function AdminDashboard() {
           </h1>
           <div className="flex items-center gap-1">
             <ThemeToggle />
+            <Link
+              to={ADMIN_PROBES_PATH}
+              className={cn(
+                navActionClass,
+                'text-slate-500 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-700 dark:hover:text-slate-100',
+              )}
+            >
+              <svg
+                className="w-5 h-5 sm:hidden"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8 9a4 4 0 118 0 4 4 0 01-8 0zm8 3.5V15a1 1 0 01-1 1H9a1 1 0 01-1-1v-2.5M4 21h16"
+                />
+              </svg>
+              <span className="hidden sm:inline">{t('probes.title')}</span>
+            </Link>
             <Link
               to={ADMIN_ANALYTICS_PATH}
               className={cn(

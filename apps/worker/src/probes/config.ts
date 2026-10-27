@@ -1,56 +1,6 @@
-import {
-  expectedStatusJsonSchema,
-  forbiddenStatusJsonSchema,
-  httpHeadersJsonSchema,
-  parseDbJsonNullable,
-} from '@uptimer/db/json';
-
 import type { Env } from '../env';
 import { authenticateProbe, type AuthenticatedProbe } from './auth';
-
-type MonitorConfigRow = {
-  id: number;
-  name: string;
-  type: 'http' | 'tcp';
-  target: string;
-  interval_sec: number;
-  timeout_ms: number;
-  http_method: string | null;
-  http_headers_json: string | null;
-  http_body: string | null;
-  follow_redirects: number | boolean;
-  expected_status_json: string | null;
-  forbidden_status_json: string | null;
-  response_keyword: string | null;
-  response_keyword_mode: string | null;
-  response_forbidden_keyword: string | null;
-  response_forbidden_keyword_mode: string | null;
-  updated_at: number;
-};
-
-const LIST_PROBE_MONITORS_SQL = `
-  SELECT
-    id,
-    name,
-    type,
-    target,
-    interval_sec,
-    timeout_ms,
-    http_method,
-    http_headers_json,
-    http_body,
-    follow_redirects,
-    expected_status_json,
-    forbidden_status_json,
-    response_keyword,
-    response_keyword_mode,
-    response_forbidden_keyword,
-    response_forbidden_keyword_mode,
-    updated_at
-  FROM monitors
-  WHERE is_active = 1 AND probe_mode = 'multi_region'
-  ORDER BY id
-`;
+import { loadAssignedMonitors } from './assignment';
 
 const TOUCH_PROBE_SQL = `
   UPDATE probes
@@ -58,7 +8,6 @@ const TOUCH_PROBE_SQL = `
   WHERE id = ?1
 `;
 
-const listProbeMonitorsStatementByDb = new WeakMap<D1Database, D1PreparedStatement>();
 const touchProbeStatementByDb = new WeakMap<D1Database, D1PreparedStatement>();
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -69,18 +18,6 @@ function jsonResponse(body: unknown, status = 200): Response {
       'Cache-Control': 'no-store',
     },
   });
-}
-
-function toBooleanDefaultTrue(value: number | boolean): boolean {
-  return value !== false && value !== 0;
-}
-
-function probeSupportsMonitor(probe: AuthenticatedProbe, type: 'http' | 'tcp'): boolean {
-  // Edge functions can only make HTTP requests; raw TCP sockets are not available there.
-  if (probe.kind === 'edgeone') {
-    return type === 'http';
-  }
-  return true;
 }
 
 /**
@@ -95,44 +32,35 @@ export async function handleProbeConfig(request: Request, env: Env): Promise<Res
     return jsonResponse({ error: { code: 'UNAUTHORIZED', message: 'Invalid probe token' } }, 401);
   }
 
-  const cached = listProbeMonitorsStatementByDb.get(env.DB);
-  const statement = cached ?? env.DB.prepare(LIST_PROBE_MONITORS_SQL);
-  if (!cached) {
-    listProbeMonitorsStatementByDb.set(env.DB, statement);
-  }
+  return await buildProbeConfigResponse(env, probe);
+}
 
-  const { results } = await statement.all<MonitorConfigRow>();
-  const rows = results ?? [];
+/** Shared by the token-authenticated endpoint and trusted in-platform probes. */
+export async function buildProbeConfigResponse(
+  env: Env,
+  probe: AuthenticatedProbe,
+): Promise<Response> {
+  const assigned = await loadAssignedMonitors(env.DB, probe.kind);
   const now = Math.floor(Date.now() / 1000);
 
-  const monitors = rows
-    .filter((row) => probeSupportsMonitor(probe, row.type))
-    .map((row) => ({
-      id: row.id,
-      name: row.name,
-      type: row.type,
-      target: row.target,
-      interval_sec: row.interval_sec,
-      timeout_ms: row.timeout_ms,
-      http_method: row.http_method,
-      http_headers: parseDbJsonNullable(httpHeadersJsonSchema, row.http_headers_json, {
-        field: 'http_headers_json',
-      }),
-      http_body: row.http_body,
-      follow_redirects: toBooleanDefaultTrue(row.follow_redirects),
-      expected_status: parseDbJsonNullable(expectedStatusJsonSchema, row.expected_status_json, {
-        field: 'expected_status_json',
-      }),
-      forbidden_status: parseDbJsonNullable(forbiddenStatusJsonSchema, row.forbidden_status_json, {
-        field: 'forbidden_status_json',
-      }),
-      response_keyword: row.response_keyword,
-      response_keyword_mode: row.response_keyword_mode,
-      response_forbidden_keyword: row.response_forbidden_keyword,
-      response_forbidden_keyword_mode: row.response_forbidden_keyword_mode,
-    }));
-
-  const maxUpdatedAt = rows.reduce((max, row) => Math.max(max, row.updated_at ?? 0), 0);
+  const monitors = assigned.map((monitor) => ({
+    id: monitor.id,
+    name: monitor.name,
+    type: monitor.type,
+    target: monitor.target,
+    interval_sec: monitor.intervalSec,
+    timeout_ms: monitor.timeoutMs,
+    http_method: monitor.http?.method ?? null,
+    http_headers: monitor.http?.headers ?? null,
+    http_body: monitor.http?.body ?? null,
+    follow_redirects: monitor.http?.followRedirects ?? true,
+    expected_status: monitor.http?.expectedStatus ?? null,
+    forbidden_status: monitor.http?.forbiddenStatus ?? null,
+    response_keyword: monitor.http?.responseKeyword ?? null,
+    response_keyword_mode: monitor.http?.responseKeywordMode ?? null,
+    response_forbidden_keyword: monitor.http?.responseForbiddenKeyword ?? null,
+    response_forbidden_keyword_mode: monitor.http?.responseForbiddenKeywordMode ?? null,
+  }));
 
   const touchCached = touchProbeStatementByDb.get(env.DB);
   const touch = touchCached ?? env.DB.prepare(TOUCH_PROBE_SQL);
@@ -140,6 +68,13 @@ export async function handleProbeConfig(request: Request, env: Env): Promise<Res
     touchProbeStatementByDb.set(env.DB, touch);
   }
   await touch.bind(probe.id, now).run();
+
+  // The revision changes when the probe's config version or the assigned monitor set changes,
+  // so probes can cheaply detect that their cached assignment is stale.
+  const configRevision = `${probe.configVersion}:${monitors.length}:${assigned.reduce(
+    (acc, monitor) => acc + monitor.id,
+    0,
+  )}`;
 
   return jsonResponse({
     probe: {
@@ -149,7 +84,7 @@ export async function handleProbeConfig(request: Request, env: Env): Promise<Res
       scope: probe.scope,
       region: probe.region,
     },
-    config_revision: `${probe.configVersion}:${maxUpdatedAt}`,
+    config_revision: configRevision,
     generated_at: now,
     monitors,
   });

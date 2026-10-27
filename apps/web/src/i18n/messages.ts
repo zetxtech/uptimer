@@ -473,6 +473,19 @@ const en = {
   'theme.light': 'Light',
   'theme.dark': 'Dark',
   'theme.system': 'System',
+
+  'probes.title': 'Probes',
+  'probes.subtitle': 'Independent monitoring viewpoints that report into this instance.',
+  'probes.empty': 'No probes registered yet.',
+  'probes.token_once': 'Copy this token now. It is shown only once.',
+  'probes.rotate': 'Rotate token',
+  'probes.required': 'Required',
+  'probes.enabled': 'Enabled',
+  'probes.last_result': 'Last result',
+  'probes.never': 'Never',
+  'probes.region_mode': 'Region mode',
+  'probes.mode_worker': 'Cloudflare cron',
+  'probes.mode_multi_region': 'Multi-region probes',
 } as const;
 
 type MessageKey = keyof typeof en;
@@ -927,6 +940,19 @@ const zhCn: LocaleMessages = {
   'theme.light': '浅色',
   'theme.dark': '深色',
   'theme.system': '跟随系统',
+
+  'probes.title': '探针',
+  'probes.subtitle': '独立探测视角，将结果上报到本实例。',
+  'probes.empty': '还没有注册任何探针。',
+  'probes.token_once': '请立即复制该 token，它只显示一次。',
+  'probes.rotate': '轮换 token',
+  'probes.required': '必需',
+  'probes.enabled': '已启用',
+  'probes.last_result': '最近上报',
+  'probes.never': '从未',
+  'probes.region_mode': '区域模式',
+  'probes.mode_worker': 'Cloudflare 定时探测',
+  'probes.mode_multi_region': '多区域探针',
 };
 
 const zhTw: LocaleMessages = {
@@ -1380,6 +1406,19 @@ const zhTw: LocaleMessages = {
   'theme.light': '淺色',
   'theme.dark': '深色',
   'theme.system': '依系統設定',
+
+  'probes.title': '探針',
+  'probes.subtitle': '獨立探測視角，將結果上報到本執行個體。',
+  'probes.empty': '尚未註冊任何探針。',
+  'probes.token_once': '請立即複製此 token，僅會顯示一次。',
+  'probes.rotate': '輪換 token',
+  'probes.required': '必需',
+  'probes.enabled': '已啟用',
+  'probes.last_result': '最近上報',
+  'probes.never': '從未',
+  'probes.region_mode': '區域模式',
+  'probes.mode_worker': 'Cloudflare 定時探測',
+  'probes.mode_multi_region': '多區域探針',
 };
 
 const ja: LocaleMessages = {
@@ -1562,6 +1601,19 @@ const ja: LocaleMessages = {
   'theme.light': 'ライト',
   'theme.dark': 'ダーク',
   'theme.system': 'システム',
+
+  'probes.title': 'プローブ',
+  'probes.subtitle': '本インスタンスへ結果を送信する独立した監視拠点です。',
+  'probes.empty': 'プローブがまだ登録されていません。',
+  'probes.token_once': 'このトークンは一度しか表示されません。今すぐコピーしてください。',
+  'probes.rotate': 'トークンを再発行',
+  'probes.required': '必須',
+  'probes.enabled': '有効',
+  'probes.last_result': '最終結果',
+  'probes.never': '未実行',
+  'probes.region_mode': 'リージョンモード',
+  'probes.mode_worker': 'Cloudflare Cron',
+  'probes.mode_multi_region': 'マルチリージョンプローブ',
 };
 
 const es: LocaleMessages = {
@@ -1745,6 +1797,19 @@ const es: LocaleMessages = {
   'theme.light': 'Claro',
   'theme.dark': 'Oscuro',
   'theme.system': 'Sistema',
+
+  'probes.title': 'Sondas',
+  'probes.subtitle': 'Puntos de monitorizacion independientes que reportan a esta instancia.',
+  'probes.empty': 'Aun no hay sondas registradas.',
+  'probes.token_once': 'Copia este token ahora. Solo se muestra una vez.',
+  'probes.rotate': 'Rotar token',
+  'probes.required': 'Obligatoria',
+  'probes.enabled': 'Habilitada',
+  'probes.last_result': 'Ultimo resultado',
+  'probes.never': 'Nunca',
+  'probes.region_mode': 'Modo regional',
+  'probes.mode_worker': 'Cron de Cloudflare',
+  'probes.mode_multi_region': 'Sondas multirregion',
 };
 
 type MessagesByLocale = Record<SupportedLocale, LocaleMessages> & {
