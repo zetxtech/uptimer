@@ -1189,6 +1189,21 @@ const worker = {
 
     const { runScheduledTick } = await import('./scheduler/scheduled');
     await runScheduledTick(env, ctx);
+
+    // Overseas probe shards are additive: they only own probe_mode = 'multi_region' monitors,
+    // so enabling this cannot change the in-Worker cron behaviour above.
+    const { isProbeShardDispatchEnabled, runProbeShardDispatch } =
+      await import('./probes/shard-dispatch');
+    if (isProbeShardDispatchEnabled(env)) {
+      ctx.waitUntil(
+        runProbeShardDispatch(env, ctx).catch((err) => {
+          console.error('scheduled: probe shard dispatch failed', err);
+        }),
+      );
+    }
   },
 } satisfies ExportedHandler<Env>;
 export default worker;
+
+// Durable Object classes must be exported from the Worker entry module.
+export { ProbeShard } from './probes/shard';

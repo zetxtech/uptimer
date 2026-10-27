@@ -47,3 +47,18 @@ UPTIMER_INTERNAL_SCHEDULED_CHECK_BATCH_TIMEOUT_MS = "75000"
 UPTIMER_INTERNAL_CHECK_BATCH_FRAGMENT_WRITE_SPLIT = "1"
 UPTIMER_INTERNAL_CHECK_BATCH_TRUST_SCHEDULER_LEASE = "1"
 UPTIMER_SCHEDULED_REFRESH_LOGS = "0"
+
+# Overseas probe shards (Durable Object). Off by default; see docs/multi-region-probes.md.
+UPTIMER_DO_PROBES = "0"
+UPTIMER_DO_PROBE_ID = "cf-do"
+UPTIMER_DO_SHARD_COUNT = "1"
+
+# Overseas probe shards. Sharding is deterministic (monitor id modulo shard count) and the
+# placement hint below is best-effort: a Durable Object is created once and never moves.
+[[durable_objects.bindings]]
+name = "PROBE_SHARD"
+class_name = "ProbeShard"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ProbeShard"]

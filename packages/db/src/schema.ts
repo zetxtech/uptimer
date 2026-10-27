@@ -11,6 +11,9 @@ import {
 export type MonitorType = 'http' | 'tcp';
 export type MonitorStatus = 'up' | 'down' | 'maintenance' | 'paused' | 'unknown';
 export type CheckStatus = 'up' | 'down' | 'maintenance' | 'unknown';
+export type ProbeKind = 'edgeone' | 'durable_object' | 'worker' | 'server';
+export type ProbeScope = 'domestic' | 'overseas';
+export type MonitorProbeMode = 'worker' | 'multi_region';
 export type HttpResponseMatchMode = 'contains' | 'regex';
 export type IncidentStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved';
 export type IncidentImpact = 'none' | 'minor' | 'major' | 'critical';
@@ -47,6 +50,7 @@ export const monitors = sqliteTable(
     sortOrder: integer('sort_order').notNull().default(0),
     showOnStatusPage: integer('show_on_status_page', { mode: 'boolean' }).notNull().default(true),
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+    probeMode: text('probe_mode').$type<MonitorProbeMode>().notNull().default('worker'),
     createdAt: integer('created_at')
       .notNull()
       .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
@@ -87,6 +91,8 @@ export const checkResults = sqliteTable(
     error: text('error'),
     location: text('location'),
     attempt: integer('attempt').notNull().default(1),
+    probeId: text('probe_id'),
+    batchId: text('batch_id'),
   },
   (t) => ({
     monitorTimeIdx: index('idx_check_results_monitor_time').on(t.monitorId, t.checkedAt),
@@ -233,6 +239,65 @@ export const locks = sqliteTable('locks', {
   name: text('name').primaryKey(),
   expiresAt: integer('expires_at').notNull(),
 });
+
+export const probes = sqliteTable(
+  'probes',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    kind: text('kind').$type<ProbeKind>().notNull(),
+    scope: text('scope').$type<ProbeScope>().notNull(),
+    region: text('region').notNull(),
+    tokenSha256: text('token_sha256').notNull(),
+    isEnabled: integer('is_enabled', { mode: 'boolean' }).notNull().default(true),
+    isRequired: integer('is_required', { mode: 'boolean' }).notNull().default(true),
+    configVersion: integer('config_version').notNull().default(1),
+    lastSeenAt: integer('last_seen_at'),
+    lastResultAt: integer('last_result_at'),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
+  },
+  (t) => ({
+    tokenIdx: uniqueIndex('uq_probes_token_sha256').on(t.tokenSha256),
+  }),
+);
+
+export const probeBatches = sqliteTable(
+  'probe_batches',
+  {
+    probeId: text('probe_id').notNull(),
+    batchId: text('batch_id').notNull(),
+    receivedAt: integer('received_at').notNull(),
+    resultCount: integer('result_count').notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.probeId, t.batchId] }),
+    receivedIdx: index('idx_probe_batches_received').on(t.receivedAt),
+  }),
+);
+
+export const monitorProbeState = sqliteTable(
+  'monitor_probe_state',
+  {
+    monitorId: integer('monitor_id').notNull(),
+    probeId: text('probe_id').notNull(),
+    status: text('status').$type<MonitorStatus>().notNull(),
+    lastCheckedAt: integer('last_checked_at'),
+    lastChangedAt: integer('last_changed_at'),
+    lastLatencyMs: integer('last_latency_ms'),
+    lastError: text('last_error'),
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+    consecutiveSuccesses: integer('consecutive_successes').notNull().default(0),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.monitorId, t.probeId] }),
+    probeIdx: index('idx_monitor_probe_state_probe').on(t.probeId, t.lastCheckedAt),
+  }),
+);
 
 export const monitorDailyRollups = sqliteTable(
   'monitor_daily_rollups',

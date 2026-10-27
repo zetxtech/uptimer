@@ -17,6 +17,10 @@ function createEnv(handlers: FakeD1QueryHandler[]): Env {
   return { DB: createFakeD1Database(handlers) } as unknown as Env;
 }
 
+function cutoffFor(scheduledTimeMs: number, retentionDays: number): number {
+  return Math.floor(scheduledTimeMs / 1000) - retentionDays * 86400;
+}
+
 describe('scheduler/retention', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -71,6 +75,10 @@ describe('scheduler/retention', () => {
           return { meta: { changes: deletes.shift() ?? 0 } };
         },
       },
+      {
+        match: 'delete from probe_check_results',
+        run: () => ({ meta: { changes: 0 } }),
+      },
     ]);
 
     const scheduledTime = Date.UTC(2026, 1, 18, 0, 0, 0);
@@ -115,5 +123,29 @@ describe('scheduler/retention', () => {
 
     await runRetention(env, { scheduledTime: 1 } as ScheduledController);
     expect(runCalls).toHaveLength(0);
+  });
+
+  it('also prunes per-region probe history', async () => {
+    const probeRunCalls: unknown[][] = [];
+    const env = createEnv([
+      {
+        match: 'delete from check_results',
+        run: () => ({ meta: { changes: 0 } }),
+      },
+      {
+        match: 'delete from probe_check_results',
+        run: (args) => {
+          probeRunCalls.push(args);
+          return { meta: { changes: 42 } };
+        },
+      },
+    ]);
+
+    const scheduledTime = Date.UTC(2026, 1, 18, 0, 0, 0);
+    await runRetention(env, { scheduledTime } as ScheduledController);
+
+    expect(probeRunCalls).toHaveLength(1);
+    expect(probeRunCalls[0]?.[0]).toBe(cutoffFor(scheduledTime, 7));
+    expect(probeRunCalls[0]?.[1]).toBe(5000);
   });
 });

@@ -1,11 +1,16 @@
 import type {
   AdminMonitor,
+  AdminProbe,
+  AdminProbeWithToken,
+  AdminProbesResponse,
+  AdminProbeTokenRotation,
   AdminSettings,
   AdminSettingsResponse,
   AdminIncidentsResponse,
   AnalyticsOverviewResponse,
   AnalyticsOverviewRange,
   AnalyticsRange,
+  CreateAdminProbeInput,
   CreateMonitorInput,
   CreateIncidentInput,
   CreateIncidentUpdateInput,
@@ -18,6 +23,7 @@ import type {
   IncidentUpdate,
   NotificationChannel,
   NotificationChannelTestResult,
+  PatchAdminProbeInput,
   PatchMaintenanceWindowInput,
   PatchMonitorInput,
   PatchNotificationChannelInput,
@@ -726,4 +732,55 @@ export async function updateAdminUptimeRating(
     body: JSON.stringify({ uptime_rating_level }),
   });
   return handleResponse<{ uptime_rating_level: 1 | 2 | 3 | 4 | 5 }>(res);
+}
+
+// Admin API - Probes (multi-region viewpoints)
+export async function fetchAdminProbes(): Promise<AdminProbesResponse> {
+  const res = await fetch(`${API_BASE}/admin/probes`, { headers: getAuthHeaders() });
+  return handleResponse<AdminProbesResponse>(res);
+}
+
+export async function createAdminProbe(input: CreateAdminProbeInput): Promise<AdminProbeWithToken> {
+  const res = await fetch(`${API_BASE}/admin/probes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(input),
+  });
+  return handleResponse<AdminProbeWithToken>(res);
+}
+
+export async function patchAdminProbe(
+  id: string,
+  input: PatchAdminProbeInput,
+): Promise<{ probe: AdminProbe | null }> {
+  const res = await fetch(`${API_BASE}/admin/probes/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(input),
+  });
+  return handleResponse<{ probe: AdminProbe | null }>(res);
+}
+
+export async function rotateAdminProbeToken(id: string): Promise<AdminProbeTokenRotation> {
+  const res = await fetch(`${API_BASE}/admin/probes/${encodeURIComponent(id)}/rotate-token`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  return handleResponse<AdminProbeTokenRotation>(res);
+}
+
+export async function bumpAdminProbeConfig(id: string): Promise<{ ok: true }> {
+  const res = await fetch(`${API_BASE}/admin/probes/${encodeURIComponent(id)}/bump-config`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  return handleResponse<{ ok: true }>(res);
+}
+
+export async function deleteAdminProbe(id: string): Promise<{ ok: true }> {
+  const res = await fetch(`${API_BASE}/admin/probes/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  return handleResponse<{ ok: true }>(res);
 }

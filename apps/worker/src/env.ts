@@ -8,6 +8,13 @@ export interface Env {
   // Optional internal service binding to self (configured by CI deploy).
   SELF?: Fetcher;
 
+  // Overseas probe shards (Durable Object). Dispatch stays off unless UPTIMER_DO_PROBES is set.
+  PROBE_SHARD?: DurableObjectNamespace;
+  UPTIMER_DO_PROBES?: string;
+  UPTIMER_DO_PROBE_ID?: string;
+  UPTIMER_DO_SHARD_COUNT?: string;
+  UPTIMER_DO_LOCATION_HINT?: string;
+
   // Optional dev-only trace secret. If set, trace headers are honored only when
   // callers present `X-Uptimer-Trace-Token`.
   UPTIMER_TRACE_TOKEN?: string;

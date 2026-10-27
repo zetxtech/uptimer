@@ -748,6 +748,11 @@ export async function handleFetch(
   }
 
   try {
+    if (hotPathname.startsWith('/api/v1/probe/')) {
+      const { probeRoutes } = await import('./routes/probes');
+      return probeRoutes.fetch(normalizedRequest, env, ctx);
+    }
+
     if (hotPathname === '/api/v1/public/homepage-artifact') {
       const routeRes = await handlePublicHomepageArtifact(normalizedRequest, env);
       const res = bypassPublicSharedCache

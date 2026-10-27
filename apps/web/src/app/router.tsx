@@ -2,7 +2,12 @@ import { Suspense, lazy } from 'react';
 import { createBrowserRouter } from 'react-router-dom';
 
 import { StatusPage } from '../pages/StatusPage';
-import { ADMIN_ANALYTICS_PATH, ADMIN_LOGIN_PATH, ADMIN_PATH } from './adminPaths';
+import {
+  ADMIN_ANALYTICS_PATH,
+  ADMIN_LOGIN_PATH,
+  ADMIN_PATH,
+  ADMIN_PROBES_PATH,
+} from './adminPaths';
 import { ProtectedRoute } from './ProtectedRoute';
 
 const AdminDashboard = lazy(async () => {
@@ -13,6 +18,11 @@ const AdminDashboard = lazy(async () => {
 const AdminAnalytics = lazy(async () => {
   const mod = await import('../pages/AdminAnalytics');
   return { default: mod.AdminAnalytics };
+});
+
+const AdminProbes = lazy(async () => {
+  const mod = await import('../pages/AdminProbes');
+  return { default: mod.AdminProbes };
 });
 
 const IncidentHistoryPage = lazy(async () => {
@@ -78,6 +88,16 @@ export const router = createBrowserRouter([
       <Suspense fallback={<PageFallback />}>
         <AdminLogin />
       </Suspense>
+    ),
+  },
+  {
+    path: ADMIN_PROBES_PATH,
+    element: (
+      <ProtectedRoute>
+        <Suspense fallback={<PageFallback />}>
+          <AdminProbes />
+        </Suspense>
+      </ProtectedRoute>
     ),
   },
 ]);

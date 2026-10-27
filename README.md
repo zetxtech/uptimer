@@ -213,6 +213,7 @@ Default addresses:
 | [Deployment Guide](docs/deploy-github-actions.md) ([中文](docs/deploy-github-actions.zh-CN.md))            | Full GitHub Actions deployment walkthrough                 |
 | [Configuration Reference](docs/configuration-reference.md) ([中文](docs/configuration-reference.zh-CN.md)) | All configurable parameters (secrets, variables, settings) |
 | [Notification System](docs/notifications.md) ([中文](docs/notifications.zh-CN.md))                         | Webhook setup, templates, signatures, troubleshooting      |
+| [Multi-region probes](docs/multi-region-probes.md) ([中文](docs/multi-region-probes.zh-CN.md))             | Domestic/overseas probes, aggregation, deployment          |
 | [Local Development](Develop/LOCAL-TESTING.md)                                                              | Local setup, seed data, testing procedures                 |
 
 ## Quality Checks

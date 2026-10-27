@@ -213,6 +213,7 @@ pnpm dev
 | [部署指南](docs/deploy-github-actions.zh-CN.md)   | GitHub Actions 部署完整流程        |
 | [配置参考](docs/configuration-reference.zh-CN.md) | 所有可配置参数（密钥、变量、设置） |
 | [通知系统](docs/notifications.zh-CN.md)           | Webhook 配置、模板、签名、故障排除 |
+| [多区域探测](docs/multi-region-probes.zh-CN.md)   | 国内/海外探针、聚合策略与部署      |
 | [本地开发](Develop/LOCAL-TESTING.md)              | 本地环境搭建、种子数据、测试流程   |
 
 ## 质量检查
