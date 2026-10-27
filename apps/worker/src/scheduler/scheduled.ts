@@ -912,6 +912,7 @@ const LIST_DUE_MONITORS_SQL = `
   FROM monitors m
   LEFT JOIN monitor_state s ON s.monitor_id = m.id
   WHERE m.is_active = 1
+    AND m.probe_mode = 'worker'
     AND (s.status IS NULL OR s.status != 'paused')
     AND (s.last_checked_at IS NULL OR s.last_checked_at <= ?1 - m.interval_sec)
   ORDER BY m.id
@@ -922,6 +923,7 @@ const HAS_SCHEDULABLE_MONITORS_SQL = `
   FROM monitors m
   LEFT JOIN monitor_state s ON s.monitor_id = m.id
   WHERE m.is_active = 1
+    AND m.probe_mode = 'worker'
     AND (s.status IS NULL OR s.status != 'paused')
   LIMIT 1
 `;
@@ -1081,6 +1083,7 @@ export async function listMonitorRowsByIds(
       FROM monitors m
       LEFT JOIN monitor_state s ON s.monitor_id = m.id
       WHERE m.is_active = 1
+        AND m.probe_mode = 'worker'
         AND (s.status IS NULL OR s.status != 'paused')
         AND m.id IN (${placeholders})
       ORDER BY m.id

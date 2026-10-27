@@ -47,6 +47,7 @@ import {
 import { encryptTelegramBotToken } from '../notify/telegram-token';
 import { adminAnalyticsRoutes } from './admin-analytics';
 import { adminExportsRoutes } from './admin-exports';
+import { adminProbeRoutes } from './admin-probes';
 import { adminSettingsRoutes } from './admin-settings';
 import {
   createIncidentInputSchema,
@@ -89,6 +90,7 @@ adminRoutes.use('*', requireAdmin);
 adminRoutes.route('/analytics', adminAnalyticsRoutes);
 adminRoutes.route('/exports', adminExportsRoutes);
 adminRoutes.route('/settings', adminSettingsRoutes);
+adminRoutes.route('/probes', adminProbeRoutes);
 
 function queuePublicHomepageSnapshotRefresh(c: { env: Env; executionCtx: ExecutionContext }) {
   const now = Math.floor(Date.now() / 1000);
@@ -292,6 +294,7 @@ function monitorRowToApi(
     sort_order: row.sortOrder,
     show_on_status_page: row.showOnStatusPage,
     is_active: row.isActive,
+    probe_mode: row.probeMode,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
 
@@ -495,6 +498,7 @@ adminRoutes.post('/monitors', async (c) => {
       sortOrder: input.sort_order ?? 0,
       showOnStatusPage: input.show_on_status_page ?? true,
       isActive: input.is_active ?? true,
+      probeMode: input.probe_mode ?? 'worker',
       createdAt: now,
       updatedAt: now,
     })
@@ -634,6 +638,7 @@ adminRoutes.patch('/monitors/:id', async (c) => {
       sortOrder: input.sort_order ?? existing.sortOrder,
       showOnStatusPage: input.show_on_status_page ?? existing.showOnStatusPage,
       isActive: input.is_active ?? existing.isActive,
+      probeMode: input.probe_mode ?? existing.probeMode,
       updatedAt: now,
     })
     .where(eq(monitors.id, id))

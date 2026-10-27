@@ -36,3 +36,6 @@ pnpm-debug.log*
 
 # Reference project (do not track in this repo)
 [U]ptimeFlare/
+
+# Local codegraph index (codegraph init)
+.codegraph/

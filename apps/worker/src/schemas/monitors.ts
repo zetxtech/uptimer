@@ -62,6 +62,7 @@ export const createMonitorInputSchema = z
     sort_order: monitorSortOrderSchema.optional(),
     show_on_status_page: z.boolean().optional(),
     is_active: z.boolean().optional(),
+    probe_mode: z.enum(['worker', 'multi_region']).optional(),
   })
   .superRefine((val, ctx) => {
     const err =
@@ -130,6 +131,7 @@ export const patchMonitorInputSchema = z
     sort_order: monitorSortOrderSchema.optional(),
     show_on_status_page: z.boolean().optional(),
     is_active: z.boolean().optional(),
+    probe_mode: z.enum(['worker', 'multi_region']).optional(),
   })
   .superRefine((val, ctx) => {
     for (const issue of validateHttpResponseAssertionConfig({
