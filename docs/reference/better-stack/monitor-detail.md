@@ -10,21 +10,25 @@ Captured 2026-11-13 at `…/team/t132878/monitors/2498052` (a monitor that is cu
 
 ## Summary row
 
-Three columns of 185 px at x=481, 724, 967 (same grid as the incident summary):
+Three separate cards, not one grid: each is `flex-1 p-5 mb-5 rounded border border-neutral-60 dark:border-neutral-600 bg-elevation-2 shadow-2xs` inside a `flex-col md:flex-row md:space-x-4` row, so they are 185 px wide with 16 px gaps at this viewport (x=481, 724, 967).
 
-- **Currently down for** (14/400 muted) → "23 hours 50 mins" (20/600 white)
-- **Last checked at** → "1 minute ago" (20/600)
-- **Incidents** (14/400) with an inline **Ongoing incident** chip (13/500 muted) → "56" (20/600)
+- Label `h6`, 14 px / 400 muted → value `h2.mt-2.display-small`, 20 px / 600 white.
+- **Currently down for** → "23 hours 50 mins"
+- **Last checked at** → "1 minute ago" (a `time.timeago` element with a tooltip showing the absolute timestamp)
+- **Incidents** (with an inline **Ongoing incident** chip 13/500 next to the label) → "56"
 
 ## Response times panel
 
-- Section bar **Response times**: 711 × 42, radius 8, fill `rgb(34, 40, 56)`, label 13/500 muted. The bar doubles as the collapsed header of the chart card.
-- Chart area: ~470 px tall inside the same card, with the axis labels at 11–12 px and no gridline-heavy styling.
+- Card wrapper `mb-5 rounded border border-neutral-60 dark:border-neutral-600`. Header bar: `px-4 flex items-center bg-elevation-2 rounded-t border-b h-[42px] leading-none font-medium text-dashboards-sm` — label **Response times**.
+- Chart body `#response-times-chart` fixed `h-[466px]`, containing a `h-[400px]` plot area with a 16 px spinner while loading.
+- Chart toolbar (`px-6 pt-3 flex justify-between gap-4`):
+  - Region selector: a flag icon (20 × 14, `rounded-[2px]`, 1 px border) overlaid inside a `<select class="form-control-v2 pl-[30px]">` with options Europe / North America / Asia / Australia; the select has no border (`border-none shadow-none bg-elevation-1`) and highlights on hover.
+  - Range segmented control: buttons `py-2 w-16` (64 px), `-ml-px`, first `rounded-l`, last `rounded-r`, 1 px border; active button filled `bg-neutral-50 dark:bg-neutral-700 text-primary`, others transparent with `hover:bg-elevation-3 hover:text-primary`. Labels **Hour**, **Day**, **Week**, **Month**.
 - Below the chart sits the stats table:
   - Header row 41 px tall; labels 13/500 muted: Time period, Availability, Downtime, Incidents, Longest incident, Avg. incident. Column widths: 177 / 99 / 183 / 89 / 185 / 183.
-  - Body rows ~42 px tall; first cell 13/400 white, availability 13/500 white, remaining cells 13/400 white. Numbers are not tabular-figure aligned; long durations wrap into two lines when needed.
+  - Body rows ~42 px tall; first cell 13/400, availability cell `text-right font-medium`, remaining cells `text-right`, durations `whitespace-nowrap`.
   - Rows: Today, Last 7 days, Last 30 days, Last 365 days, All time (Last N days).
-- Date range row below the table: **From** / **To** fields and a **Calculate** button.
+- Date range row below the table: **From** / **To** date pickers and a **Calculate** button, which appends a computed row ("Since 1 Nov 2026 until today").
 
 ## Table markup (from the archived DOM)
 
