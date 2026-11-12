@@ -19,7 +19,7 @@ Text captures of the signed-in reference workspace (`incidents.betterstack.com/t
 
 ## Coverage status
 
-Captured end to end: create monitor, configure monitor (including every advanced section, per-type fields and the destructive action behaviour), monitor detail (header, actions, summary cards, chart toolbar, stats table, custom range), monitors list controls, row anatomy and selection mode, all 16 bulk dialogs, incidents list, incident detail (ongoing and resolved states, request tabs, timeline, status-page composer shell), incident report form, create heartbeat, all settings pages plus billing and SSO, reporting navigation, every integrations tab, empty states, design tokens.
+Captured end to end (live, 2026-11-13): monitor list rows, selection bar, the 16-entry bulk menu and the bulk dialogs, the expanded status report composer, and the similar-incidents page. Earlier captures cover: create monitor, configure monitor (including every advanced section, per-type fields and the destructive action behaviour), monitor detail (header, actions, summary cards, chart toolbar, stats table, custom range), monitors list controls, row anatomy and selection mode, all 16 bulk dialogs, incidents list, incident detail (ongoing and resolved states, request tabs, timeline, status-page composer shell), incident report form, create heartbeat, all settings pages plus billing and SSO, reporting navigation, every integrations tab, empty states, design tokens.
 
 Confirmed behaviours worth noting:
 
@@ -29,10 +29,8 @@ Confirmed behaviours worth noting:
 
 Still not capturable, with the reason:
 
-- **Live monitors list rows and a live bulk selection** — `/monitors` renders the onboarding empty state for this team even though monitor detail pages open, so rows never mount. Row measurements from the 2026-11-12 session are in `monitors-list.md`.
-- **Status report composer (expanded)** — the incident page in this account only exposes the collapsed "Create status report" row; expanding it requires a status page that is not configured.
-- **Similar incidents page** — reachable only from a grouped incident row that no longer renders.
 - **Reporting widgets** — reporting is disabled ("Enable reporting").
 - **On-call schedule editor, escalation policy editor, status page editor, test-alert page** — all redirect to `settings/billing/features` (plan gate) or 404 in the archived captures.
 - **Heartbeat detail** — the account has no heartbeats.
-- **Live site access** — the signed-in session expired during capture; every URL now redirects to a magic-link sign-in that only the account owner can complete.
+- **Live site access** — the session briefly expired and now works again; the remaining gaps above are plan gates and missing data, not access.
+- **Monitors list entry point** — `/monitors` shows the onboarding empty state for this team, while `/monitors?group_id=0` lists all monitors. That group view is the reference for row anatomy.
