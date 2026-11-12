@@ -25,3 +25,22 @@ In the observed account, the default group is titled **Monitors**. Its header ha
 Choosing **Select** enters selection mode with **0 selected**: a square selection control appears in the group header and in place of each row's status icon. The bottom action bar is visible even with no items selected; in that state it showed **Create group** and **Unpause**. Clicking the group selection control selected all nine monitors in that group, updated the count to **9 selected**, and changed the action to **Pause**. No bulk action was submitted. See the separate bulk-operations record for the available actions and dialogs.
 
 For selection mode and bulk actions, see [monitors-bulk-operations.md](monitors-bulk-operations.md).
+
+## Row anatomy (measured live on 2026-11-12, when the team still listed monitors)
+
+Measured against the reference list before the page degraded to its onboarding empty state:
+
+| Item | Better Stack | Notes |
+| --- | --- | --- |
+| Row height | 57 px | row pitch 57, no divider between rows |
+| Row padding | 20 px left/right | content starts at x = row.x + 20 |
+| Status marker | 40 × 40 animated circle | sits 20 px from the row's left edge |
+| Name | 13 px / 600, 18 px line box | starts 76 px from the row's left edge |
+| Second line | 12 px / 400 | status word (green `rgb(100, 194, 141)` when up) then the elapsed time in `rgb(147, 157, 184)`, 10 px gap, **no separator dot** |
+| Trailing block | fixed 140 px | check frequency on top, action area below |
+| Row action buttons | 26 × 26 | 24 px gap from the data columns |
+| Selection mode | checkbox replaces the status marker | 16 px square, only while selection mode is active |
+| Group header | separate row above its monitors | title + count, actions (sort / add / ellipsis) appear on hover, drag handle appears only on group hover |
+| Bottom action bar | floats over the list | `N selected · Create group · Pause · ⋯ · ✕` |
+
+The toolbar search field measured 265 × 36 with a `bg-elevation-2` fill; the filter button is the same height with a border. The list column is narrower than the content area and left-aligned with the page title.
