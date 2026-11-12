@@ -14,12 +14,12 @@ Text captures of the signed-in reference workspace (`incidents.betterstack.com/t
 | [incident-detail.md](incident-detail.md) | Incident header, summary card, request tabs, metadata, timeline, status-page composer |
 | [heartbeat-create.md](heartbeat-create.md) | Create heartbeat: defaults, expanded sections, validation |
 | [settings.md](settings.md) | Settings shell and all account/organization pages |
-| [reporting-overview.md](reporting-overview.md) | Reporting rail and report list, plus its enable gate |
+| [reporting-overview.md](reporting-overview.md) | Reporting: report tree, filter bar, KPI block, chart card, incident table, and the full-panel "Enable reporting" overlay |
 | [integrations-and-empty-states.md](integrations-and-empty-states.md) | Integrations cards, empty states (monitors, heartbeats, status pages, on-call, policies), 404 |
 
 ## Coverage status
 
-Captured end to end (live, 2026-11-13): monitor list rows, selection bar, the 16-entry bulk menu and the bulk dialogs, the expanded status report composer, and the similar-incidents page. Earlier captures cover: create monitor, configure monitor (including every advanced section, per-type fields and the destructive action behaviour), monitor detail (header, actions, summary cards, chart toolbar, stats table, custom range), monitors list controls, row anatomy and selection mode, all 16 bulk dialogs, incidents list, incident detail (ongoing and resolved states, request tabs, timeline, status-page composer shell), incident report form, create heartbeat, all settings pages plus billing and SSO, reporting navigation, every integrations tab, empty states, design tokens.
+Captured end to end (live, 2026-11-13): monitor list rows, selection bar, the 16-entry bulk menu and the bulk dialogs, the expanded status report composer, and the similar-incidents page. Earlier captures cover: create monitor, configure monitor (including every advanced section, per-type fields and the destructive action behaviour), monitor detail (header, actions, summary cards, chart toolbar, stats table, custom range), monitors list controls, row anatomy and selection mode, all 16 bulk dialogs, incidents list, incident detail (ongoing and resolved states, request tabs, timeline, status-page composer shell), incident report form, create heartbeat, all settings pages plus billing and SSO, reporting (widgets, filters, table and the upsell overlay), every integrations tab, empty states, design tokens.
 
 Confirmed behaviours worth noting:
 
@@ -29,7 +29,6 @@ Confirmed behaviours worth noting:
 
 Still not capturable, with the reason:
 
-- **Reporting widgets** — reporting is disabled ("Enable reporting").
 - **On-call schedule editor, escalation policy editor, status page editor, test-alert page** — all redirect to `settings/billing/features` (plan gate) or 404 in the archived captures.
 - **Heartbeat detail** — the account has no heartbeats.
 - **Live site access** — the session briefly expired and now works again; the remaining gaps above are plan gates and missing data, not access.
