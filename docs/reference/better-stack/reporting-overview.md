@@ -13,7 +13,9 @@ The report is **fully rendered**; what you see in the DOM is a transparent, full
 - The overlay measured 672 × 2413 starting at the panel's top-left, i.e. it covers the whole report body.
 - Because it is `inset-0` with `z-2001`, every click inside the panel (filters, range buttons, chart hover, table rows, CSV export, pagination) lands on the upsell link instead, which redirects to `team-features-redirect` (the plan/features page).
 - Text is `text-transparent`, so the widget content stays visible and readable; only interaction is gated. Reporting itself is a paid feature for this team.
-- Consequence for the port: the layout, typography and data are all observable, the *behaviour* of the controls cannot be exercised in this account.
+- Verified with a real (CDP) click on the **Day** granularity button: the browser navigated to `https://betterstack.com/settings/teams/132878/features`, which reads "**Please enable reporting first.** The reporting module is configured on a per-team basis. Please enable it below." and shows **Reporting → Unavailable**.
+- A scripted `element.click()` on the same button still works (URL switches to `resolution=week`), which is why the widgets can be measured: the handlers are intact, only pointer input is hijacked by the overlay.
+- Consequence for the port: layout, typography, data and control states are observable; real user interaction (filters, granularity, CSV export, pagination, drill-down) cannot be exercised in this account.
 
 ## Layout
 
