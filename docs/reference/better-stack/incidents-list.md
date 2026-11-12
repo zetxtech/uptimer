@@ -47,4 +47,17 @@ Re-measured with the list populated (22 pages of incidents, 1056 px column at a 
 - Row content: monitor name 13/600 white, 17 px line box, 2 px gap to the second line; second line "Status 525 / Started 23 hours ago" at 13/400 muted. Grouped rows prefix "2 similar incidents". Right columns: team avatar + name, length, acknowledged dash.
 - Pagination: 26 × 26 buttons radius 6; current page filled `rgb(47, 54, 71)` with white text, others transparent and muted, with an ellipsis before the last pages.
 
+## Report form (archived DOM, `…/report/<token>`)
+
+- Informational banner above the title: `flex space-x-3 border rounded-lg px-3 pt-3 pb-4 bg-neutral-50 dark:bg-neutral-800 border-neutral-40 dark:border-neutral-700` with a 16 px solid `information-circle` icon, bold title **Share this URL with your team**, body "Let your colleagues report issues directly to the on-call person. Share the following URL on your team's Slack or wiki.", and a readonly monospace input (`font-mono text-sm rounded-sm p-1.5`) containing the public report URL.
+- `h1` **Report new incident** (`display-large mt-12 mb-10`).
+- Section copy: **What's going on?** — "Please describe what's going on including steps to reproduce the issue. The more specific you are, the easier it's going to be for your colleagues to locate the issue and resolve the incident."
+  - **Brief description \*** (required text input, `placeholder="Example: New users can't sign up"`, `maxlength=100`, autofocus).
+  - **In-depth description \*** (required `textarea rows=5`).
+  - **Attach files or screenshots** with a drag-and-drop area ("Drag & drop files or screenshots" / "Drop it here") and a **Choose files** button backed by a visually hidden file input.
+- **Your contact details** — **Your e-mail**, prefilled and `disabled`, italic, dimmed background.
+- **Who should we notify?** — **Report to** (team or escalation policy).
+- **Notification channels** — intro "Please configure how urgent this incident is." then checkboxes Call, SMS, E-mail (checked), Push notification, Critical alert; disabled ones carry upgrade links. Note under them: "<team> currently has no primary responder. Set up primary schedule to always have a specific team member to notify."
+- Submit button: `h-10 rounded px-3.5 font-medium text-white bg-brand-primary-200`, label **Create new incident**.
+
 Submitting both description fields empty triggers native browser required-field validation on the brief description first; both description controls have `required`. No incident was created. At a 1208 × 958 viewport the heading measured 28 px / 600 weight, the content/form width 1000 px, text inputs 36 px high with 8 px radius, the textarea 118 px high, and the submit button 40 px high. Dimensions reflect this viewport and account state.
