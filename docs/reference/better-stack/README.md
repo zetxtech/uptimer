@@ -19,7 +19,7 @@ Text captures of the signed-in reference workspace (`incidents.betterstack.com/t
 
 ## Coverage status
 
-Captured end to end: create monitor, configure monitor (including every advanced section and the destructive action behaviour), monitor detail (header, actions, chart frame, stats table, custom range), monitors list controls and selection mode, all 16 bulk dialogs, incidents list, incident detail, incident report form, create heartbeat, all settings pages, reporting navigation, integrations, empty states, design tokens.
+Captured end to end: create monitor, configure monitor (including every advanced section, per-type fields and the destructive action behaviour), monitor detail (header, actions, summary cards, chart toolbar, stats table, custom range), monitors list controls, row anatomy and selection mode, all 16 bulk dialogs, incidents list, incident detail (ongoing and resolved states, request tabs, timeline, status-page composer shell), incident report form, create heartbeat, all settings pages plus billing and SSO, reporting navigation, every integrations tab, empty states, design tokens.
 
 Confirmed behaviours worth noting:
 
