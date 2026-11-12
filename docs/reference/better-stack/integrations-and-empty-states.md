@@ -50,3 +50,13 @@ When the team has no monitors the list area is replaced by an onboarding card:
 ## 404 page
 
 Plain centered page: `404` large, **Page not found**, explanatory paragraph, links Terms of Use · Privacy Policy · GDPR. Uses the marketing site shell, not the workspace shell.
+
+## Integration tabs (archived DOM, 2026-11-09)
+
+The Integrations page is a tab set, not a single list: **Popular** · **Importing data** · **Exporting data** · **Meetings** · **Zapier** · **APIs**. Each tab is a stack of the same 728 × 109 cards described above.
+
+- **Importing data** — "Import data from other services." (2 minutes): AWS CloudWatch, Google Cloud Monitoring, Heroku, Microsoft Azure, "Manually tr…" (truncated in the capture).
+- **Exporting data** — "Export data to other services." (2 minutes): AI SRE, Slack, Microsoft Teams, iOS app, and further mobile/notification entries.
+- **Meetings** — Zoom ("Create Zoom meetings for incidents"), Google Meet ("Create Google Meets for incidents").
+- **Zapier** — intro "Connect Better Stack to other services you already use with Zapier" + **Add Zapier templates**, then template cards tagged `ZAPIER`: On-call change webhook, Typeform, Incident webhook, Asana, Front, …
+- **APIs** — "REST API", note "You'll need your API token" with **Get the API token**, then resource sections: HTTP API, Logs, Monitors, Monitor groups, Heartbeats, Heartbeat groups, On-call schedule, …

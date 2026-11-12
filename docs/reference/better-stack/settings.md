@@ -68,3 +68,14 @@ Body example (Responders): explanatory paragraph, **Manage responders** button, 
 ## API tokens (`/settings/global-api-tokens`)
 
 Card **Global API tokens** — "Global tokens are shared among all teams throughout Better Stack." Links: Incidents API documentation, Telemetry API documentation. Tabs **Global tokens** / **Team-based tokens**. Form: **Token name**, scope radios **Read & write** / **Read only**, **Create** button. Empty state: "Create an API token to be able to use the API."
+
+## Billing (`/settings/billing`)
+
+- Lead: "You're currently on the Free plan. Please upgrade your plan to use Pay as you go features." + "Try Better Stack risk-free with a 60-day money-back guarantee."
+- Pricing block: "How many responder licenses will you need?" — "All users are team members by default and are free." Price line "$29 per month billed yearly", then **Responder licenses** with the definition "Responder is a user that has access to Incidents, including on-call, monitoring and status pages, with unlimited phone call and SMS alerts and is billed extra."
+- Secondary question: "Do you want to pre-pay for a telemetry bundle?" with reserved-volume options.
+
+## Single Sign-On (`/settings/sso`)
+
+- Lead: "Single Sign-On and 2FA — Secure your team with SSO and two-factor authentication." (2 minutes)
+- Provider cards with a **Connect** action each: Google Workspace, Okta SSO, Microsoft Azure, Generic SAML SSO. Copy follows "Let everyone from your <provider> automatically sign up for a Better Stack account."
