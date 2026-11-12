@@ -19,3 +19,16 @@ Observed in the signed-in browser on 2026-11-12 at `/team/<team-id>/heartbeats/n
 ## Validation and gaps
 
 Clicking Create heartbeat with the name empty kept the page in place and invoked the browser's native required-field validation on the name input. With the browser's Chinese locale the validation message was `请填写此字段。`; no `role=alert` was present. This does not establish server-side error formatting. Other escalation-policy branches, timezone dropdown contents, submission and post-create behaviour remain to be observed.
+
+## Structure from the archived DOM
+
+- The form uses a **two-column section layout**: left column `flex-1` holds the `h3.heading` + description, right column `flex-2 rounded-lg bg-elevation-2 border p-6 xl:rounded xl:border xl:max-w-[612px]` holds the controls. This is different from Create monitor, where each section is a full-width card.
+- Section 1 copy: "Configure the name and schedule for the CRON job or a worker you want to monitor." Field label **What service will this heartbeat track?** (with the **Billable** badge), then the sentence row: "Expect a heartbeat every `[n]` `[unit]` with a grace period of `[n]` `[unit]`".
+  - `heartbeat[period_type]` options: second, minute, hour, day.
+  - `heartbeat[grace_type]` options: seconds, minutes, hours, days.
+- Section 2 is the shared escalation block (primary responder radio, escalation policy radio, notification checkboxes, acknowledgement select with the same five options), followed by **Escalation steps**.
+- **Advanced settings** contains **Location timezone**: "Set your server location to count in local timezone changes." The select is a searchable multi-select; each option renders as `GMT±hh:mm` + `Area/City` + local time, e.g. `GMT+08:00 Asia/Singapore`, `GMT-05:00 America/New York`. Hidden input `heartbeat[server_timezone]`; empty means None.
+- **Maintenance** card (`#maintenance-form.vue-maintenance`, `p-6`, radius 8/12, `xl:max-w-[612px]`):
+  - Label **Maintenance window between**, two `<input type="time" step="60">` fields (`maintenance_from`, `maintenance_to`).
+  - Timezone picker: 36 px chip `rounded border border-elevation-5 bg-elevation-2 shadow-button`, globe icon 16 px, then `GMT+08:00` in primary text and `Asia/Singapore` in tertiary text truncated with ellipsis; click opens a searchable list.
+  - Weekday chips Mon–Sun bound to `maintenance-days` (all seven enabled by default).
