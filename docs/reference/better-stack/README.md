@@ -1,6 +1,6 @@
 # Better Stack reference archive
 
-Text captures of the signed-in reference workspace (`incidents.betterstack.com/team/t132878`, settings at `betterstack.com/settings`). Taken from live pages on 2026-11-12/13 and from the DOM snapshots saved while signed in (`/tmp/opencode/uptimer/bs-pages/`, 58 pages). No data was created, edited or deleted in the reference account.
+Text captures of the signed-in reference workspace (`incidents.betterstack.com/team/t132878`, settings at `betterstack.com/settings`). Taken from live pages on 2026-11-12/13 and from the DOM snapshots saved while signed in (`/tmp/opencode/uptimer/bs-pages/`, 55 saved pages). No data was created, edited or deleted in the reference account.
 
 | File | Covers |
 | --- | --- |
@@ -8,7 +8,7 @@ Text captures of the signed-in reference workspace (`incidents.betterstack.com/t
 | [monitor-create.md](monitor-create.md) | Create monitor: frame, cards, every field and option, advanced sections, error state |
 | [monitor-edit.md](monitor-edit.md) | Configure: header actions (test alert / pause / remove), per-type fields, Escalation steps, all advanced sections, environment variables, GitHub badge |
 | [monitor-detail.md](monitor-detail.md) | Monitor detail: header, action strip, summary row, response-times chart, stats table, custom range row |
-| [monitors-list.md](monitors-list.md) | Monitors page: toolbar, search, filter, sort, group menu, selection mode |
+| [monitors-list.md](monitors-list.md) | Monitors page: toolbar, search, filter, sort, group menu, selection mode, measured row anatomy |
 | [monitors-bulk-operations.md](monitors-bulk-operations.md) | Selection toolbar, bulk action menu, and each per-property bulk dialog |
 | [incidents-list.md](incidents-list.md) | Incidents list, row anatomy, pagination, report form (banner, fields, attributes) |
 | [incident-detail.md](incident-detail.md) | Incident header, summary card, request tabs, metadata, timeline, status-page composer |
