@@ -61,3 +61,12 @@ Re-measured with the list populated (22 pages of incidents, 1056 px column at a 
 - Submit button: `h-10 rounded px-3.5 font-medium text-white bg-brand-primary-200`, label **Create new incident**.
 
 Submitting both description fields empty triggers native browser required-field validation on the brief description first; both description controls have `required`. No incident was created. At a 1208 × 958 viewport the heading measured 28 px / 600 weight, the content/form width 1000 px, text inputs 36 px high with 8 px radius, the textarea 118 px high, and the submit button 40 px high. Dimensions reflect this viewport and account state.
+
+## Similar incidents page (live 2026-11-13)
+
+`…/similar-incidents/<id>` is the list of incidents grouped under one cause:
+
+- `h1` is the count: **"2 similar incidents"** (28/600), with the group's first timestamp on the next line ("Nov 11, 2026 at 6:34am GMT+8"), then the breadcrumb chip `/`.
+- Toolbar: **Search** input 265 × 36 right-aligned before the primary action **Acknowledge all** 135 × 36 (radius 8, fill `rgb(91, 99, 211)`, 14/500).
+- The table is the same component as the main incidents list: header band 37 px (13/500 for the sortable "Incident" label, 13/400 muted for the others), data rows **82 px** tall at 1056 px wide, row link wraps the whole row, trailing 26 × 26 row-menu buttons.
+- No pagination and no filters on this page.

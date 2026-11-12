@@ -66,3 +66,16 @@ With an incident selected the tabs show real data:
 - **Request timing** — key/value rows, label left, value right, 12 px text: Effective URL, Redirect count, Name lookup time, Connect time, Pre-transfer time, Start-transfer time, App connect time, Redirect time, Total time, Response code, Return keyword (e.g. "ok").
 - **Response headers** — status line then raw headers (`HTTP/2 525`, `server: ESA`, `content-length: 0`, …) rendered as plain monospace-ish lines, not a table.
 - **Replay** — the playback surface for the captured request.
+
+## Status report composer, expanded (live 2026-11-13)
+
+Clicking the collapsed **Create status report** row expands it in place (no modal). Measured at a 1152 px viewport:
+
+- Card block inside the timeline column; content padding 24 px (fields start at x = card + 24).
+- **What's going on?** label 12/500, then a 743 × 36 text input prefilled with "<monitor> is down"; help "Concise summary of the incident." 12/400 under it.
+- **Description** label 12/500, textarea 743 × 98 (radius 8, fill `rgb(34, 40, 56)`), prefilled "<monitor> went down."; help "You can use markdown. View recommended templates".
+- **Affected services** label 12/500, then one row per service: name 14/500 white (truncated with ellipsis) and a right-aligned status multiselect 192 × 36 (radius 8, 1 px `rgb(59, 66, 84)` border, `rgb(34, 40, 56)` fill) showing **Downtime** / **Not affected** / etc. Row pitch 53 px.
+- **Published at** label 12/500 with a datetime control.
+- **Notify status page subscribers** — 16 px checkbox (radius 4, `rgb(47, 54, 71)` unchecked fill) plus label 12/500; the collapsed value reads "We won't notify anyone".
+- Submit **Create status report**: 151 × 32, radius 8, fill `rgb(91, 99, 211)`, left-aligned at the bottom of the block.
+- Submitted values are carried in hidden inputs: status text, description, one status code per service (`not_affected` / `downtime`), publication timestamp (`YYYY-MM-DDTHH:mm`), timezone name, notify flag.
