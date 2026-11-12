@@ -26,7 +26,21 @@ Choosing **Select** enters selection mode with **0 selected**: a square selectio
 
 For selection mode and bulk actions, see [monitors-bulk-operations.md](monitors-bulk-operations.md).
 
-## Row anatomy (measured live on 2026-11-12, when the team still listed monitors)
+## Row anatomy (re-measured live 2026-11-13 on the group view)
+
+The default `/monitors` URL renders an empty onboarding state for this team, but `/monitors?group_id=0` renders the real list (9 monitors, 831 px column at a 1152 px viewport):
+
+- Row: 831 × 57, `padding: 0 20px`, **1 px top border `rgb(47, 54, 71)`**, no radius, transparent background; the whole row is one link.
+- Status marker: 40 × 40 box at x = row + 20, containing three stacked 10 px animated circles (`circle-main` / `circle-secondary` / `circle-tertiary`), colour by state (`status-indicator--success` / `--danger`).
+- Text block starts 76 px from the row edge: name `13px / 600`, `leading-[120%]`, white, `truncate`, 18 px line box, `pb-0.5`.
+- Second line `mt-1 pb-1 text-dashboards-xs`: state word 12 px (Up `rgb(100, 194, 141)`, Down `rgb(224, 104, 125)`), then 10 px gap, then the elapsed time 12 px `rgb(147, 157, 184)`; no separator.
+- Trailing block `flex items-center gap-6` at x = row right − 160: frequency cell fixed `w-[90px]` (13 px, with a tooltip wrapper), then a `w-[26px]` cell holding a 26 × 26 row menu button (radius 6).
+- Down rows additionally show a status-page link pill: 182 × 30, 1 px border, radius 8, placed left of the frequency cell.
+- Group header: `h-[42px] flex justify-between items-center cursor-pointer`, title 13 px / 500 `rgb(147, 157, 184)` at x = row + 34, trailing control cluster 108 × 26 at the right edge (sort, add, ellipsis as 26 × 26 buttons).
+- Group ellipsis menu: 190 × 190, radius 6, fill `rgb(34, 40, 56)`, items 33 px tall / 13 px: **Create monitor**, separator, **Select**, **Select all**, **Rename** (disabled), **Remove** (disabled).
+- Selection mode: bottom bar 377 × 32 at y = viewport − 60, buttons 32 px tall — `N selected`, **Create group** (131), **Pause**/**Unpause** (105), ellipsis (32); the state word flips from "Unpause" to "Pause" once rows are selected.
+
+## Earlier measurements (2026-11-12)
 
 Measured against the reference list before the page degraded to its onboarding empty state:
 

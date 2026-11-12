@@ -95,3 +95,12 @@ The form warns: **Bulk editing will overwrite existing metadata.** It exposes tw
 ## Capture limitations
 
 The remaining dialogs, pages, motion and error states still need to be inspected and recorded as text. The desktop browser disconnected during collection; no changes were saved to the reference account. Measurements above are specific to the observed viewport and are not a responsive specification.
+
+## Live verification (2026-11-13, `/monitors?group_id=0`)
+
+- Selection bar: 377 × 32 at the bottom of the viewport, controls 32 px tall: `10 selected`, **Create group** (131 px), **Pause** (105 px), ellipsis (32 px).
+- Ellipsis menu: **350 × 633**, radius 6, fill `rgb(34, 40, 56)`, every row 33 px tall at 13 px; exactly the 16 `Configure …` entries listed above followed by **Remove**, with no "resume/enable" or generic "Edit" entry.
+- Dialog frame: `relative rounded-lg overflow-hidden grow max-w-[612px] mx-4`, measured 581 wide, radius 12, fill `rgb(34, 40, 56)`; header `px-5 py-4 bg-elevation-3` (46 px, 14 px medium label), body `px-5 py-6 border-y border-elevation-4 max-h-[80vh] overflow-y-auto`, footer `p-2 flex justify-end gap-2` (46 px).
+- Footer buttons: **Cancel** 68 × 30 (fill `rgb(41, 48, 64)`), **Save** 55 × 30 (fill `rgb(91, 99, 211)`), both radius 8 / 14 px / 500; close button 23 px, radius 6.
+- **Configure check frequency** dialog measured 581 × 219: one full-width select (Leave unchanged, 30 s, 45 s, 1, 2, 3, 5, 10, 15, 30 minutes) plus help "How often should we check your monitor?".
+- **Configure request parameters** dialog measured 581 × 413: two 261 × 34 selects side by side (method, timeout), textarea 542 × 82, two 15 px checkboxes (Follow redirects, Keep cookies when redirecting).
