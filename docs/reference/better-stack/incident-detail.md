@@ -51,3 +51,18 @@ Below the timeline, a card block headed **Status page (status.zetx.tech)** (14/7
 
 - Summary values are 20/600 — larger than labels, and the page title is 28/600, so hierarchy is title → 20 px values → 16 px section headings → 14 px labels → 13 px body.
 - Actions live in a text tab strip, not icon buttons; the only filled button in the header is Escalate, and Acknowledge is a plain text action.
+
+## State variants (archived resolved incident)
+
+- Header line for a resolved incident: **Resolved** in the neutral text colour, then `·`, then the absolute start time ("Nov 8, 2026 at 3:45pm GMT+8"). The acknowledgement pill reads **Not acknowledged** when nobody acknowledged, "Not acknowledged yet" while ongoing.
+- The action strip gains **Reopen** as its first item when the incident is resolved; the rest stay **Response**, **Screenshot**, **Monitor**, **Rename**, **Remove**.
+- The AI summary block renders a **Summarizing…** placeholder inside the summary card until the postmortem is ready.
+
+## Request detail tabs, populated
+
+With an incident selected the tabs show real data:
+
+- **Resolved IPs** — one IP per line (e.g. `163.181.214.1`).
+- **Request timing** — key/value rows, label left, value right, 12 px text: Effective URL, Redirect count, Name lookup time, Connect time, Pre-transfer time, Start-transfer time, App connect time, Redirect time, Total time, Response code, Return keyword (e.g. "ok").
+- **Response headers** — status line then raw headers (`HTTP/2 525`, `server: ESA`, `content-length: 0`, …) rendered as plain monospace-ish lines, not a table.
+- **Replay** — the playback surface for the captured request.
