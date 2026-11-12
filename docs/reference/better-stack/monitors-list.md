@@ -58,3 +58,18 @@ Measured against the reference list before the page degraded to its onboarding e
 | Bottom action bar | floats over the list | `N selected · Create group · Pause · ⋯ · ✕` |
 
 The toolbar search field measured 265 × 36 with a `bg-elevation-2` fill; the filter button is the same height with a border. The list column is narrower than the content area and left-aligned with the page title.
+
+## Row menu (live 2026-11-13)
+
+The 26 × 26 button at the right edge of each row opens a menu measured **190 × 297**, radius 6, fill `rgb(34, 40, 56)`. Items are 33 px tall at 13 px, in this order:
+
+1. **View incidents** → `/incidents?m=<monitorId>`
+2. **Configure** → `/monitors/<monitorId>/edit`
+3. **Pause** (POST, no confirm)
+4. **Duplicate**
+5. **Send test alert**
+6. **Select** (enters selection mode with this monitor checked)
+7. **Create group**
+8. **Remove** (native confirm, `_method=delete`)
+
+The menu opens bottom-end aligned to the button.
