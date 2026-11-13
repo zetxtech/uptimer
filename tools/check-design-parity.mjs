@@ -131,6 +131,12 @@ const cssRule = (selector) => {
   return styles.slice(start, styles.indexOf('}', start));
 };
 assert('group header height', /height:\s*42px/.test(cssRule('.ui-group-head')), 'height: 42px');
+assert('range segment width', /width:\s*64px/.test(cssRule('.ui-range-segment')), 'width: 64px');
+contains(
+  'monitor detail action gap',
+  read('apps/web/src/pages/AdminMonitorDetail.tsx'),
+  'md:gap-12',
+);
 assert(
   'no list header chrome',
   !/ui-monitor-list-header/.test(styles) && !/ui-monitor-list-header/.test(monitorList),

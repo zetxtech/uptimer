@@ -464,7 +464,8 @@ export function AdminMonitorDetail() {
           </div>
         </div>
 
-        <div className="mt-8 mb-5 flex flex-wrap items-center gap-1">
+        {/* Reference strip: icon + text links with a wide gap on desktop, wrapping on mobile. */}
+        <div className="mt-8 mb-5 -mx-2 flex flex-wrap items-center gap-2 md:gap-12">
           {monitor.type === 'heartbeat' ? null : (
             <ActionLink
               icon={ICON_TEST_ALERT}
@@ -563,16 +564,15 @@ export function AdminMonitorDetail() {
             <h2 className="text-[13px] font-medium text-ink">
               {t('monitor_detail.response_times')}
             </h2>
-            <div className="flex items-center gap-1">
+            {/* Reference segmented control: 64 px segments joined by 1 px borders. */}
+            <div className="ui-range-segments">
               {CHART_RANGES.map((range) => (
                 <button
                   key={range}
                   type="button"
+                  aria-pressed={chartRange === range}
                   onClick={() => setChartRange(range)}
-                  className={cn(
-                    'rounded px-2 py-1 text-[12px] transition-colors',
-                    chartRange === range ? 'bg-surface-2 text-ink' : 'text-ink-3 hover:text-ink',
-                  )}
+                  className="ui-range-segment"
                 >
                   {range}
                 </button>

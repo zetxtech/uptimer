@@ -2111,6 +2111,48 @@ button,
   color: var(--color-text-muted);
 }
 
+/* Reference range switch: 64 px segments sharing 1 px borders, square inner edges. */
+.ui-range-segments {
+  display: inline-flex;
+  align-items: stretch;
+}
+
+.ui-range-segment {
+  width: 64px;
+  height: 32px;
+  border: 1px solid var(--color-border);
+  background: transparent;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.ui-range-segment + .ui-range-segment {
+  margin-left: -1px;
+}
+
+.ui-range-segment:first-child {
+  border-top-left-radius: 6px;
+  border-bottom-left-radius: 6px;
+}
+
+.ui-range-segment:last-child {
+  border-top-right-radius: 6px;
+  border-bottom-right-radius: 6px;
+}
+
+.ui-range-segment:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.ui-range-segment[aria-pressed='true'] {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
 /* Reference menus: 6 px radius and 33 px rows. */
 [role='menu'].ui-panel,
 [role='menu'].ui-sort-menu {
