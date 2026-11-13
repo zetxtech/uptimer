@@ -2,20 +2,21 @@
 
 Text captures of the signed-in reference workspace (`incidents.betterstack.com/team/t132878`, settings at `betterstack.com/settings`). Taken from live pages on 2026-11-12/13 and from the DOM snapshots saved while signed in (`/tmp/opencode/uptimer/bs-pages/`, 55 saved pages). No data was created, edited or deleted in the reference account.
 
-| File | Covers |
-| --- | --- |
-| [design-tokens.md](design-tokens.md) | Font stack, type scale, neutral ramp, elevation surfaces, brand palette, radii, layout constants |
-| [monitor-create.md](monitor-create.md) | Create monitor: frame, cards, every field and option, advanced sections, error state |
-| [monitor-edit.md](monitor-edit.md) | Configure: header actions (test alert / pause / remove), per-type fields, Escalation steps, all advanced sections, environment variables, GitHub badge |
-| [monitor-detail.md](monitor-detail.md) | Monitor detail: header, action strip, summary row, response-times chart, stats table, custom range row |
-| [monitors-list.md](monitors-list.md) | Monitors page: toolbar, search, filter, sort, group menu, selection mode, measured row anatomy |
-| [monitors-bulk-operations.md](monitors-bulk-operations.md) | Selection toolbar, bulk action menu, and each per-property bulk dialog |
-| [incidents-list.md](incidents-list.md) | Incidents list, row anatomy, pagination, report form (banner, fields, attributes) |
-| [incident-detail.md](incident-detail.md) | Incident header, summary card, request tabs, metadata, timeline, status-page composer |
-| [heartbeat-create.md](heartbeat-create.md) | Create heartbeat: defaults, expanded sections, validation |
-| [settings.md](settings.md) | Settings shell and all account/organization pages |
-| [reporting-overview.md](reporting-overview.md) | Reporting: report tree, filter bar, KPI block, chart card, incident table, and the full-panel "Enable reporting" overlay |
-| [integrations-and-empty-states.md](integrations-and-empty-states.md) | Integrations cards, empty states (monitors, heartbeats, status pages, on-call, policies), 404 |
+| File                                                                 | Covers                                                                                                                                                 |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| [design-tokens.md](design-tokens.md)                                 | Font stack, type scale, neutral ramp, elevation surfaces, brand palette, radii, layout constants                                                       |
+| [monitor-create.md](monitor-create.md)                               | Create monitor: frame, cards, every field and option, advanced sections, error state                                                                   |
+| [monitor-edit.md](monitor-edit.md)                                   | Configure: header actions (test alert / pause / remove), per-type fields, Escalation steps, all advanced sections, environment variables, GitHub badge |
+| [monitor-detail.md](monitor-detail.md)                               | Monitor detail: header, action strip, summary row, response-times chart, stats table, custom range row                                                 |
+| [monitors-list.md](monitors-list.md)                                 | Monitors page: toolbar, search, filter, sort, group menu, selection mode, measured row anatomy                                                         |
+| [monitors-bulk-operations.md](monitors-bulk-operations.md)           | Selection toolbar, bulk action menu, and each per-property bulk dialog                                                                                 |
+| [incidents-list.md](incidents-list.md)                               | Incidents list, row anatomy, pagination, report form (banner, fields, attributes)                                                                      |
+| [incident-detail.md](incident-detail.md)                             | Incident header, summary card, request tabs, metadata, timeline, status-page composer                                                                  |
+| [heartbeat-create.md](heartbeat-create.md)                           | Create heartbeat: defaults, expanded sections, validation                                                                                              |
+| [settings.md](settings.md)                                           | Settings shell and all account/organization pages                                                                                                      |
+| [reporting-overview.md](reporting-overview.md)                       | Reporting: report tree, filter bar, KPI block, chart card, incident table, and the full-panel "Enable reporting" overlay                               |
+| [integrations-and-empty-states.md](integrations-and-empty-states.md) | Integrations cards, empty states (monitors, heartbeats, status pages, on-call, policies), 404                                                          |
+| [port-coverage.md](port-coverage.md)                                 | What we port, and the four reference features we deliberately do not, with the technical reason                                                        |
 
 ## Coverage status
 
@@ -33,3 +34,5 @@ Still not capturable, with the reason:
 - **Heartbeat detail** — the account has no heartbeats.
 - **Live site access** — the session briefly expired and now works again; the remaining gaps above are plan gates and missing data, not access.
 - **Monitors list entry point** — `/monitors` shows the onboarding empty state for this team, while `/monitors?group_id=0` lists all monitors. That group view is the reference for row anatomy.
+
+See [port-coverage.md](port-coverage.md) for the four reference features Uptimer deliberately leaves out (on-call escalation, Playwright scenarios, IP version, per-monitor region checkboxes) and why.
