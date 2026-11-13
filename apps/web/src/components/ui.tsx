@@ -203,10 +203,11 @@ const buttonVariants = {
     'bg-red-600 text-white hover:bg-red-700 active:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 shadow-[0_1px_2px_rgba(25,28,36,0.28)]',
 };
 
+// Reference buttons are 14 px / 500 regardless of height.
 const buttonSizes = {
   sm: 'h-8 px-3 text-[13px]',
-  md: 'h-9 px-3.5 text-sm',
-  lg: 'h-10 px-3.5 text-sm',
+  md: 'h-9 px-3.5 text-[14px]',
+  lg: 'h-10 px-3.5 text-[14px]',
 };
 
 /** Shimmer block for loading placeholders. */
