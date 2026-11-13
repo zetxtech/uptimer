@@ -41,6 +41,8 @@ function createApp(channels: Array<{ id: number; name: string; enabledEvents?: s
       maintenance_window_json TEXT,
       ssl_expiry_enabled INTEGER NOT NULL DEFAULT 0,
       domain_expiry_enabled INTEGER NOT NULL DEFAULT 0,
+      ssl_expiry_alert_days INTEGER,
+      domain_expiry_alert_days INTEGER,
       ssl_expires_at INTEGER,
       ssl_issuer TEXT,
       domain_expires_at INTEGER,

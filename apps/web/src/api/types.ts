@@ -447,7 +447,9 @@ export interface AdminMonitor {
   maintenance_window: MonitorMaintenanceWindow | null;
   metadata: MonitorMetadataEntry[];
   ssl_expiry_enabled: boolean;
+  ssl_expiry_alert_days: number | null;
   domain_expiry_enabled: boolean;
+  domain_expiry_alert_days: number | null;
   ssl_expires_at: number | null;
   ssl_issuer: string | null;
   domain_expires_at: number | null;
@@ -496,7 +498,9 @@ export interface CreateMonitorInput {
   maintenance_window?: MonitorMaintenanceWindow | null;
   metadata?: MonitorMetadataEntry[];
   ssl_expiry_enabled?: boolean;
+  ssl_expiry_alert_days?: number | null;
   domain_expiry_enabled?: boolean;
+  domain_expiry_alert_days?: number | null;
   keep_cookies?: boolean;
   heartbeat_grace_sec?: number | null;
   failures_to_down_from_up?: number | null;
@@ -529,7 +533,9 @@ export interface PatchMonitorInput {
   maintenance_window?: MonitorMaintenanceWindow | null;
   metadata?: MonitorMetadataEntry[];
   ssl_expiry_enabled?: boolean;
+  ssl_expiry_alert_days?: number | null;
   domain_expiry_enabled?: boolean;
+  domain_expiry_alert_days?: number | null;
   keep_cookies?: boolean;
   heartbeat_grace_sec?: number | null;
   failures_to_down_from_up?: number | null;

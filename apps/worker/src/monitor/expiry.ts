@@ -230,10 +230,19 @@ async function checkDomainExpiry(
  * Smallest threshold the monitor has just crossed, or null when nothing should fire. The first
  * run has no previous value, so an already-expiring certificate still alerts once.
  */
+/** Alert ladder for one monitor: its own value when set, otherwise the shared one. */
+export function expiryThresholdsFor(customDays: number | null | undefined): readonly number[] {
+  if (typeof customDays === 'number' && Number.isInteger(customDays) && customDays >= 1) {
+    return [customDays];
+  }
+  return EXPIRY_THRESHOLDS_DAYS;
+}
+
 export function crossedExpiryThreshold(
   previousExpiresAt: number | null,
   nextExpiresAt: number,
   now: number,
+  thresholds: readonly number[] = EXPIRY_THRESHOLDS_DAYS,
 ): number | null {
   const days = Math.floor((nextExpiresAt - now) / 86400);
   if (days < 0) return null;
@@ -241,7 +250,7 @@ export function crossedExpiryThreshold(
   const previousDays =
     previousExpiresAt === null ? null : Math.floor((previousExpiresAt - now) / 86400);
 
-  for (const threshold of EXPIRY_THRESHOLDS_DAYS) {
+  for (const threshold of thresholds) {
     if (days <= threshold) {
       return previousDays === null || previousDays > threshold ? threshold : null;
     }
@@ -259,6 +268,8 @@ export type ExpiryCheckMonitor = {
   domain_expiry_enabled: number | boolean;
   ssl_expires_at: number | null;
   domain_expires_at: number | null;
+  ssl_expiry_alert_days: number | null;
+  domain_expiry_alert_days: number | null;
   notification_channel_ids_json: string | null;
 };
 

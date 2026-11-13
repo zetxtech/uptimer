@@ -4,6 +4,8 @@ import {
   checkAndStoreMonitorExpiry,
   crossedExpiryThreshold,
   expiryHostFromTarget,
+  expiryThresholdsFor,
+  EXPIRY_THRESHOLDS_DAYS,
   type ExpiryCheckMonitor,
 } from '../src/monitor/expiry';
 import { createFakeD1Database, type FakeD1QueryHandler } from './helpers/fake-d1';
@@ -23,6 +25,8 @@ function buildMonitor(overrides: Partial<ExpiryCheckMonitor> = {}): ExpiryCheckM
     domain_expiry_enabled: 0,
     ssl_expires_at: null,
     domain_expires_at: null,
+    ssl_expiry_alert_days: null,
+    domain_expiry_alert_days: null,
     notification_channel_ids_json: null,
     ...overrides,
   };
@@ -86,6 +90,24 @@ describe('crossedExpiryThreshold', () => {
 
   it('stays quiet for already expired certificates', () => {
     expect(crossedExpiryThreshold(null, NOW - DAY, NOW)).toBeNull();
+  });
+
+  it('uses a monitor-specific alert day when one is set', () => {
+    const thresholds = expiryThresholdsFor(45);
+    // Only the monitor's own day fires; the shared ladder is ignored.
+    expect(crossedExpiryThreshold(null, NOW + 60 * DAY, NOW, thresholds)).toBeNull();
+    expect(crossedExpiryThreshold(null, NOW + 45 * DAY, NOW, thresholds)).toBe(45);
+    // Moving deeper inside the same band stays quiet; crossing into it fires once.
+    expect(crossedExpiryThreshold(NOW + 45 * DAY, NOW + 44 * DAY, NOW, thresholds)).toBeNull();
+    expect(crossedExpiryThreshold(NOW + 46 * DAY, NOW + 45 * DAY, NOW, thresholds)).toBe(45);
+  });
+
+  it('falls back to the shared ladder for null or invalid overrides', () => {
+    expect(expiryThresholdsFor(null)).toEqual(EXPIRY_THRESHOLDS_DAYS);
+    expect(expiryThresholdsFor(undefined)).toEqual(EXPIRY_THRESHOLDS_DAYS);
+    expect(expiryThresholdsFor(0)).toEqual(EXPIRY_THRESHOLDS_DAYS);
+    expect(expiryThresholdsFor(-3)).toEqual(EXPIRY_THRESHOLDS_DAYS);
+    expect(expiryThresholdsFor(2.5)).toEqual(EXPIRY_THRESHOLDS_DAYS);
   });
 });
 

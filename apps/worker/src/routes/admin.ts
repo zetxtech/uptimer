@@ -329,6 +329,8 @@ function monitorRowToApi(
     ),
     ssl_expiry_enabled: row.sslExpiryEnabled,
     domain_expiry_enabled: row.domainExpiryEnabled,
+    ssl_expiry_alert_days: row.sslExpiryAlertDays ?? null,
+    domain_expiry_alert_days: row.domainExpiryAlertDays ?? null,
     ssl_expires_at: row.sslExpiresAt ?? null,
     ssl_issuer: row.sslIssuer ?? null,
     domain_expires_at: row.domainExpiresAt ?? null,
@@ -654,6 +656,8 @@ adminRoutes.post('/monitors', async (c) => {
           : null,
       sslExpiryEnabled: input.ssl_expiry_enabled ?? false,
       domainExpiryEnabled: input.domain_expiry_enabled ?? false,
+      sslExpiryAlertDays: input.ssl_expiry_alert_days ?? null,
+      domainExpiryAlertDays: input.domain_expiry_alert_days ?? null,
       keepCookies: input.type === 'http' ? (input.keep_cookies ?? false) : false,
       heartbeatGraceSec: input.type === 'heartbeat' ? (input.heartbeat_grace_sec ?? null) : null,
       failuresToDownFromUp: input.failures_to_down_from_up ?? null,
@@ -819,6 +823,14 @@ adminRoutes.patch('/monitors/:id', async (c) => {
           : existing.maintenanceWindowJson,
       sslExpiryEnabled: input.ssl_expiry_enabled ?? existing.sslExpiryEnabled,
       domainExpiryEnabled: input.domain_expiry_enabled ?? existing.domainExpiryEnabled,
+      sslExpiryAlertDays:
+        input.ssl_expiry_alert_days !== undefined
+          ? input.ssl_expiry_alert_days
+          : existing.sslExpiryAlertDays,
+      domainExpiryAlertDays:
+        input.domain_expiry_alert_days !== undefined
+          ? input.domain_expiry_alert_days
+          : existing.domainExpiryAlertDays,
       keepCookies: input.keep_cookies ?? existing.keepCookies,
       // Results describe the old target, so a target change invalidates them. Turning either
       // check on also clears the stamp so the next scheduled tick picks the monitor up.
@@ -934,6 +946,8 @@ adminRoutes.post('/monitors/:id/expiry-check', async (c) => {
       domain_expiry_enabled: number;
       ssl_expires_at: number | null;
       domain_expires_at: number | null;
+      ssl_expiry_alert_days: number | null;
+      domain_expiry_alert_days: number | null;
       notification_channel_ids_json: string | null;
     }>();
 
@@ -946,7 +960,8 @@ adminRoutes.post('/monitors/:id/expiry-check', async (c) => {
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const { checkAndStoreMonitorExpiry, crossedExpiryThreshold } = await import('../monitor/expiry');
+  const { checkAndStoreMonitorExpiry, crossedExpiryThreshold, expiryThresholdsFor } =
+    await import('../monitor/expiry');
   const { createNotifyContext, queueExpiryNotification } =
     await import('../scheduler/notifications');
 
@@ -954,7 +969,12 @@ adminRoutes.post('/monitors/:id/expiry-check', async (c) => {
   const notify = await createNotifyContext(c.env, c.executionCtx);
 
   if (outcome.sslExpiresAt !== null) {
-    const threshold = crossedExpiryThreshold(monitor.ssl_expires_at, outcome.sslExpiresAt, now);
+    const threshold = crossedExpiryThreshold(
+      monitor.ssl_expires_at,
+      outcome.sslExpiresAt,
+      now,
+      expiryThresholdsFor(monitor.ssl_expiry_alert_days),
+    );
     if (threshold !== null) {
       queueExpiryNotification(c.env, notify, {
         monitor,
@@ -970,6 +990,7 @@ adminRoutes.post('/monitors/:id/expiry-check', async (c) => {
       monitor.domain_expires_at,
       outcome.domainExpiresAt,
       now,
+      expiryThresholdsFor(monitor.domain_expiry_alert_days),
     );
     if (threshold !== null) {
       queueExpiryNotification(c.env, notify, {

@@ -154,6 +154,8 @@ describe('admin single-resource reads', () => {
         metadata: [],
         ssl_expiry_enabled: false,
         domain_expiry_enabled: false,
+        ssl_expiry_alert_days: null,
+        domain_expiry_alert_days: null,
         ssl_expires_at: null,
         ssl_issuer: null,
         domain_expires_at: null,

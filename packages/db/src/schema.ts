@@ -61,6 +61,9 @@ export const monitors = sqliteTable(
     domainExpiryEnabled: integer('domain_expiry_enabled', { mode: 'boolean' })
       .notNull()
       .default(false),
+    // Days-before-expiry that alerts fire on; NULL follows the shared ladder.
+    sslExpiryAlertDays: integer('ssl_expiry_alert_days'),
+    domainExpiryAlertDays: integer('domain_expiry_alert_days'),
     // Last results of the expiry job (unix seconds / issuer CN).
     sslExpiresAt: integer('ssl_expires_at'),
     sslIssuer: text('ssl_issuer'),

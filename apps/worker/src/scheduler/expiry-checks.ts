@@ -2,6 +2,7 @@ import type { Env } from '../env';
 import {
   checkAndStoreMonitorExpiry,
   crossedExpiryThreshold,
+  expiryThresholdsFor,
   type ExpiryCheckMonitor,
 } from '../monitor/expiry';
 import { createNotifyContext, queueExpiryNotification, type NotifyContext } from './notifications';
@@ -20,6 +21,8 @@ const EXPIRY_MONITOR_COLUMNS = `
   domain_expiry_enabled,
   ssl_expires_at,
   domain_expires_at,
+  ssl_expiry_alert_days,
+  domain_expiry_alert_days,
   notification_channel_ids_json
 `;
 
@@ -47,7 +50,12 @@ async function checkAndNotify(
     }
 
     if (notify && outcome.sslExpiresAt !== null) {
-      const threshold = crossedExpiryThreshold(monitor.ssl_expires_at, outcome.sslExpiresAt, now);
+      const threshold = crossedExpiryThreshold(
+        monitor.ssl_expires_at,
+        outcome.sslExpiresAt,
+        now,
+        expiryThresholdsFor(monitor.ssl_expiry_alert_days),
+      );
       if (threshold !== null) {
         queueExpiryNotification(env, notify, {
           monitor,
@@ -64,6 +72,7 @@ async function checkAndNotify(
         monitor.domain_expires_at,
         outcome.domainExpiresAt,
         now,
+        expiryThresholdsFor(monitor.domain_expiry_alert_days),
       );
       if (threshold !== null) {
         queueExpiryNotification(env, notify, {

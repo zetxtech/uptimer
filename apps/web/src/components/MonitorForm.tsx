@@ -114,6 +114,9 @@ type TranslateFn = ReturnType<typeof useI18n>['t'];
 
 type HeartbeatUnit = 'second' | 'minute' | 'hour' | 'day';
 
+/** Days-before-expiry choices shared by the SSL and domain alert selects. */
+const EXPIRY_ALERT_DAY_OPTIONS = [1, 3, 7, 14, 30] as const;
+
 const HEARTBEAT_UNITS: Array<{ id: HeartbeatUnit; seconds: number; label: MessageKey }> = [
   { id: 'second', seconds: 1, label: 'monitor_form.unit_second' },
   { id: 'minute', seconds: 60, label: 'monitor_form.unit_minute' },
@@ -703,6 +706,12 @@ export function MonitorForm(props: CreateProps | EditProps) {
   const [domainExpiryEnabled, setDomainExpiryEnabled] = useState(
     monitor?.domain_expiry_enabled ?? false,
   );
+  const [sslAlertDays, setSslAlertDays] = useState(
+    monitor?.ssl_expiry_alert_days ? String(monitor.ssl_expiry_alert_days) : '',
+  );
+  const [domainAlertDays, setDomainAlertDays] = useState(
+    monitor?.domain_expiry_alert_days ? String(monitor.domain_expiry_alert_days) : '',
+  );
   const [keepCookies, setKeepCookies] = useState(monitor?.keep_cookies ?? false);
   const [badgeCopied, setBadgeCopied] = useState(false);
   const [expiryResult, setExpiryResult] = useState<{
@@ -1028,6 +1037,8 @@ export function MonitorForm(props: CreateProps | EditProps) {
         : {
             ssl_expiry_enabled: sslExpiryEnabled,
             domain_expiry_enabled: domainExpiryEnabled,
+            ssl_expiry_alert_days: sslAlertDays ? Number(sslAlertDays) : null,
+            domain_expiry_alert_days: domainAlertDays ? Number(domainAlertDays) : null,
             ...(type === 'http' ? { keep_cookies: keepCookies } : {}),
           }),
     };
@@ -1777,6 +1788,24 @@ export function MonitorForm(props: CreateProps | EditProps) {
                     checked={sslExpiryEnabled}
                     onChange={setSslExpiryEnabled}
                   />
+                  {sslExpiryEnabled ? (
+                    <label className="block max-w-[280px] text-[12px] font-medium text-ink-2">
+                      {t('monitor_form.expiry_alert_days')}
+                      <Select
+                        value={sslAlertDays}
+                        onChange={setSslAlertDays}
+                        className={cn(selectClass, 'mt-1.5')}
+                        aria-label={t('monitor_form.expiry_alert_days')}
+                      >
+                        <option value="">{t('monitor_form.expiry_alert_days_default')}</option>
+                        {EXPIRY_ALERT_DAY_OPTIONS.map((days) => (
+                          <option key={days} value={String(days)}>
+                            {t('monitor_form.expiry_alert_days_value', { days })}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
+                  ) : null}
                   {sslExpiryEnabled && monitor ? (
                     <p className="text-[13px] leading-5 text-ink-2">
                       {expiryResult?.ssl_expires_at !== null &&
@@ -1804,6 +1833,24 @@ export function MonitorForm(props: CreateProps | EditProps) {
                     checked={domainExpiryEnabled}
                     onChange={setDomainExpiryEnabled}
                   />
+                  {domainExpiryEnabled ? (
+                    <label className="block max-w-[280px] text-[12px] font-medium text-ink-2">
+                      {t('monitor_form.expiry_alert_days')}
+                      <Select
+                        value={domainAlertDays}
+                        onChange={setDomainAlertDays}
+                        className={cn(selectClass, 'mt-1.5')}
+                        aria-label={t('monitor_form.expiry_alert_days')}
+                      >
+                        <option value="">{t('monitor_form.expiry_alert_days_default')}</option>
+                        {EXPIRY_ALERT_DAY_OPTIONS.map((days) => (
+                          <option key={days} value={String(days)}>
+                            {t('monitor_form.expiry_alert_days_value', { days })}
+                          </option>
+                        ))}
+                      </Select>
+                    </label>
+                  ) : null}
                   {domainExpiryEnabled && monitor ? (
                     <p className="text-[13px] leading-5 text-ink-2">
                       {expiryResult?.domain_expires_at !== null &&

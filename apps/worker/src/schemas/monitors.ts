@@ -23,6 +23,8 @@ const stateThresholdSchema = z.number().int().min(1).max(10);
 const heartbeatGraceSchema = z.number().int().min(0).max(86_400).nullable().optional();
 // Explicit channel selection; null = every enabled channel, empty list is rejected so a monitor
 // can never be saved into a state where nothing could ever reach the operator.
+// Days before expiry an alert fires; NULL means "use the shared ladder".
+const expiryAlertDaysSchema = z.number().int().min(1).max(90).nullable().optional();
 const notificationChannelIdsSchema = notificationChannelIdsJsonSchema.min(1).nullable().optional();
 // Recurring daily maintenance window; null removes the window.
 const maintenanceWindowSchema = maintenanceWindowJsonSchema.nullable().optional();
@@ -106,6 +108,8 @@ export const createMonitorInputSchema = z
     metadata: monitorMetadataSchema.optional(),
 
     ssl_expiry_enabled: z.boolean().optional(),
+    ssl_expiry_alert_days: expiryAlertDaysSchema,
+    domain_expiry_alert_days: expiryAlertDaysSchema,
     domain_expiry_enabled: z.boolean().optional(),
     keep_cookies: z.boolean().optional(),
   })
@@ -237,6 +241,8 @@ export const patchMonitorInputSchema = z
     metadata: monitorMetadataSchema.optional(),
 
     ssl_expiry_enabled: z.boolean().optional(),
+    ssl_expiry_alert_days: expiryAlertDaysSchema,
+    domain_expiry_alert_days: expiryAlertDaysSchema,
     domain_expiry_enabled: z.boolean().optional(),
     keep_cookies: z.boolean().optional(),
   })
