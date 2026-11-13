@@ -379,16 +379,10 @@ export function AdminPageHeader({
     <div
       className={`flex flex-wrap items-center justify-between gap-x-4 gap-y-3 ${className ?? ''}`}
     >
-      <div className={`flex min-w-0 items-center gap-2 ${search ? 'ui-monitor-page-title' : ''}`}>
+      <div className={`min-w-0 ${search ? 'ui-monitor-page-title' : ''}`}>
         <h1 className="ui-page-title truncate">{title}</h1>
         {description ? (
-          <span
-            title={description}
-            aria-label={description}
-            className="grid h-4 w-4 shrink-0 cursor-help place-items-center rounded-full border border-line text-[11px] font-semibold leading-none text-ink-3"
-          >
-            ?
-          </span>
+          <p className="mt-1 max-w-[46rem] text-[14px] leading-5 text-ink-2">{description}</p>
         ) : null}
       </div>
       {search || actions ? (

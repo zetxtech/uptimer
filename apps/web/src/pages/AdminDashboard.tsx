@@ -1839,6 +1839,7 @@ export function AdminDashboard() {
             <div className="space-y-5">
               <AdminPageHeader
                 title={t('admin_dashboard.tab.monitors')}
+                description={t('admin_dashboard.monitors_description')}
                 className="ui-monitor-page-header"
                 actions={
                   <>
