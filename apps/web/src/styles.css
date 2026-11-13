@@ -1549,15 +1549,17 @@ button,
 /* Floating selection bar, anchored to the bottom of the workspace like the reference. */
 .ui-bulk-bar {
   position: fixed;
-  bottom: 24px;
+  /* The reference bar sits 60 px above the viewport edge and is exactly 32 px tall. */
+  bottom: 44px;
   left: calc(50% + 8.5rem);
   z-index: 30;
   display: flex;
+  height: 32px;
   align-items: center;
   gap: 2px;
-  padding: 6px 8px;
+  padding: 0 6px;
   border: 1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: 8px;
   background: var(--color-card);
   box-shadow: var(--shadow-panel);
   transform: translateX(-50%);
@@ -1570,6 +1572,10 @@ button,
     bottom: 12px;
     transform: none;
   }
+}
+
+.ui-bulk-bar button {
+  height: 32px;
 }
 
 .ui-bulk-bar-count {
