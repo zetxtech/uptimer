@@ -136,6 +136,12 @@ const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
 contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
 contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
 assert(
+  'field pitch (label 6 px, help 10 px)',
+  /margin-bottom:\s*0\.375rem/.test(cssRule('\n.ui-label')) &&
+    /margin-top:\s*0\.625rem/.test(cssRule('\n.ui-help')),
+  'label 6px, help 10px',
+);
+assert(
   'radii limited to the reference set (4/8/12/pill)',
   !/rounded-(md|sm)\b/.test(
     [

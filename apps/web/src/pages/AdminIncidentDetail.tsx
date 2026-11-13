@@ -373,7 +373,7 @@ function IncidentDetail({ incidentId }: { incidentId: number }) {
             {t('incident_detail.timeline')}
           </h2>
           {downloadError ? (
-            <p role="alert" className="mt-2 text-[12px] text-status-down">
+            <p role="alert" className="mt-2.5 text-[12px] text-status-down">
               {t('incident_detail.attachment_download_failed')}
             </p>
           ) : null}

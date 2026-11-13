@@ -986,7 +986,7 @@ function EventDetail({ eventId }: { eventId: number }) {
 
         <h3 className="mt-12 text-[16px] font-semibold text-ink">{t('events.timeline')}</h3>
         {downloadError ? (
-          <p role="alert" className="mt-2 text-[12px] text-status-down">
+          <p role="alert" className="mt-2.5 text-[12px] text-status-down">
             {t('events.attachment_download_failed')}
           </p>
         ) : null}
@@ -1075,12 +1075,12 @@ function EventDetail({ eventId }: { eventId: number }) {
                 </ul>
               ) : null}
               {fileError ? (
-                <p role="alert" className="mt-2 text-[12px] text-status-down">
+                <p role="alert" className="mt-2.5 text-[12px] text-status-down">
                   {t('events.attachment_limit')}
                 </p>
               ) : null}
               {updateState === 'failed' ? (
-                <p role="alert" className="mt-2 text-[12px] text-status-down">
+                <p role="alert" className="mt-2.5 text-[12px] text-status-down">
                   {t('events.update_failed')}
                 </p>
               ) : null}
