@@ -73,25 +73,26 @@ function tooltipDotClass(uptimePct: number | null, level: UptimeRatingLevel): st
 }
 
 function uptimeFill(uptimePct: number | null, level: UptimeRatingLevel): string {
-  if (uptimePct === null) return '#cbd5e1';
+  if (uptimePct === null) return 'var(--color-border)';
 
   const tier = getUptimeTier(uptimePct, level);
   switch (tier) {
     case 'emerald':
+      return 'var(--color-up-strong)';
     case 'green':
-      return '#10b981';
+      return 'var(--color-up)';
     case 'lime':
-      return '#84cc16';
+      return 'var(--color-up)';
     case 'yellow':
     case 'amber':
+      return 'var(--color-warn)';
     case 'orange':
-      return '#f59e0b';
     case 'red':
     case 'rose':
-      return '#ef4444';
+      return 'var(--color-down)';
     case 'slate':
     default:
-      return '#cbd5e1';
+      return 'var(--color-border)';
   }
 }
 

@@ -80,7 +80,9 @@ export function AdminLogin() {
             <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] text-white">
               {t('admin_login.title')}
             </h1>
-            <p className="mt-2 text-[14px] leading-5 text-[#939db8]">{t('admin_login.subtitle')}</p>
+            <p className="mt-2 text-[14px] leading-5 text-[color:var(--color-text-secondary)]">
+              {t('admin_login.subtitle')}
+            </p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">

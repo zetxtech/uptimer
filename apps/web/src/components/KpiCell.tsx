@@ -5,20 +5,17 @@ import { cn } from './ui';
 type Tone = 'success' | 'danger' | 'warning';
 
 const TONE_CLASS: Record<Tone | 'default', string> = {
-  success: 'text-emerald-600 dark:text-emerald-400',
-  danger: 'text-red-600 dark:text-red-400',
-  warning: 'text-amber-600 dark:text-amber-400',
+  success: 'ui-tier-fg-up',
+  danger: 'ui-tier-fg-down',
+  warning: 'ui-tier-fg-warn',
   default: 'text-ink',
 };
 
 /** Tinted icon chip mirrors the value tone so state reads before the number does. */
 const CHIP_CLASS: Record<Tone | 'default', string> = {
-  success:
-    'bg-emerald-50 text-emerald-600 ring-emerald-500/15 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/20',
-  danger:
-    'bg-red-50 text-red-600 ring-red-500/15 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/20',
-  warning:
-    'bg-amber-50 text-amber-600 ring-amber-500/15 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/20',
+  success: 'ui-tier-pill-up',
+  danger: 'ui-tier-pill-down',
+  warning: 'ui-tier-pill-warn',
   default: 'bg-surface-2 text-ink-3 ring-line dark:bg-surface-2 dark:text-ink-2 dark:ring-line',
 };
 

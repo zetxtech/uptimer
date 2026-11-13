@@ -3,10 +3,10 @@ import { Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 
 import type { ProbeHistoryResponse } from '../api/types';
 import { useI18n } from '../app/I18nContext';
-import { useTheme } from '../app/ThemeContext';
 import { formatDateTime } from '../utils/datetime';
 
-const COLORS = ['#0284c7', '#d97706', '#059669', '#db2777', '#7c3aed', '#dc2626', '#0891b2'];
+/** Reference palette: primary, amber, green, violet, blue, red, cyan. */
+const COLORS = ['#5b63d3', '#dd9c51', '#00af79', '#a579e9', '#4bb9e8', '#e0687d', '#55bfc1'];
 
 export function ProbeHistoryChart({
   history,
@@ -16,11 +16,9 @@ export function ProbeHistoryChart({
   timeZone: string;
 }) {
   const { t, locale } = useI18n();
-  const { resolvedTheme } = useTheme();
   const [hidden, setHidden] = useState<string[]>([]);
   const [metric, setMetric] = useState<'latency' | 'availability'>('latency');
-  const isDark = resolvedTheme === 'dark';
-  const axisColor = isDark ? '#94a3b8' : '#64748b';
+  const axisColor = 'var(--color-text-secondary)';
 
   if (history.probes.length === 0) {
     return <p className="py-8 text-center text-sm text-ink-2">{t('probes.history_empty')}</p>;
@@ -174,10 +172,10 @@ export function ProbeHistoryChart({
                 name,
               ]}
               contentStyle={{
-                backgroundColor: isDark ? '#1e293b' : '#fff',
-                borderColor: isDark ? '#334155' : '#e2e8f0',
+                backgroundColor: 'var(--color-card)',
+                borderColor: 'var(--color-border)',
                 borderRadius: '0.5rem',
-                color: isDark ? '#f1f5f9' : '#0f172a',
+                color: 'var(--color-text-primary)',
               }}
             />
             {history.probes.map((probe, index) => (

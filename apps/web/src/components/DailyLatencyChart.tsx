@@ -2,7 +2,6 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 
 import type { MonitorAnalyticsDayPoint } from '../api/types';
 import { useI18n } from '../app/I18nContext';
-import { useTheme } from '../app/ThemeContext';
 import { suggestLatencyAxisCeiling } from '../utils/latencyScale';
 
 interface DailyLatencyChartProps {
@@ -16,8 +15,6 @@ function formatDay(ts: number): string {
 
 export function DailyLatencyChart({ points, height = 220 }: DailyLatencyChartProps) {
   const { t } = useI18n();
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
 
   const rawData = points
     .filter(
@@ -61,9 +58,9 @@ export function DailyLatencyChart({ points, height = 220 }: DailyLatencyChartPro
     );
   }
 
-  const axisColor = isDark ? '#64748b' : '#9ca3af';
-  const p95Color = isDark ? '#38bdf8' : '#0ea5e9';
-  const p50Color = isDark ? '#64748b' : '#94a3b8';
+  const axisColor = 'var(--color-text-secondary)';
+  const p95Color = 'var(--color-maintenance)';
+  const p50Color = 'var(--color-text-muted)';
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -94,10 +91,10 @@ export function DailyLatencyChart({ points, height = 220 }: DailyLatencyChartPro
             ];
           }}
           contentStyle={{
-            backgroundColor: isDark ? '#1e293b' : '#ffffff',
-            borderColor: isDark ? '#334155' : '#e2e8f0',
+            backgroundColor: 'var(--color-card)',
+            borderColor: 'var(--color-border)',
             borderRadius: '0.5rem',
-            color: isDark ? '#f1f5f9' : '#0f172a',
+            color: 'var(--color-text-primary)',
           }}
         />
         <Line

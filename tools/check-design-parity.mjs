@@ -136,6 +136,28 @@ const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
 contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
 contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
 assert(
+  'no off-palette colours in data visuals',
+  !/#(10b981|84cc16|f59e0b|ef4444|22c55e|34d399|38bdf8|0ea5e9|64748b|94a3b8|1e293b|334155|f1f5f9|0f172a|4b93e8|cbd5e1|0284c7|d97706|059669|db2777|7c3aed|dc2626|0891b2)\b/i.test(
+    [
+      'apps/web/src/components/UptimeBar30d.tsx',
+      'apps/web/src/components/HeartbeatBar.tsx',
+      'apps/web/src/components/DailyUptimeChart.tsx',
+      'apps/web/src/components/DailyLatencyChart.tsx',
+      'apps/web/src/components/ProbeHistoryChart.tsx',
+      'apps/web/src/pages/AdminEventDetail.tsx',
+    ]
+      .map(read)
+      .join('\n'),
+  ),
+  'charts and bars use the design tokens',
+);
+assert(
+  'uptime tiers use token classes',
+  /ui-tier-bg-\$\{tierKey\(tier\)\}/.test(read('apps/web/src/utils/uptime.ts')) &&
+    /ui-tier-pill-\$\{tierKey\(tier\)\}/.test(read('apps/web/src/utils/uptime.ts')),
+  'tier helpers return token classes',
+);
+assert(
   'workspace top bar (52 px)',
   /h-\[52px\] max-w-\[90rem\]/.test(read('apps/web/src/components/AdminShell.tsx')) &&
     /flex h-\[52px\] shrink-0 items-center/.test(read('apps/web/src/components/AdminShell.tsx')),

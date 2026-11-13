@@ -127,28 +127,28 @@ function getBarHeightPct(
 function heartbeatFill(status: CheckStatus): string {
   switch (status) {
     case 'up':
-      return '#10b981';
+      return 'var(--color-up)';
     case 'down':
-      return '#ef4444';
+      return 'var(--color-down)';
     case 'maintenance':
-      return '#3b82f6';
+      return 'var(--color-maintenance)';
     case 'unknown':
     default:
-      return '#cbd5e1';
+      return 'var(--color-border)';
   }
 }
 
 function tooltipDotClass(status: CheckStatus): string {
   switch (status) {
     case 'up':
-      return 'bg-emerald-500 dark:bg-emerald-400';
+      return 'ui-tier-bg-up';
     case 'down':
-      return 'bg-red-500 dark:bg-red-400';
+      return 'ui-tier-bg-down';
     case 'maintenance':
-      return 'bg-blue-500 dark:bg-blue-400';
+      return 'bg-[color:var(--color-maintenance)]';
     case 'unknown':
     default:
-      return 'bg-ink-3';
+      return 'ui-tier-bg-muted';
   }
 }
 

@@ -279,11 +279,11 @@ export type ToastTone = 'success' | 'danger' | 'info';
 
 const toastTones: Record<ToastTone, { badge: string; icon: ReactNode }> = {
   success: {
-    badge: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300',
+    badge: 'ui-tier-pill-up',
     icon: <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />,
   },
   danger: {
-    badge: 'bg-red-100 text-red-700 dark:bg-red-500/20 dark:text-red-300',
+    badge: 'ui-tier-pill-down',
     icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v5m0 3.5h.01" />,
   },
   info: {

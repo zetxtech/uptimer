@@ -43,7 +43,7 @@ interface TimelineEntry {
 }
 
 const TONE_COLOR: Record<TimelineTone, string> = {
-  start: '#4b93e8',
+  start: 'var(--color-blue)',
   down: 'var(--color-down)',
   up: 'var(--color-up)',
   idle: 'var(--color-text-muted)',
@@ -736,7 +736,7 @@ function EventDetail({ eventId }: { eventId: number }) {
                   aria-hidden
                   className={cn(
                     'absolute inset-x-0 bottom-0 h-[2px] rounded-t-full',
-                    tab === entry.id ? 'bg-[#4b93e8]' : 'bg-transparent',
+                    tab === entry.id ? 'bg-[color:var(--color-blue)]' : 'bg-transparent',
                   )}
                 />
               </button>
