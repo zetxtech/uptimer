@@ -19,7 +19,7 @@ export function PublicStatusHeader({ siteTitle = 'Uptimer' }: { siteTitle?: stri
           className="flex min-w-0 max-w-[200px] items-center gap-2 rounded-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
         >
           <img src="/favicon.svg" alt="" className="h-6 w-6 shrink-0" />
-          <span className="truncate text-[15px] font-semibold tracking-tight">{siteTitle}</span>
+          <span className="truncate text-[16px] font-semibold tracking-tight">{siteTitle}</span>
         </Link>
         <div className="order-2 justify-self-end md:order-3">
           <ThemeToggle />

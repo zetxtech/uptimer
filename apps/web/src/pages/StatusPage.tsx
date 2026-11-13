@@ -157,7 +157,7 @@ function IncidentCard({
           {incidentStatusLabel(incident.status, t)}
         </span>
       </div>
-      <h4 className="break-words text-[15px] font-medium text-ink">{incident.title}</h4>
+      <h4 className="break-words text-[14px] font-semibold text-ink">{incident.title}</h4>
       {incident.message && (
         <p className="mt-2 line-clamp-3 break-words text-sm leading-relaxed text-ink-2">
           {incident.message}
@@ -485,7 +485,7 @@ export function StatusPage() {
         {(data.maintenance_windows.active.length > 0 ||
           data.maintenance_windows.upcoming.length > 0) && (
           <section className="mb-10 sm:mb-12">
-            <h2 className="mb-5 text-[17px] font-semibold text-ink">
+            <h2 className="mb-5 text-[16px] font-semibold text-ink">
               {t('status_page.scheduled_maintenance')}
             </h2>
 
@@ -499,7 +499,7 @@ export function StatusPage() {
                       className="min-w-0 border-l-2 border-status-maintenance py-1 pl-5"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 mb-2">
-                        <h3 className="min-w-0 break-words text-[15px] font-medium text-ink">
+                        <h3 className="min-w-0 break-words text-[14px] font-semibold text-ink">
                           {w.title}
                         </h3>
                         <span className="text-xs text-ink-3">
@@ -525,7 +525,7 @@ export function StatusPage() {
                   {data.maintenance_windows.upcoming.map((w) => (
                     <article key={w.id} className="min-w-0 border-l-2 border-line py-1 pl-5">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 mb-2">
-                        <h3 className="min-w-0 break-words text-[15px] font-medium text-ink">
+                        <h3 className="min-w-0 break-words text-[14px] font-semibold text-ink">
                           {w.title}
                         </h3>
                         <span className="text-xs text-ink-3">
@@ -553,7 +553,7 @@ export function StatusPage() {
         {/* Active Incidents */}
         {activeIncidents.length > 0 && (
           <section className="mb-10 sm:mb-12">
-            <h2 className="mb-5 text-[17px] font-semibold text-ink">
+            <h2 className="mb-5 text-[16px] font-semibold text-ink">
               {t('status_page.active_incidents')}
             </h2>
             <div className="space-y-6">
@@ -635,7 +635,7 @@ export function StatusPage() {
         <section className="mt-10 space-y-10 border-t border-line pt-8 sm:mt-12 sm:space-y-12 sm:pt-10">
           <div>
             <div className="mb-6 flex items-center justify-between gap-4">
-              <h2 className="text-[22px] font-bold text-ink">
+              <h2 className="text-[20px] font-semibold text-ink">
                 {t('status_page.incident_history')}
               </h2>
               <Link to="/history/incidents" className="shrink-0 text-sm text-ink-3 hover:text-ink">
@@ -661,7 +661,7 @@ export function StatusPage() {
 
           <div>
             <div className="mb-6 flex items-center justify-between gap-4">
-              <h2 className="text-[22px] font-bold text-ink">
+              <h2 className="text-[20px] font-semibold text-ink">
                 {t('status_page.maintenance_history')}
               </h2>
               <Link
@@ -680,7 +680,7 @@ export function StatusPage() {
                     {formatDateTime(maintenanceHistoryPreview.ends_at, timeZone, locale)}
                   </span>
                 </div>
-                <h3 className="mb-2 break-words text-[15px] font-medium text-ink">
+                <h3 className="mb-2 break-words text-[14px] font-semibold text-ink">
                   {maintenanceHistoryPreview.title}
                 </h3>
                 <div className="text-sm text-ink-2 mb-2">

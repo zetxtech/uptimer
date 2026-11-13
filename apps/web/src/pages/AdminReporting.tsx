@@ -368,7 +368,7 @@ export function AdminReporting() {
                           }}
                           title={`${entry.day}: ${entry.count}`}
                         />
-                        <span className="text-[10px] text-ink-3">
+                        <span className="text-[11px] text-ink-3">
                           {Number(entry.day.slice(-2))}
                         </span>
                       </div>

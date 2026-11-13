@@ -31,7 +31,7 @@ export function SectionHeader({
         {size === 'page' ? (
           <h1 className="ui-page-title truncate">{title}</h1>
         ) : (
-          <h2 className="text-[15px] font-semibold leading-tight tracking-[-0.01em] text-ink">
+          <h2 className="text-[16px] font-semibold leading-tight tracking-[-0.01em] text-ink">
             {title}
           </h2>
         )}
@@ -151,7 +151,7 @@ export function EmptyState({
           <path strokeLinecap="round" strokeLinejoin="round" d={ICON_PATHS[icon]} />
         </svg>
       </span>
-      <p className="mt-4 text-[18px] font-semibold leading-6 text-ink">{title}</p>
+      <p className="mt-4 text-[16px] font-semibold leading-6 text-ink">{title}</p>
       {description ? (
         <p className="mt-3 max-w-[295px] text-[14px] leading-[21.7px] text-ink-2">{description}</p>
       ) : null}

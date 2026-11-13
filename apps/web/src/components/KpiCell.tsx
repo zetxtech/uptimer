@@ -62,7 +62,7 @@ export function KpiCell({
       </div>
       <div
         className={cn(
-          'text-[21px] font-semibold leading-none tabular-nums tracking-[-0.02em]',
+          'text-[20px] font-semibold leading-none tabular-nums tracking-[-0.02em]',
           TONE_CLASS[resolvedTone],
         )}
       >

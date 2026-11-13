@@ -369,7 +369,7 @@ export function AdminMonitorDetail() {
     return (
       <AdminShell active="dashboard" layout="sidebar">
         <main className="mx-auto max-w-[46rem] px-5 py-10">
-          <h1 className="text-[21px] font-semibold">{t('monitor_detail.not_found')}</h1>
+          <h1 className="text-[20px] font-semibold">{t('monitor_detail.not_found')}</h1>
           <Link
             to={ADMIN_PATH}
             className="mt-4 inline-flex items-center gap-1.5 text-[13px] text-accent hover:underline"

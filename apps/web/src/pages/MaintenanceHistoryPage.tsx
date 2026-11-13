@@ -101,7 +101,7 @@ export function MaintenanceHistoryPage() {
                   key={month}
                   className="min-w-0 overflow-hidden rounded-xl border border-line bg-surface"
                 >
-                  <h2 className="border-b border-line px-5 py-5 text-[15px] font-medium text-ink sm:px-7">
+                  <h2 className="border-b border-line px-5 py-5 text-[14px] font-semibold text-ink sm:px-7">
                     {month}
                   </h2>
                   <ol className="min-w-0 divide-y divide-line-soft">
@@ -116,7 +116,7 @@ export function MaintenanceHistoryPage() {
                             {formatDateTime(window.ends_at, timeZone, locale)}
                           </time>
                         </div>
-                        <h3 className="mb-3 break-words text-[17px] font-medium text-ink">
+                        <h3 className="mb-3 break-words text-[16px] font-semibold text-ink">
                           {window.title}
                         </h3>
                         <p className="mb-3 break-words text-sm text-ink-2">
@@ -165,7 +165,7 @@ export function MaintenanceHistoryPage() {
             )}
           </>
         ) : (
-          <div className="rounded-xl border border-line bg-surface px-5 py-14 text-center text-[15px] font-medium text-ink-3">
+          <div className="rounded-xl border border-line bg-surface px-5 py-14 text-center text-[14px] font-medium text-ink-3">
             {t('status_page.no_past_maintenance')}
           </div>
         )}

@@ -249,7 +249,7 @@ function EventDetail({ eventId }: { eventId: number }) {
     return (
       <AdminShell active="events" layout="sidebar">
         <main className="mx-auto w-full max-w-[1040px] px-5 pb-12 pt-2.5">
-          <h1 className="text-[21px] font-semibold">{t('events.not_found')}</h1>
+          <h1 className="text-[20px] font-semibold">{t('events.not_found')}</h1>
           <Link
             to={ADMIN_EVENTS_PATH}
             className="mt-4 inline-flex items-center gap-1.5 text-[13px] text-accent hover:underline"
@@ -1243,7 +1243,7 @@ function EventDetail({ eventId }: { eventId: number }) {
           aria-label={t('events.rename')}
         >
           <div className={cn(MODAL_PANEL_CLASS, 'w-full max-w-md p-5')}>
-            <h2 className="text-[15px] font-semibold text-ink">{t('events.rename_title')}</h2>
+            <h2 className="text-[16px] font-semibold text-ink">{t('events.rename_title')}</h2>
             <p className="mt-1 text-[13px] text-ink-2">{t('events.rename_help')}</p>
             <input
               autoFocus
@@ -1303,7 +1303,7 @@ function EventDetail({ eventId }: { eventId: number }) {
           aria-label={t('events.remove')}
         >
           <div className={cn(MODAL_PANEL_CLASS, 'w-full max-w-md p-5')}>
-            <h2 className="text-[15px] font-semibold text-ink">{t('events.remove')}</h2>
+            <h2 className="text-[16px] font-semibold text-ink">{t('events.remove')}</h2>
             <p className="mt-1 text-[13px] text-ink-2">{t('events.remove_confirm')}</p>
             <div className="mt-5 flex justify-end gap-2">
               <Button size="sm" variant="ghost" onClick={() => setConfirmRemove(false)}>

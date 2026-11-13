@@ -167,7 +167,7 @@ function IncidentDetail({ incidentId }: { incidentId: number }) {
       <AdminShell active="dashboard" layout="sidebar">
         <main className="mx-auto w-full max-w-[1040px] px-5 pb-12 pt-2.5">
           {incidentLoadError ?? (
-            <h1 className="text-[21px] font-semibold">{t('incident_detail.not_found')}</h1>
+            <h1 className="text-[20px] font-semibold">{t('incident_detail.not_found')}</h1>
           )}
           <Link
             to={`${ADMIN_PATH}?tab=incidents`}

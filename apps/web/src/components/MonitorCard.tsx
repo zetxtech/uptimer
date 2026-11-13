@@ -134,7 +134,7 @@ export function MonitorCard({
   return (
     <article className="min-w-0 border-b border-line-soft py-5 last:border-b-0 sm:py-6">
       <div className="mb-3 flex items-center justify-between gap-4">
-        <h3 className="min-w-0 text-[15px] font-medium text-ink">
+        <h3 className="min-w-0 text-[14px] font-semibold text-ink">
           <button
             type="button"
             onClick={onSelect}

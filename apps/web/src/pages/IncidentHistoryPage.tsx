@@ -47,7 +47,9 @@ function IncidentCard({
         className="block w-full min-w-0 px-5 py-7 text-left hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ink sm:px-7"
       >
         <div className="flex items-start justify-between gap-4">
-          <h3 className="min-w-0 break-words text-[17px] font-medium text-ink">{incident.title}</h3>
+          <h3 className="min-w-0 break-words text-[16px] font-semibold text-ink">
+            {incident.title}
+          </h3>
           <Badge variant={incident.status === 'resolved' ? 'up' : 'paused'}>
             {incidentStatusLabel(incident.status, t)}
           </Badge>
@@ -274,7 +276,7 @@ export function IncidentHistoryPage() {
                   key={month}
                   className="min-w-0 overflow-hidden rounded-xl border border-line bg-surface"
                 >
-                  <h2 className="border-b border-line px-5 py-5 text-[15px] font-medium text-ink sm:px-7">
+                  <h2 className="border-b border-line px-5 py-5 text-[14px] font-semibold text-ink sm:px-7">
                     {month}
                   </h2>
                   <ol className="min-w-0 divide-y divide-line-soft">
@@ -320,7 +322,7 @@ export function IncidentHistoryPage() {
             )}
           </>
         ) : (
-          <div className="rounded-xl border border-line bg-surface px-5 py-14 text-center text-[15px] font-medium text-ink-3">
+          <div className="rounded-xl border border-line bg-surface px-5 py-14 text-center text-[14px] font-medium text-ink-3">
             {t('status_page.no_past_incidents')}
           </div>
         )}

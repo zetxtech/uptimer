@@ -136,6 +136,24 @@ const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
 contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
 contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
 assert(
+  'type scale limited to 11/12/13/14/16/20/28',
+  !/text-\[(?!11px\]|12px\]|13px\]|14px\]|16px\]|20px\]|28px\])[0-9]+px\]/.test(
+    [
+      'apps/web/src/pages/StatusPage.tsx',
+      'apps/web/src/pages/MaintenanceHistoryPage.tsx',
+      'apps/web/src/pages/IncidentHistoryPage.tsx',
+      'apps/web/src/pages/AdminReporting.tsx',
+      'apps/web/src/components/AdminSection.tsx',
+      'apps/web/src/components/MonitorCard.tsx',
+      'apps/web/src/components/KpiCell.tsx',
+      'apps/web/src/components/PublicStatusHeader.tsx',
+    ]
+      .map(read)
+      .join('\n'),
+  ),
+  'no off-scale font sizes',
+);
+assert(
   'no off-palette colours in data visuals',
   !/#(10b981|84cc16|f59e0b|ef4444|22c55e|34d399|38bdf8|0ea5e9|64748b|94a3b8|1e293b|334155|f1f5f9|0f172a|4b93e8|cbd5e1|0284c7|d97706|059669|db2777|7c3aed|dc2626|0891b2)\b/i.test(
     [

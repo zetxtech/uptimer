@@ -285,7 +285,7 @@ export function FormCollapse({
         >
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
         </svg>
-        <span className="ml-2 text-[15px] text-ink-2">{title}</span>
+        <span className="ml-2 text-[14px] text-ink-2">{title}</span>
         {!open && error && (
           <span className="ml-3 text-[12px] text-red-600 dark:text-red-400">{error}</span>
         )}
