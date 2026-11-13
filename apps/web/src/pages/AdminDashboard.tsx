@@ -61,6 +61,7 @@ import type {
   UptimeRatingLevel,
 } from '../api/types';
 import { AdminPageHeader, AdminShell, AdminTabs } from '../components/AdminShell';
+import { BulkConfigureDialog, type BulkConfigProperty } from '../components/BulkConfigureDialog';
 import {
   AdminSearchField,
   MaintenanceList,
@@ -125,7 +126,46 @@ type ModalState =
   | { type: 'create-maintenance' }
   | { type: 'edit-maintenance'; window: MaintenanceWindow }
   | { type: 'bulk-move' }
-  | { type: 'bulk-edit' };
+  | { type: 'bulk-edit' }
+  | { type: 'bulk-configure'; property: BulkConfigProperty };
+
+/** Reference selection-mode menu entries; each opens its own dialog. */
+const BULK_CONFIG_PROPERTIES: Array<{
+  property: BulkConfigProperty;
+  labelKey: Parameters<ReturnType<typeof useI18n>['t']>[0];
+  icon: string;
+}> = [
+  {
+    property: 'frequency',
+    labelKey: 'admin_dashboard.bulk_frequency',
+    icon: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+  },
+  {
+    property: 'confirmation',
+    labelKey: 'admin_dashboard.bulk_confirmation',
+    icon: 'M12 6v6l4 2m5-2a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+  },
+  {
+    property: 'recovery',
+    labelKey: 'admin_dashboard.bulk_recovery',
+    icon: 'm9 12.75 2.25 2.25L15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
+  },
+  {
+    property: 'request',
+    labelKey: 'admin_dashboard.bulk_request',
+    icon: 'M6.75 7.5h10.5M6.75 12h10.5m-10.5 4.5h6',
+  },
+  {
+    property: 'headers',
+    labelKey: 'admin_dashboard.bulk_headers',
+    icon: 'M4.5 6.75h15m-15 5.25h15m-15 5.25h9',
+  },
+  {
+    property: 'http-auth',
+    labelKey: 'admin_dashboard.bulk_http_auth',
+    icon: 'M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-1.5 9h12a1.5 1.5 0 0 0 1.5-1.5v-6a1.5 1.5 0 0 0-1.5-1.5h-12A1.5 1.5 0 0 0 4.5 12v6a1.5 1.5 0 0 0 1.5 1.5Z',
+  },
+];
 
 /** Page forms own their header, scroller and footer. */
 function ownsPageShell(type: ModalState['type']): boolean {
@@ -1740,30 +1780,29 @@ export function AdminDashboard() {
                 </svg>
                 {t('common.resume')}
               </button>
-              <button
-                type="button"
-                role="menuitem"
-                className="ui-sort-menu-item"
-                onClick={() => {
-                  setShowBulkMenu(false);
-                  setModal({ type: 'bulk-edit' });
-                }}
-              >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.7}
-                  aria-hidden
+              {BULK_CONFIG_PROPERTIES.map(({ property, labelKey, icon }) => (
+                <button
+                  key={property}
+                  type="button"
+                  role="menuitem"
+                  className="ui-sort-menu-item"
+                  onClick={() => {
+                    setShowBulkMenu(false);
+                    setModal({ type: 'bulk-configure', property });
+                  }}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z"
-                  />
-                </svg>
-                {t('admin_dashboard.bulk_edit')}
-              </button>
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={1.7}
+                    aria-hidden
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
+                  </svg>
+                  {t(labelKey)}
+                </button>
+              ))}
               <div className="ui-sort-menu-divider" />
               <button
                 type="button"
@@ -3657,11 +3696,13 @@ export function AdminDashboard() {
                 : cn(
                     MODAL_PANEL_CLASS,
                     'p-5 focus:outline-none sm:p-6',
-                    modal.type === 'create-group' || modal.type === 'edit-group'
-                      ? 'sm:max-w-2xl'
-                      : modal.type === 'create-channel' || modal.type === 'edit-channel'
-                        ? 'sm:max-w-lg'
-                        : 'sm:max-w-md',
+                    modal.type === 'bulk-configure'
+                      ? 'sm:max-w-[581px]'
+                      : modal.type === 'create-group' || modal.type === 'edit-group'
+                        ? 'sm:max-w-2xl'
+                        : modal.type === 'create-channel' || modal.type === 'edit-channel'
+                          ? 'sm:max-w-lg'
+                          : 'sm:max-w-md',
                   ),
             )}
           >
@@ -3700,6 +3741,25 @@ export function AdminDashboard() {
             )}
 
             {modal.type === 'bulk-edit' && <div className="space-y-3">{bulkEditPanel}</div>}
+
+            {modal.type === 'bulk-configure' && (
+              <BulkConfigureDialog
+                property={modal.property}
+                count={selectedMonitorIds.length}
+                busy={bulkBusy}
+                onCancel={closeModal}
+                onSave={(patch) => {
+                  if (Object.keys(patch).length === 0) {
+                    closeModal();
+                    return;
+                  }
+                  bulkEditMut.mutate(
+                    { ids: [...selectedMonitorIds], patch },
+                    { onSuccess: () => closeModal() },
+                  );
+                }}
+              />
+            )}
 
             {(modal.type === 'create-monitor' || modal.type === 'edit-monitor') && (
               <>
