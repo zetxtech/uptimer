@@ -132,6 +132,14 @@ const cssRule = (selector) => {
 };
 assert('group header height', /height:\s*42px/.test(cssRule('.ui-group-head')), 'height: 42px');
 assert('range segment width', /width:\s*64px/.test(cssRule('.ui-range-segment')), 'width: 64px');
+const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
+contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
+contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
+assert(
+  'button type scale (14 px)',
+  /md: 'h-9 px-3\.5 text-\[14px\]'/.test(read('apps/web/src/components/ui.tsx')),
+  'text-[14px]',
+);
 assert(
   'admin section rhythm (40px)',
   /space-y-10/.test(read('apps/web/src/pages/AdminDashboard.tsx')) &&
