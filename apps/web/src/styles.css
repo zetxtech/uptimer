@@ -2011,7 +2011,8 @@ button,
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 20px;
+  /* Reference trailing block: gap-6 between the frequency cell and the row menu. */
+  gap: 24px;
 }
 
 .ui-monitor-row-schedule {
@@ -2029,6 +2030,7 @@ button,
   width: 26px;
   height: 26px;
   border: 0;
+  border-radius: 6px;
   background: transparent;
   color: var(--color-text-muted);
 }
@@ -2038,7 +2040,7 @@ button,
   color: var(--color-text-primary);
 }
 
-/* Six-dot grip shown on the list header and (on hover) on group headers. */
+/* Six-dot grip: permanent part of the group header. */
 .ui-monitor-grip {
   display: inline-grid;
   width: 14px;
