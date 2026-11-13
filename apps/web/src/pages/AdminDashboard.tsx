@@ -3816,6 +3816,23 @@ export function AdminDashboard() {
                     error={formatError(updateMonitorMut.error)}
                     groupOptions={monitorGroupLabels.filter((label) => label !== UNGROUPED_LABEL)}
                     stateThresholdDefaults={stateThresholdDefaults}
+                    onTestAlert={() => testMonitorMut.mutate(modal.monitor.id)}
+                    onTogglePause={() =>
+                      modal.monitor.status === 'paused'
+                        ? resumeMonitorMut.mutate(modal.monitor.id)
+                        : pauseMonitorMut.mutate(modal.monitor.id)
+                    }
+                    onDelete={() => {
+                      if (window.confirm(`${t('common.delete')} "${modal.monitor.name}"?`)) {
+                        deleteMonitorMut.mutate(modal.monitor.id);
+                        closeModal();
+                      }
+                    }}
+                    actionPending={
+                      testMonitorMut.isPending ||
+                      pauseMonitorMut.isPending ||
+                      deleteMonitorMut.isPending
+                    }
                   />
                 )}
               </>

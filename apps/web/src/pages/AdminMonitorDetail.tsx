@@ -826,6 +826,14 @@ export function AdminMonitorDetail() {
               isLoading={updateMut.isPending}
               error={updateMut.error?.message}
               groupOptions={groupOptions}
+              onTestAlert={() => testMut.mutate()}
+              onTogglePause={() => pauseMut.mutate()}
+              onDelete={() => {
+                if (window.confirm(`${t('common.delete')} "${monitor.name}"?`)) {
+                  deleteMut.mutate();
+                }
+              }}
+              actionPending={testMut.isPending || pauseMut.isPending || deleteMut.isPending}
             />
           </div>
         </div>

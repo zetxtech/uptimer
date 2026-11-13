@@ -81,6 +81,11 @@ function monitorNameFromTarget(target: string): string {
 
 type CommonProps = {
   onCancel: () => void;
+  /** Edit-page action strip, mirroring the reference: test alert, pause/resume, remove. */
+  onTestAlert?: () => void;
+  onTogglePause?: () => void;
+  onDelete?: () => void;
+  actionPending?: boolean;
   /** Layout of the form shell: modal dialog or full page surface. */
   variant?: 'modal' | 'page';
   isLoading?: boolean;
@@ -1163,6 +1168,89 @@ export function MonitorForm(props: CreateProps | EditProps) {
               ? t('admin_dashboard.edit_monitor')
               : createLabel}
         </h1>
+
+        {isPage && monitor && (props.onTestAlert || props.onTogglePause || props.onDelete) ? (
+          <div className="-mx-2 mt-4 flex flex-wrap items-center gap-2 md:gap-12">
+            {props.onTestAlert ? (
+              <button
+                type="button"
+                onClick={props.onTestAlert}
+                disabled={props.actionPending || monitor.status === 'paused'}
+                className="flex items-center gap-2 rounded px-2 py-1 text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-ink-3"
+              >
+                <svg
+                  className="h-5 w-5 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 12 3.269 3.126A59.768 59.768 0 0 1 21.485 12 59.77 59.77 0 0 1 3.27 20.876L5.999 12Zm0 0h7.5"
+                  />
+                </svg>
+                {t('monitor_detail.send_test_alert')}
+              </button>
+            ) : null}
+            {props.onTogglePause ? (
+              <button
+                type="button"
+                onClick={props.onTogglePause}
+                disabled={props.actionPending}
+                className="flex items-center gap-2 rounded px-2 py-1 text-[13px] font-medium text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:text-ink-3"
+              >
+                <svg
+                  className="h-5 w-5 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  aria-hidden
+                >
+                  {monitor.status === 'paused' ? (
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
+                    />
+                  ) : (
+                    <>
+                      <path strokeLinecap="round" d="M8.25 5.25v13.5M15.75 5.25v13.5" />
+                    </>
+                  )}
+                </svg>
+                {monitor.status === 'paused' ? t('common.resume') : t('common.pause')}
+              </button>
+            ) : null}
+            {props.onDelete ? (
+              <button
+                type="button"
+                onClick={props.onDelete}
+                disabled={props.actionPending}
+                className="flex items-center gap-2 rounded px-2 py-1 text-[13px] font-medium text-status-down transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:text-ink-3"
+              >
+                <svg
+                  className="h-5 w-5 shrink-0"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.6}
+                  aria-hidden
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165"
+                  />
+                </svg>
+                {t('common.delete')}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
 
         {monitor && !isPage && (
           <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] leading-5">
