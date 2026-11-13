@@ -136,6 +136,12 @@ const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
 contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
 contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
 assert(
+  'workspace top bar (52 px)',
+  /h-\[52px\] max-w-\[90rem\]/.test(read('apps/web/src/components/AdminShell.tsx')) &&
+    /flex h-\[52px\] shrink-0 items-center/.test(read('apps/web/src/components/AdminShell.tsx')),
+  '52px bar and sidebar brand row',
+);
+assert(
   'monitor detail header is text-only (17 px status line)',
   /mt-\[17px\] flex flex-wrap items-center gap-x-1\.5 text-\[14px\]/.test(
     read('apps/web/src/pages/AdminMonitorDetail.tsx'),

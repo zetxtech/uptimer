@@ -176,7 +176,8 @@ export function AdminShell({
     return (
       <div className="min-h-screen bg-app text-ink">
         <aside className="ui-admin-sidebar fixed inset-y-0 left-0 z-40 hidden w-[17rem] flex-col border-r md:flex">
-          <div className="flex h-[3.25rem] shrink-0 items-center px-5">
+          {/* Sidebar brand row aligns with the 52 px workspace top bar. */}
+          <div className="flex h-[52px] shrink-0 items-center px-5">
             <Link to={ADMIN_PATH} className="flex items-center gap-2">
               <BrandMark />
               <span className="text-[16px] font-semibold tracking-[-0.01em] text-ink">Uptimer</span>
@@ -310,7 +311,8 @@ export function AdminShell({
   return (
     <>
       <header className="ui-topbar sticky top-0 z-40">
-        <div className="mx-auto flex h-14 max-w-[90rem] items-center gap-2 px-5 sm:px-8 lg:px-12">
+        {/* Reference workspace top bar: 52 px tall. */}
+        <div className="mx-auto flex h-[52px] max-w-[90rem] items-center gap-2 px-5 sm:px-8 lg:px-12">
           <Link to={ADMIN_PATH} className="mr-1 flex shrink-0 items-center gap-2">
             <BrandMark />
             <span className="hidden text-[16px] font-semibold tracking-[-0.01em] text-ink sm:block">
