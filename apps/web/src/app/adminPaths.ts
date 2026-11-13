@@ -31,3 +31,21 @@ export const ADMIN_PATH = normalizeAdminPath(import.meta.env.VITE_ADMIN_PATH);
 export const ADMIN_LOGIN_PATH = `${ADMIN_PATH}/login`;
 export const ADMIN_ANALYTICS_PATH = `${ADMIN_PATH}/analytics`;
 export const ADMIN_PROBES_PATH = `${ADMIN_PATH}/probes`;
+export const ADMIN_EVENTS_PATH = `${ADMIN_PATH}/events`;
+export const ADMIN_HEARTBEATS_PATH = `${ADMIN_PATH}/heartbeats`;
+export const ADMIN_REPORTING_PATH = `${ADMIN_PATH}/reporting`;
+export const ADMIN_MONITOR_DETAIL_ROUTE = `${ADMIN_PATH}/monitors/:id`;
+export const ADMIN_INCIDENT_DETAIL_ROUTE = `${ADMIN_PATH}/incidents/:id`;
+export const ADMIN_EVENT_DETAIL_ROUTE = `${ADMIN_PATH}/events/:id`;
+
+export function adminMonitorDetailPath(monitorId: number): string {
+  return `${ADMIN_PATH}/monitors/${monitorId}`;
+}
+
+export function adminIncidentDetailPath(incidentId: number): string {
+  return `${ADMIN_PATH}/incidents/${incidentId}`;
+}
+
+export function adminEventDetailPath(eventId: number): string {
+  return `${ADMIN_PATH}/events/${eventId}`;
+}

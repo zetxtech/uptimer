@@ -6,7 +6,8 @@ import type {
 } from '../api/types';
 import { useI18n } from '../app/I18nContext';
 import { Markdown } from './Markdown';
-import { Button, FIELD_LABEL_CLASS, INPUT_CLASS, TEXTAREA_CLASS } from './ui';
+import { CheckboxRow, FormPageShell, FormRow } from './formPage';
+import { Button, FIELD_HELP_CLASS, FIELD_LABEL_CLASS, INPUT_CLASS, TEXTAREA_CLASS } from './ui';
 
 function pad2(n: number): string {
   return String(n).padStart(2, '0');
@@ -32,6 +33,7 @@ const labelClass = FIELD_LABEL_CLASS;
 type CommonProps = {
   onCancel: () => void;
   isLoading?: boolean;
+  error?: string | undefined;
   monitors: Array<{ id: number; name: string }>;
 };
 type CreateProps = CommonProps & {
@@ -44,7 +46,7 @@ type EditProps = CommonProps & {
 };
 
 export function MaintenanceWindowForm(props: CreateProps | EditProps) {
-  const { window, onCancel, isLoading, monitors } = props;
+  const { window, onCancel, isLoading, error, monitors } = props;
   const { t } = useI18n();
 
   const [title, setTitle] = useState(window?.title ?? '');
@@ -53,6 +55,7 @@ export function MaintenanceWindowForm(props: CreateProps | EditProps) {
   const [endsAt, setEndsAt] = useState(window ? toDatetimeLocal(window.ends_at) : '');
   const [selectedMonitorIds, setSelectedMonitorIds] = useState<number[]>(window?.monitor_ids ?? []);
 
+  const [attempted, setAttempted] = useState(false);
   const normalized = useMemo(() => message.trim(), [message]);
   const parsed = useMemo(
     () => ({ starts_at: fromDatetimeLocal(startsAt), ends_at: fromDatetimeLocal(endsAt) }),
@@ -72,11 +75,18 @@ export function MaintenanceWindowForm(props: CreateProps | EditProps) {
         ? t('maintenance_form.select_at_least_one')
         : null;
 
+  const issues: string[] = [];
+  if (title.trim().length === 0) issues.push(t('maintenance_form.issue_title'));
+  if (timeError) issues.push(timeError);
+  if (monitorsError) issues.push(monitorsError);
+
   return (
     <form
-      className="space-y-5"
+      noValidate
+      aria-labelledby="admin-modal-title"
       onSubmit={(e) => {
         e.preventDefault();
+        setAttempted(true);
         if (
           timeError ||
           parsed.starts_at === null ||
@@ -94,108 +104,112 @@ export function MaintenanceWindowForm(props: CreateProps | EditProps) {
         else props.onSubmit(normalized ? { ...base, message: normalized } : base);
       }}
     >
-      <div>
-        <div className={labelClass}>{t('maintenance_form.affected_monitors')}</div>
-        {monitors.length === 0 ? (
-          <div className="text-sm text-slate-500 dark:text-slate-400">
-            {t('maintenance_form.no_monitors')}
+      <FormPageShell
+        backLabel={t('admin_dashboard.tab.maintenance')}
+        onBack={onCancel}
+        backDisabled={isLoading}
+        title={
+          window ? t('admin_dashboard.edit_maintenance') : t('admin_dashboard.create_maintenance')
+        }
+        error={error}
+        errorTitle={window ? t('form.error_save') : t('form.error_create')}
+        issues={attempted ? issues : []}
+        primaryAction={
+          <Button type="submit" disabled={isLoading} className="min-w-40">
+            {isLoading ? t('common.saving') : window ? t('common.save') : t('common.create')}
+          </Button>
+        }
+      >
+        <FormRow
+          label={t('maintenance_form.section_window')}
+          description={t('maintenance_form.section_window_hint')}
+        >
+          <div>
+            <label className={labelClass}>{t('maintenance_form.title')}</label>
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className={inputClass}
+              placeholder={t('maintenance_form.title_placeholder')}
+            />
           </div>
-        ) : (
-          <div className="max-h-40 overflow-y-auto border border-slate-200 dark:border-slate-600 rounded-lg p-3 space-y-2 bg-white dark:bg-slate-700">
-            {monitors.map((m) => (
-              <label
-                key={m.id}
-                className="flex items-center gap-2.5 text-sm text-slate-700 dark:text-slate-300 cursor-pointer hover:text-slate-900 dark:hover:text-slate-100"
-              >
-                <input
-                  type="checkbox"
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className={labelClass}>{t('maintenance_form.starts_at')}</label>
+              <input
+                type="datetime-local"
+                value={startsAt}
+                onChange={(e) => setStartsAt(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+            <div>
+              <label className={labelClass}>{t('maintenance_form.ends_at')}</label>
+              <input
+                type="datetime-local"
+                value={endsAt}
+                onChange={(e) => setEndsAt(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+          </div>
+          {timeError && (
+            <div className="text-[12px] text-red-500 dark:text-red-400">{timeError}</div>
+          )}
+
+          <div>
+            <label className={labelClass}>{t('maintenance_form.message')}</label>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              rows={3}
+              className={textareaClass}
+              placeholder={t('maintenance_form.message_placeholder')}
+            />
+            {normalized && (
+              <div className="mt-2 rounded-lg border border-line bg-surface-2 p-3">
+                <Markdown text={normalized} />
+              </div>
+            )}
+          </div>
+        </FormRow>
+
+        <FormRow
+          label={t('maintenance_form.affected_monitors')}
+          description={t('maintenance_form.section_monitors_hint')}
+        >
+          {monitors.length === 0 ? (
+            <div className="text-[13px] text-ink-2 dark:text-ink-3">
+              {t('maintenance_form.no_monitors')}
+            </div>
+          ) : (
+            <div className="max-h-56 space-y-2 overflow-y-auto">
+              {monitors.map((m) => (
+                <CheckboxRow
+                  key={m.id}
+                  id={`maintenance-monitor-${m.id}`}
+                  label={m.name}
                   checked={selectedMonitorIds.includes(m.id)}
-                  onChange={(e) =>
+                  onChange={(next) =>
                     setSelectedMonitorIds(
-                      e.target.checked
+                      next
                         ? [...selectedMonitorIds, m.id]
                         : selectedMonitorIds.filter((id) => id !== m.id),
                     )
                   }
-                  className="rounded border-slate-300 dark:border-slate-500 dark:bg-slate-600"
                 />
-                <span>{m.name}</span>
-              </label>
-            ))}
+              ))}
+            </div>
+          )}
+          {monitorsError && (
+            <div className="text-[12px] text-red-500 dark:text-red-400">{monitorsError}</div>
+          )}
+          <div className={FIELD_HELP_CLASS}>
+            {t('maintenance_form.monitors_help', { count: selectedMonitorIds.length })}
           </div>
-        )}
-        {monitorsError && (
-          <div className="mt-2 text-sm text-red-500 dark:text-red-400">{monitorsError}</div>
-        )}
-      </div>
-
-      <div>
-        <label className={labelClass}>{t('maintenance_form.title')}</label>
-        <input
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className={inputClass}
-          placeholder={t('maintenance_form.title_placeholder')}
-          required
-        />
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label className={labelClass}>{t('maintenance_form.starts_at')}</label>
-          <input
-            type="datetime-local"
-            value={startsAt}
-            onChange={(e) => setStartsAt(e.target.value)}
-            className={inputClass}
-            required
-          />
-        </div>
-        <div>
-          <label className={labelClass}>{t('maintenance_form.ends_at')}</label>
-          <input
-            type="datetime-local"
-            value={endsAt}
-            onChange={(e) => setEndsAt(e.target.value)}
-            className={inputClass}
-            required
-          />
-        </div>
-      </div>
-      {timeError && <div className="text-sm text-red-500 dark:text-red-400">{timeError}</div>}
-
-      <div>
-        <label className={labelClass}>{t('maintenance_form.message')}</label>
-        <textarea
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          rows={4}
-          className={`${textareaClass} font-mono`}
-          placeholder={t('maintenance_form.message_placeholder')}
-        />
-      </div>
-
-      {normalized && (
-        <div>
-          <div className={labelClass}>{t('common.preview')}</div>
-          <div className="border border-slate-200 dark:border-slate-600 rounded-lg p-4 bg-slate-50 dark:bg-slate-700/50">
-            <Markdown text={normalized} />
-          </div>
-        </div>
-      )}
-
-      <div className="flex gap-3 pt-2">
-        <Button type="button" variant="secondary" onClick={onCancel} className="flex-1">
-          {t('common.cancel')}
-        </Button>
-        <Button
-          type="submit"
-          disabled={isLoading || !title.trim() || !!timeError || !selectedMonitorIds.length}
-          className="flex-1"
-        >
-          {isLoading ? t('common.saving') : window ? t('common.save') : t('common.create')}
-        </Button>
-      </div>
+        </FormRow>
+      </FormPageShell>
     </form>
   );
 }

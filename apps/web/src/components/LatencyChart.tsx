@@ -36,7 +36,10 @@ export function LatencyChart({ points, height = 200 }: LatencyChartProps) {
 
   if (rawData.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[200px] text-slate-500 dark:text-slate-400">
+      <div
+        className="flex items-center justify-center text-ink-2 dark:text-ink-3"
+        style={{ height }}
+      >
         {t('common.no_latency_data')}
       </div>
     );

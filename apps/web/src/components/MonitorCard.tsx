@@ -10,15 +10,8 @@ import { useI18n } from '../app/I18nContext';
 import { statusLabel } from '../i18n/labels';
 import { HeartbeatBar } from './HeartbeatBar';
 import { UptimeBar30d } from './UptimeBar30d';
-import { Badge, Card, StatusDot } from './ui';
 import { formatTime } from '../utils/datetime';
-import {
-  formatLatency,
-  formatPct,
-  getUptimeBgClasses,
-  getUptimePillClasses,
-  getUptimeTier,
-} from '../utils/uptime';
+import { formatLatency, formatPct } from '../utils/uptime';
 
 const HEARTBEAT_BARS = 60;
 const AVAILABILITY_BARS = 60;
@@ -138,106 +131,128 @@ export function MonitorCard({
     [heartbeatStrip, heartbeats],
   );
 
-  const tier = uptime30d ? getUptimeTier(uptime30d.uptime_pct, ratingLevel) : null;
-
   return (
-    <Card hover onClick={onSelect} className="p-3 sm:p-4">
-      {/* Header */}
-      <div className="mb-2.5 sm:mb-3 flex items-start justify-between gap-2">
-        <div className="min-w-0 flex items-center gap-2.5">
-          <StatusDot status={monitor.status} pulse={monitor.status === 'down'} size="sm" />
-          <div className="min-w-0">
-            <h3 className="truncate text-base font-semibold leading-tight text-slate-900 dark:text-slate-100">
-              {monitor.name}
-            </h3>
-            {monitor.display_url && (
-              <a
-                href={monitor.display_url}
-                target="_blank"
-                rel="noreferrer"
-                onClick={(event) => event.stopPropagation()}
-                className="mt-0.5 block truncate text-xs text-slate-500 underline decoration-slate-300 underline-offset-2 hover:text-slate-900 dark:text-slate-400 dark:decoration-slate-600 dark:hover:text-slate-100"
-                title={monitor.display_url}
-              >
-                {monitor.display_url}
-              </a>
-            )}
-            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-              <span>{monitor.type}</span>
-              {monitor.is_stale && (
-                <span className="rounded bg-amber-100 px-1.5 py-px text-[10px] font-semibold text-amber-800 dark:bg-amber-900/50 dark:text-amber-200">
-                  {t('monitor_card.stale')}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex shrink-0 items-center gap-1.5">
-          {uptime30d && tier ? (
+    <article className="min-w-0 border-b border-line-soft py-5 last:border-b-0 sm:py-6">
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <h3 className="min-w-0 text-[15px] font-medium text-ink">
+          <button
+            type="button"
+            onClick={onSelect}
+            className="flex max-w-full items-center gap-2 rounded-sm text-left hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
+          >
             <span
-              className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium tabular-nums ${getUptimePillClasses(tier)}`}
-              title={t('monitor_card.uptime_title')}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${getUptimeBgClasses(tier)}`} />
-              {formatPct(uptime30d.uptime_pct)}
-            </span>
-          ) : (
-            <span className="text-xs text-slate-400 dark:text-slate-500">-</span>
-          )}
-          <Badge variant={monitor.status}>{statusLabel(monitor.status, t)}</Badge>
-        </div>
+              aria-hidden="true"
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                {
+                  up: 'bg-status-up',
+                  down: 'bg-status-down',
+                  maintenance: 'bg-status-maintenance',
+                  paused: 'bg-status-paused',
+                  unknown: 'bg-status-unknown',
+                }[monitor.status]
+              }`}
+            />
+            <span className="truncate">{monitor.name}</span>
+            <span className="sr-only">{statusLabel(monitor.status, t)}</span>
+          </button>
+        </h3>
+        <span
+          className="shrink-0 text-sm tabular-nums text-ink-2"
+          title={t('monitor_card.uptime_title')}
+        >
+          {uptime30d ? formatPct(uptime30d.uptime_pct) : '—'}
+        </span>
       </div>
 
-      {/* Availability (60d) */}
-      <div>
-        <div className="mb-2 text-[11px] text-slate-400 dark:text-slate-500">
-          {t('monitor_card.availability_30d')}
-        </div>
+      <div className="min-w-0">
         <UptimeBar30d
+          variant="block"
           days={uptimeDays}
           strip={uptimeDayStrip}
           ratingLevel={ratingLevel}
           maxBars={AVAILABILITY_BARS}
           timeZone={timeZone}
           onDayClick={onDayClick}
-          density="compact"
+          fillMode="pad"
+          blockClassName="h-8 [&_button:focus-visible]:relative [&_button:focus-visible]:z-10 [&_button:focus-visible]:ring-2 [&_button:focus-visible]:ring-ink [&_button:focus-visible]:ring-offset-2 [&_button:focus-visible]:ring-offset-surface"
         />
+        <div className="mt-2 flex items-center justify-between text-xs text-ink-3">
+          <span>{t('monitor_card.range_start', { count: AVAILABILITY_BARS })}</span>
+          <span>{t('monitor_card.range_end')}</span>
+        </div>
       </div>
 
-      {/* Heartbeat */}
-      <div className="mt-2">
-        <div className="mb-2 text-[11px] text-slate-400 dark:text-slate-500">
-          {t('monitor_card.last_checks', { count: HEARTBEAT_BARS })}
+      <details className="group mt-3 text-sm">
+        <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-sm text-xs text-ink-3 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink [&::-webkit-details-marker]:hidden">
+          {t('incident_detail.details')}
+          <svg
+            aria-hidden="true"
+            className="h-3 w-3 transition-transform group-open:rotate-180"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+          >
+            <path d="m4 6 4 4 4-4" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </summary>
+        <div className="mt-4 space-y-4 rounded-md bg-surface-2 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <span>{statusLabel(monitor.status, t)}</span>
+              <span className="uppercase">{monitor.type}</span>
+              {monitor.is_stale && (
+                <span className="text-status-paused">{t('monitor_card.stale')}</span>
+              )}
+            </div>
+            <span>
+              {monitor.last_checked_at
+                ? t('common.last_updated', { value: checkedAt })
+                : t('monitor_card.never_checked')}
+            </span>
+          </div>
+          {monitor.display_url && (
+            <a
+              href={monitor.display_url}
+              target="_blank"
+              rel="noreferrer"
+              className="block break-all text-ink-2 underline decoration-line underline-offset-4 hover:text-ink"
+            >
+              {monitor.display_url}
+            </a>
+          )}
+          <div>
+            <p className="mb-2 text-xs text-ink-3">
+              {t('monitor_card.last_checks', { count: HEARTBEAT_BARS })}
+            </p>
+            <HeartbeatBar
+              heartbeats={heartbeats}
+              strip={heartbeatStrip}
+              maxBars={HEARTBEAT_BARS}
+              density="compact"
+            />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs tabular-nums text-ink-2">
+              <span>
+                {t('monitor_card.fast')} {formatLatency(latencyStats.fastestMs)}
+              </span>
+              <span>
+                {t('monitor_card.avg')} {formatLatency(latencyStats.avgMs)}
+              </span>
+              <span>
+                {t('monitor_card.slow')} {formatLatency(latencyStats.slowestMs)}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onSelect}
+              className="rounded-sm text-xs font-medium text-ink underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
+            >
+              {t('monitor_detail.response_times')}
+            </button>
+          </div>
         </div>
-        <HeartbeatBar
-          heartbeats={heartbeats}
-          strip={heartbeatStrip}
-          maxBars={HEARTBEAT_BARS}
-          density="compact"
-        />
-      </div>
-
-      {/* Latency + timestamp footer */}
-      <div className="mt-2 sm:mt-2.5 flex flex-wrap items-baseline justify-between gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-        <div className="flex items-baseline gap-2 sm:gap-3 tabular-nums">
-          <span>
-            <span className="text-slate-400 dark:text-slate-500">{t('monitor_card.fast')}</span>{' '}
-            {formatLatency(latencyStats.fastestMs)}
-          </span>
-          <span>
-            <span className="text-slate-400 dark:text-slate-500">{t('monitor_card.avg')}</span>{' '}
-            {formatLatency(latencyStats.avgMs)}
-          </span>
-          <span>
-            <span className="text-slate-400 dark:text-slate-500">{t('monitor_card.slow')}</span>{' '}
-            {formatLatency(latencyStats.slowestMs)}
-          </span>
-        </div>
-        <span className="text-[11px] text-slate-400 dark:text-slate-500">
-          {monitor.last_checked_at ? checkedAt : t('monitor_card.never_checked')}
-        </span>
-      </div>
-    </Card>
+      </details>
+    </article>
   );
 }

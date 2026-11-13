@@ -26,7 +26,7 @@ export function DailyUptimeChart({ points, height = 220 }: DailyUptimeChartProps
 
   if (data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[220px] text-slate-500 dark:text-slate-400">
+      <div className="flex items-center justify-center h-[220px] text-ink-2 dark:text-ink-3">
         {t('common.no_data')}
       </div>
     );
@@ -34,7 +34,7 @@ export function DailyUptimeChart({ points, height = 220 }: DailyUptimeChartProps
 
   const axisColor = isDark ? '#64748b' : '#9ca3af';
   const uptimeColor = isDark ? '#34d399' : '#22c55e';
-  const unknownColor = isDark ? '#64748b' : '#9ca3af';
+  const unknownColor = isDark ? '#94a3b8' : '#cbd5e1';
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -75,7 +75,8 @@ export function DailyUptimeChart({ points, height = 220 }: DailyUptimeChartProps
           type="monotone"
           dataKey="unknown_pct"
           stroke={unknownColor}
-          strokeWidth={1}
+          strokeWidth={1.5}
+          strokeDasharray="4 4"
           dot={false}
         />
       </LineChart>

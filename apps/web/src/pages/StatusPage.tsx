@@ -15,9 +15,11 @@ import type { Incident, IncidentSummary, Outage, PublicHomepageResponse } from '
 import { DayDowntimeModal } from '../components/DayDowntimeModal';
 import { Markdown } from '../components/Markdown';
 import { MonitorCard } from '../components/MonitorCard';
-import { incidentImpactLabel, incidentStatusLabel } from '../i18n/labels';
+import { PublicDialog } from '../components/PublicDialog';
+import { PublicStatusHeader } from '../components/PublicStatusHeader';
+import { incidentImpactLabel, incidentStatusLabel, statusLabel } from '../i18n/labels';
 import { formatDateTime, getBrowserTimeZone } from '../utils/datetime';
-import { Badge, Card, MODAL_OVERLAY_CLASS, MODAL_PANEL_CLASS, ThemeToggle } from '../components/ui';
+import { Badge, Card } from '../components/ui';
 
 type BannerStatus = PublicHomepageResponse['banner']['status'];
 type IncidentCardData = IncidentSummary | Incident;
@@ -30,29 +32,19 @@ const LatencyChart = lazy(async () => {
 function getBannerConfig(status: BannerStatus, t: ReturnType<typeof useI18n>['t']) {
   const configs = {
     operational: {
-      iconBg: 'bg-emerald-500',
       text: t('status_page.all_systems_operational'),
-      icon: '✓',
     },
     partial_outage: {
-      iconBg: 'bg-amber-500',
       text: t('status_page.partial_system_outage'),
-      icon: '!',
     },
     major_outage: {
-      iconBg: 'bg-red-500',
       text: t('status_page.major_system_outage'),
-      icon: '✕',
     },
     maintenance: {
-      iconBg: 'bg-blue-500',
       text: t('status_page.scheduled_maintenance'),
-      icon: '⚙',
     },
     unknown: {
-      iconBg: 'bg-slate-500',
       text: t('status_page.status_unknown'),
-      icon: '?',
     },
   };
   return configs[status] || configs.unknown;
@@ -71,71 +63,72 @@ function MonitorDetail({ monitorId, onClose }: { monitorId: number; onClose: () 
   });
 
   return (
-    <div className={MODAL_OVERLAY_CLASS} onClick={onClose}>
-      <div
-        className={`${MODAL_PANEL_CLASS} sm:max-w-2xl p-5 sm:p-6`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-            {data?.monitor.name ?? t('common.loading')}
-          </h2>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
-        </div>
+    <PublicDialog
+      label={data?.monitor.name ?? t('monitor_detail.response_times')}
+      onClose={onClose}
+      panelClassName="sm:max-w-2xl p-5 sm:p-6"
+    >
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-semibold text-ink">
+          {data?.monitor.name ?? t('common.loading')}
+        </h2>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('common.close')}
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-2 dark:hover:bg-surface-2 text-ink-3 hover:text-ink-2 dark:hover:text-ink-2 transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      </div>
 
-        {isLoading ? (
-          <div className="h-[200px] flex items-center justify-center text-slate-500 dark:text-slate-400">
-            {t('status_page.loading_chart')}
-          </div>
-        ) : data ? (
-          <>
-            <div className="grid grid-cols-2 gap-3 sm:gap-6 mb-6">
-              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3">
-                <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  {t('status_page.avg_latency')}
-                </div>
-                <div className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">
-                  {data.avg_latency_ms ?? '-'}ms
-                </div>
+      {isLoading ? (
+        <div className="h-[200px] flex items-center justify-center text-ink-2 dark:text-ink-3">
+          {t('status_page.loading_chart')}
+        </div>
+      ) : data ? (
+        <>
+          <div className="grid grid-cols-2 gap-3 sm:gap-6 mb-6">
+            <div className="bg-surface-2 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3">
+              <div className="text-xs text-ink-2 dark:text-ink-3 uppercase tracking-wide mb-1">
+                {t('status_page.avg_latency')}
               </div>
-              <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3">
-                <div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">
-                  {t('status_page.p95_latency')}
-                </div>
-                <div className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">
-                  {data.p95_latency_ms ?? '-'}ms
-                </div>
+              <div className="text-base sm:text-lg font-semibold text-ink">
+                {data.avg_latency_ms ?? '-'}ms
               </div>
             </div>
-            <Suspense
-              fallback={
-                <div className="h-[200px] flex items-center justify-center text-slate-500 dark:text-slate-400">
-                  {t('status_page.loading_chart')}
-                </div>
-              }
-            >
-              <LatencyChart points={data.points} />
-            </Suspense>
-          </>
-        ) : (
-          <div className="h-[200px] flex items-center justify-center text-slate-500 dark:text-slate-400">
-            {t('status_page.failed_load_data')}
+            <div className="bg-surface-2 rounded-lg px-3 sm:px-4 py-2.5 sm:py-3">
+              <div className="text-xs text-ink-2 dark:text-ink-3 uppercase tracking-wide mb-1">
+                {t('status_page.p95_latency')}
+              </div>
+              <div className="text-base sm:text-lg font-semibold text-ink">
+                {data.p95_latency_ms ?? '-'}ms
+              </div>
+            </div>
           </div>
-        )}
-      </div>
-    </div>
+          <Suspense
+            fallback={
+              <div className="h-[200px] flex items-center justify-center text-ink-2 dark:text-ink-3">
+                {t('status_page.loading_chart')}
+              </div>
+            }
+          >
+            <LatencyChart points={data.points} />
+          </Suspense>
+        </>
+      ) : (
+        <div className="h-[200px] flex items-center justify-center text-ink-2 dark:text-ink-3">
+          {t('status_page.failed_load_data')}
+        </div>
+      )}
+    </PublicDialog>
   );
 }
 
@@ -152,29 +145,21 @@ function IncidentCard({
 
   return (
     <button
+      type="button"
       onClick={onClick}
-      className="ui-panel ui-panel-hover w-full rounded-xl p-3.5 sm:p-5 text-left"
+      className="w-full rounded-sm border-l-2 border-line py-1 pl-5 text-left transition-colors hover:border-ink-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
     >
-      <div className="flex items-start justify-between gap-4 mb-2">
-        <h4 className="font-semibold text-slate-900 dark:text-slate-100">{incident.title}</h4>
-        <Badge
-          variant={
-            incident.impact === 'critical'
-              ? 'down'
-              : incident.impact === 'major'
-                ? 'down'
-                : 'paused'
-          }
-        >
-          {incidentImpactLabel(incident.impact, t)}
-        </Badge>
+      <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
+        <time dateTime={new Date(incident.started_at * 1000).toISOString()}>
+          {formatDateTime(incident.started_at, timeZone, locale)}
+        </time>
+        <span className={incident.status === 'resolved' ? 'text-status-up' : 'text-status-paused'}>
+          {incidentStatusLabel(incident.status, t)}
+        </span>
       </div>
-      <div className="flex items-center gap-3 text-sm text-slate-500 dark:text-slate-400 mb-3">
-        <Badge variant="info">{incidentStatusLabel(incident.status, t)}</Badge>
-        <span>{formatDateTime(incident.started_at, timeZone, locale)}</span>
-      </div>
+      <h4 className="break-words text-[15px] font-medium text-ink">{incident.title}</h4>
       {incident.message && (
-        <p className="text-sm text-slate-600 dark:text-slate-300 line-clamp-2">
+        <p className="mt-2 line-clamp-3 break-words text-sm leading-relaxed text-ink-2">
           {incident.message}
         </p>
       )}
@@ -200,149 +185,130 @@ function IncidentDetail({
   const { locale, t } = useI18n();
 
   return (
-    <div className={MODAL_OVERLAY_CLASS} onClick={onClose}>
-      <div
-        className={`${MODAL_PANEL_CLASS} sm:max-w-2xl p-5 sm:p-6`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="flex justify-between items-start mb-4 sm:mb-6">
-          <div>
-            <h2 className="text-lg sm:text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
-              {incident.title}
-            </h2>
-            <div className="flex flex-wrap items-center gap-2">
-              <Badge
-                variant={
-                  incident.impact === 'critical' || incident.impact === 'major' ? 'down' : 'paused'
-                }
-              >
-                {incidentImpactLabel(incident.impact, t)}
-              </Badge>
-              <Badge variant="info">{incidentStatusLabel(incident.status, t)}</Badge>
-            </div>
+    <PublicDialog label={incident.title} onClose={onClose} panelClassName="sm:max-w-2xl p-5 sm:p-6">
+      <div className="flex justify-between items-start mb-4 sm:mb-6">
+        <div>
+          <h2 className="text-lg sm:text-xl font-semibold text-ink mb-2">{incident.title}</h2>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge
+              variant={
+                incident.impact === 'critical' || incident.impact === 'major' ? 'down' : 'paused'
+              }
+            >
+              {incidentImpactLabel(incident.impact, t)}
+            </Badge>
+            <Badge variant="info">{incidentStatusLabel(incident.status, t)}</Badge>
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M6 18L18 6M6 6l12 12"
-              />
-            </svg>
-          </button>
         </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('common.close')}
+          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-surface-2 dark:hover:bg-surface-2 text-ink-3 hover:text-ink-2 dark:hover:text-ink-2 transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </button>
+      </div>
 
-        <div className="space-y-2 sm:space-y-3 text-sm text-slate-600 dark:text-slate-300 mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-slate-100 dark:border-slate-700">
+      <div className="space-y-2 sm:space-y-3 text-sm text-ink-2 mb-4 sm:mb-6 pb-4 sm:pb-6 border-b border-line-soft dark:border-line">
+        <div className="flex flex-col sm:flex-row sm:gap-2">
+          <span className="text-ink-3 dark:text-ink-2 sm:w-20 text-xs sm:text-sm">
+            {t('common.affected')}:
+          </span>
+          <span className="text-sm">
+            {incident.monitor_ids.length > 0
+              ? incident.monitor_ids.map((id) => monitorNames.get(id) ?? `#${id}`).join(', ')
+              : isLoadingDetails
+                ? t('common.loading')
+                : hasDetailsError
+                  ? t('status_page.failed_load_data')
+                  : '-'}
+          </span>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:gap-2">
+          <span className="text-ink-3 dark:text-ink-2 sm:w-20 text-xs sm:text-sm">
+            {t('common.started')}:
+          </span>
+          <span className="text-sm">{formatDateTime(incident.started_at, timeZone, locale)}</span>
+        </div>
+        {incident.resolved_at && (
           <div className="flex flex-col sm:flex-row sm:gap-2">
-            <span className="text-slate-400 dark:text-slate-500 sm:w-20 text-xs sm:text-sm">
-              {t('common.affected')}:
+            <span className="text-ink-3 dark:text-ink-2 sm:w-20 text-xs sm:text-sm">
+              {t('common.resolved')}:
             </span>
             <span className="text-sm">
-              {incident.monitor_ids.length > 0
-                ? incident.monitor_ids.map((id) => monitorNames.get(id) ?? `#${id}`).join(', ')
-                : isLoadingDetails
-                  ? t('common.loading')
-                  : hasDetailsError
-                    ? t('status_page.failed_load_data')
-                    : '-'}
+              {formatDateTime(incident.resolved_at, timeZone, locale)}
             </span>
           </div>
-          <div className="flex flex-col sm:flex-row sm:gap-2">
-            <span className="text-slate-400 dark:text-slate-500 sm:w-20 text-xs sm:text-sm">
-              {t('common.started')}:
-            </span>
-            <span className="text-sm">{formatDateTime(incident.started_at, timeZone, locale)}</span>
-          </div>
-          {incident.resolved_at && (
-            <div className="flex flex-col sm:flex-row sm:gap-2">
-              <span className="text-slate-400 dark:text-slate-500 sm:w-20 text-xs sm:text-sm">
-                {t('common.resolved')}:
-              </span>
-              <span className="text-sm">
-                {formatDateTime(incident.resolved_at, timeZone, locale)}
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div className="space-y-4">
-          {incident.message && (
-            <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-4">
-              <div className="text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-2">
-                {t('status_page.initial_report')}
-              </div>
-              <Markdown text={incident.message} />
-            </div>
-          )}
-
-          {incident.updates.map((u) => (
-            <div key={u.id} className="border-l-2 border-slate-200 dark:border-slate-600 pl-4">
-              <div className="flex items-center gap-3 mb-2">
-                {u.status && <Badge variant="info">{incidentStatusLabel(u.status, t)}</Badge>}
-                <span className="text-xs text-slate-400 dark:text-slate-500">
-                  {formatDateTime(u.created_at, timeZone, locale)}
-                </span>
-              </div>
-              <Markdown text={u.message} />
-            </div>
-          ))}
-
-          {incident.updates.length === 0 && isLoadingDetails && (
-            <div className="text-sm text-slate-500 dark:text-slate-400">{t('common.loading')}</div>
-          )}
-
-          {incident.updates.length === 0 && hasDetailsError && (
-            <div className="text-sm text-red-600 dark:text-red-400">
-              {t('status_page.failed_load_data')}
-            </div>
-          )}
-        </div>
+        )}
       </div>
-    </div>
+
+      <div className="space-y-4">
+        {incident.message && (
+          <div className="bg-surface-2 rounded-lg p-4">
+            <div className="text-xs uppercase tracking-wide text-ink-3 dark:text-ink-2 mb-2">
+              {t('status_page.initial_report')}
+            </div>
+            <Markdown text={incident.message} />
+          </div>
+        )}
+
+        {incident.updates.map((u) => (
+          <div key={u.id} className="border-l-2 border-line pl-4">
+            <div className="flex items-center gap-3 mb-2">
+              {u.status && <Badge variant="info">{incidentStatusLabel(u.status, t)}</Badge>}
+              <span className="text-xs text-ink-3 dark:text-ink-2">
+                {formatDateTime(u.created_at, timeZone, locale)}
+              </span>
+            </div>
+            <Markdown text={u.message} />
+          </div>
+        ))}
+
+        {incident.updates.length === 0 && isLoadingDetails && (
+          <div className="text-sm text-ink-2 dark:text-ink-3">{t('common.loading')}</div>
+        )}
+
+        {incident.updates.length === 0 && hasDetailsError && (
+          <div className="text-sm text-red-600 dark:text-red-400">
+            {t('status_page.failed_load_data')}
+          </div>
+        )}
+      </div>
+    </PublicDialog>
   );
 }
 
 function StatusPageSkeleton() {
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/95 backdrop-blur dark:border-slate-700/80 dark:bg-slate-800/95">
-        <div className="mx-auto max-w-5xl px-4 py-3 sm:px-6 sm:py-4 lg:px-8 flex justify-between items-center">
-          <div className="ui-skeleton h-6 w-28 rounded" />
-          <div className="ui-skeleton h-8 w-20 rounded-full" />
+    <div className="min-h-screen bg-surface">
+      <PublicStatusHeader />
+      <main className="ui-public-container py-10 sm:py-14" aria-busy="true">
+        <div className="ui-skeleton h-9 w-3/4 rounded sm:w-1/2" />
+        <div className="ui-skeleton mt-3 h-4 w-44 rounded" />
+        <div className="mt-12 divide-y divide-line-soft">
+          {Array.from({ length: 4 }).map((_, idx) => (
+            <div key={idx} className="py-6">
+              <div className="mb-3 flex justify-between">
+                <div className="ui-skeleton h-4 w-32 rounded" />
+                <div className="ui-skeleton h-4 w-14 rounded" />
+              </div>
+              <div className="ui-skeleton h-8 rounded" />
+              <div className="mt-2 flex justify-between">
+                <div className="ui-skeleton h-3 w-16 rounded" />
+                <div className="ui-skeleton h-3 w-10 rounded" />
+              </div>
+              <div className="ui-skeleton mt-3 h-3 w-12 rounded" />
+            </div>
+          ))}
         </div>
-      </header>
-
-      <main className="mx-auto max-w-5xl px-4 py-4 sm:px-6 sm:py-7 lg:px-8">
-        <div className="ui-skeleton h-16 sm:h-24 rounded-2xl mb-6 sm:mb-8" />
-
-        <section>
-          <div className="h-6 w-24 bg-slate-200 dark:bg-slate-700 rounded mb-4" />
-          <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2">
-            {Array.from({ length: 6 }).map((_, idx) => (
-              <Card key={idx} className="p-4 sm:p-5">
-                <div className="mb-2.5 flex items-start justify-between">
-                  <div className="flex min-w-0 items-center gap-2.5">
-                    <div className="h-3 w-3 rounded-full bg-slate-200 dark:bg-slate-700" />
-                    <div className="min-w-0">
-                      <div className="mb-1.5 h-4 w-32 rounded bg-slate-200 dark:bg-slate-700" />
-                      <div className="h-3 w-12 rounded bg-slate-200 dark:bg-slate-700" />
-                    </div>
-                  </div>
-                  <div className="h-5 w-14 rounded-full bg-slate-200 dark:bg-slate-700" />
-                </div>
-                <div className="mb-2.5 h-5 rounded bg-slate-200 dark:bg-slate-700" />
-                <div className="flex justify-between">
-                  <div className="h-3.5 w-20 rounded bg-slate-200 dark:bg-slate-700" />
-                  <div className="h-3.5 w-24 rounded bg-slate-200 dark:bg-slate-700" />
-                </div>
-              </Card>
-            ))}
-          </div>
-        </section>
       </main>
     </div>
   );
@@ -458,13 +424,14 @@ export function StatusPage() {
 
   if (!homepageQuery.data) {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-xl font-semibold text-slate-900 dark:text-slate-100 mb-2">
+      <div className="min-h-screen bg-surface">
+        <PublicStatusHeader siteTitle={derivedTitle} />
+        <main className="ui-public-container py-12">
+          <h1 className="mb-3 text-2xl font-semibold text-ink">
             {t('status_page.unable_to_load_status')}
-          </h2>
-          <p className="text-slate-500 dark:text-slate-400">{t('status_page.check_connection')}</p>
-        </div>
+          </h1>
+          <p className="text-sm text-ink-3">{t('status_page.check_connection')}</p>
+        </main>
       </div>
     );
   }
@@ -477,109 +444,75 @@ export function StatusPage() {
   const timeZone = derivedTimeZone;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      {/* Header */}
-      <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/95 backdrop-blur dark:border-slate-700/80 dark:bg-slate-800/95">
-        <div className="mx-auto max-w-5xl px-4 py-3 sm:px-6 sm:py-4 lg:px-8 flex justify-between items-center">
-          <Link to="/" className="flex flex-col justify-center min-w-0 min-h-9">
-            <span className="text-xl sm:text-2xl font-bold leading-tight text-slate-900 dark:text-slate-100 truncate">
-              {siteTitle}
-            </span>
-            {data.site_description ? (
-              <span className="mt-0.5 text-sm leading-tight text-slate-500 dark:text-slate-400 truncate">
-                {data.site_description}
-              </span>
-            ) : null}
-          </Link>
-          <div className="flex items-center gap-1">
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen bg-surface">
+      <PublicStatusHeader siteTitle={siteTitle} />
 
-      {/* Status Banner */}
-      <div>
-        <div className="mx-auto max-w-5xl px-4 pt-7 pb-3 sm:px-6 sm:pt-12 sm:pb-5 lg:px-8 text-center">
-          <div
-            className={`inline-flex items-center justify-center w-9 h-9 sm:w-12 sm:h-12 rounded-full ${bannerConfig.iconBg} text-white text-lg sm:text-2xl mb-2 sm:mb-3`}
-          >
-            {bannerConfig.icon}
-          </div>
-          <h2 className="text-lg sm:text-2xl font-bold mb-1 text-slate-900 dark:text-slate-100">
-            {bannerConfig.text}
-          </h2>
+      <main className="ui-public-container break-words pb-12 sm:pb-16">
+        <section className="flex flex-col items-center pb-12 pt-16 text-center sm:pt-20">
+          <span className="ui-public-banner-mark" data-status={data.banner.status} aria-hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7}>
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d={data.banner.status === 'operational' ? 'm7 12 3 3 7-8' : 'M12 7v6m0 4h.01'}
+              />
+            </svg>
+          </span>
+          <h1 className="ui-public-title mt-2">{bannerConfig.text}</h1>
           {data.banner.source === 'incident' && data.banner.incident && (
-            <p className="text-slate-500 dark:text-slate-400 text-sm px-4">
+            <p className="mt-3 text-sm text-ink-2">
               {t('status_page.incident_prefix', { value: data.banner.incident.title })}
             </p>
           )}
           {data.banner.source === 'maintenance' && data.banner.maintenance_window && (
-            <p className="text-slate-500 dark:text-slate-400 text-sm px-4">
+            <p className="mt-3 text-sm text-ink-2">
               {t('status_page.maintenance_prefix', { value: data.banner.maintenance_window.title })}
             </p>
           )}
-          <p className="text-slate-400 dark:text-slate-500 text-xs mt-2">
+          <p className="mt-3 text-[13px] font-medium text-ink-3">
             {t('common.last_updated', {
               value: formatDateTime(data.generated_at, timeZone, locale),
             })}
           </p>
-        </div>
-      </div>
+          {data.site_description && (
+            <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-2">
+              {data.site_description}
+            </p>
+          )}
+        </section>
 
-      <main className="mx-auto max-w-5xl px-4 py-4 sm:px-6 sm:py-7 lg:px-8">
         {/* Maintenance Windows */}
         {(data.maintenance_windows.active.length > 0 ||
           data.maintenance_windows.upcoming.length > 0) && (
-          <section className="mb-6 sm:mb-8">
-            <h3 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2.5 sm:mb-3 flex items-center gap-2">
-              <svg
-                className="w-4 h-4 sm:w-5 sm:h-5 text-blue-500 dark:text-blue-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
+          <section className="mb-10 sm:mb-12">
+            <h2 className="mb-5 text-[17px] font-semibold text-ink">
               {t('status_page.scheduled_maintenance')}
-            </h3>
+            </h2>
 
             {data.maintenance_windows.active.length > 0 && (
               <div className="mb-4">
-                <div className="text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-2">
-                  {t('common.active')}
-                </div>
+                <div className="mb-3 text-xs text-ink-3">{t('common.active')}</div>
                 <div className="space-y-3">
                   {data.maintenance_windows.active.map((w) => (
-                    <Card
+                    <article
                       key={w.id}
-                      className="p-4 sm:p-5 border-l-4 border-l-blue-500 dark:border-l-blue-400"
+                      className="min-w-0 border-l-2 border-status-maintenance py-1 pl-5"
                     >
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 mb-2">
-                        <h4 className="font-semibold text-slate-900 dark:text-slate-100">
+                        <h3 className="min-w-0 break-words text-[15px] font-medium text-ink">
                           {w.title}
-                        </h4>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        </h3>
+                        <span className="text-xs text-ink-3">
                           {formatDateTime(w.starts_at, timeZone, locale)} –{' '}
                           {formatDateTime(w.ends_at, timeZone, locale)}
                         </span>
                       </div>
-                      <div className="text-sm text-slate-600 dark:text-slate-300 mb-2">
+                      <div className="text-sm text-ink-2 mb-2">
                         {t('common.affected')}:{' '}
                         {w.monitor_ids.map((id) => monitorNames.get(id) ?? `#${id}`).join(', ')}
                       </div>
                       {w.message && <Markdown text={w.message} />}
-                    </Card>
+                    </article>
                   ))}
                 </div>
               </div>
@@ -587,29 +520,29 @@ export function StatusPage() {
 
             {data.maintenance_windows.upcoming.length > 0 && (
               <div>
-                <div className="text-xs uppercase tracking-wide text-slate-400 dark:text-slate-500 mb-2">
-                  {t('common.upcoming')}
-                </div>
+                <div className="mb-3 text-xs text-ink-3">{t('common.upcoming')}</div>
                 <div className="space-y-3">
                   {data.maintenance_windows.upcoming.map((w) => (
-                    <Card
-                      key={w.id}
-                      className="p-4 sm:p-5 border-l-4 border-l-slate-300 dark:border-l-slate-600"
-                    >
+                    <article key={w.id} className="min-w-0 border-l-2 border-line py-1 pl-5">
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 mb-2">
-                        <h4 className="font-semibold text-slate-900 dark:text-slate-100">
+                        <h3 className="min-w-0 break-words text-[15px] font-medium text-ink">
                           {w.title}
-                        </h4>
-                        <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+                        </h3>
+                        <span className="text-xs text-ink-3">
                           {formatDateTime(w.starts_at, timeZone, locale)} –{' '}
                           {formatDateTime(w.ends_at, timeZone, locale)}
                         </span>
                       </div>
-                      <div className="text-sm text-slate-600 dark:text-slate-300">
+                      <div className="text-sm text-ink-2">
                         {t('common.affected')}:{' '}
                         {w.monitor_ids.map((id) => monitorNames.get(id) ?? `#${id}`).join(', ')}
                       </div>
-                    </Card>
+                      {w.message && (
+                        <div className="mt-2">
+                          <Markdown text={w.message} />
+                        </div>
+                      )}
+                    </article>
                   ))}
                 </div>
               </div>
@@ -619,24 +552,11 @@ export function StatusPage() {
 
         {/* Active Incidents */}
         {activeIncidents.length > 0 && (
-          <section className="mb-6 sm:mb-8">
-            <h3 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2.5 sm:mb-3 flex items-center gap-2">
-              <svg
-                className="w-4 h-4 sm:w-5 sm:h-5 text-amber-500 dark:text-amber-400"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                />
-              </svg>
+          <section className="mb-10 sm:mb-12">
+            <h2 className="mb-5 text-[17px] font-semibold text-ink">
               {t('status_page.active_incidents')}
-            </h3>
-            <div className="space-y-3">
+            </h2>
+            <div className="space-y-6">
               {activeIncidents.map((it) => (
                 <IncidentCard
                   key={it.id}
@@ -656,54 +576,69 @@ export function StatusPage() {
 
         {/* Monitors */}
         <section>
-          <h3 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100 mb-2.5 sm:mb-3">
-            {t('status_page.services')}
-          </h3>
-          <div className="space-y-5">
-            {groupedMonitors.map((group) => (
-              <div key={group.name}>
-                <div className="mb-2 flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-                    {group.name}
-                  </h4>
-                  <span className="text-xs text-slate-400 dark:text-slate-500">
-                    {group.monitors.length}
-                  </span>
-                </div>
-                <div className="grid gap-2.5 sm:gap-3 md:grid-cols-2">
-                  {group.monitors.map((monitor) => (
-                    <MonitorCard
-                      key={monitor.id}
-                      monitor={monitor}
-                      ratingLevel={data.uptime_rating_level}
-                      timeZone={timeZone}
-                      onSelect={() => setSelectedMonitorId(monitor.id)}
-                      onDayClick={(dayStartAt) =>
-                        setSelectedDay({ monitorId: monitor.id, dayStartAt })
-                      }
-                    />
-                  ))}
-                </div>
-              </div>
-            ))}
+          <h2 className="sr-only">{t('status_page.services')}</h2>
+          <div className="rounded-xl border border-line bg-surface px-3 py-2">
+            {groupedMonitors.map((group) => {
+              const groupStatus =
+                (['down', 'maintenance', 'unknown', 'paused', 'up'] as const).find((status) =>
+                  group.monitors.some((monitor) => monitor.status === status),
+                ) ?? 'unknown';
+              return (
+                <details
+                  key={group.name}
+                  open
+                  className="ui-public-group border-t border-line-soft first:border-t-0"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded px-3 py-3 text-[13px] font-medium text-ink hover:bg-surface-2 sm:px-4 [&::-webkit-details-marker]:hidden">
+                    <span className="min-w-0 truncate">
+                      {group.name === t('status_page.group_ungrouped') ? siteTitle : group.name}
+                    </span>
+                    <span className="flex shrink-0 items-center gap-3">
+                      <Badge variant={groupStatus}>{statusLabel(groupStatus, t)}</Badge>
+                      <svg
+                        className="ui-public-group-chevron h-4 w-4 text-ink-3"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={1.5}
+                        aria-hidden
+                      >
+                        <path d="m6 8 4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                  </summary>
+                  <div className="min-w-0 px-2 sm:px-3">
+                    {group.monitors.map((monitor) => (
+                      <MonitorCard
+                        key={monitor.id}
+                        monitor={monitor}
+                        ratingLevel={data.uptime_rating_level}
+                        timeZone={timeZone}
+                        onSelect={() => setSelectedMonitorId(monitor.id)}
+                        onDayClick={(dayStartAt) =>
+                          setSelectedDay({ monitorId: monitor.id, dayStartAt })
+                        }
+                      />
+                    ))}
+                  </div>
+                </details>
+              );
+            })}
           </div>
           {data.monitors.length === 0 && (
             <Card className="p-8 text-center">
-              <p className="text-slate-500 dark:text-slate-400">{t('status_page.no_monitors')}</p>
+              <p className="text-ink-2 dark:text-ink-3">{t('status_page.no_monitors')}</p>
             </Card>
           )}
         </section>
 
-        <section className="mt-6 pt-5 sm:mt-8 sm:pt-6 border-t border-slate-100 dark:border-slate-800 space-y-6 sm:space-y-8">
+        <section className="mt-10 space-y-10 border-t border-line pt-8 sm:mt-12 sm:space-y-12 sm:pt-10">
           <div>
-            <div className="flex items-center justify-between mb-2.5 sm:mb-3">
-              <h3 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <h2 className="text-[22px] font-bold text-ink">
                 {t('status_page.incident_history')}
-              </h3>
-              <Link
-                to="/history/incidents"
-                className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
-              >
+              </h2>
+              <Link to="/history/incidents" className="shrink-0 text-sm text-ink-3 hover:text-ink">
                 {t('common.view_more')}
               </Link>
             </div>
@@ -720,39 +655,35 @@ export function StatusPage() {
                 }
               />
             ) : (
-              <Card className="p-6 text-center">
-                <p className="text-slate-500 dark:text-slate-400">
-                  {t('status_page.no_past_incidents')}
-                </p>
-              </Card>
+              <p className="text-sm text-ink-3">{t('status_page.no_past_incidents')}</p>
             )}
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-2.5 sm:mb-3">
-              <h3 className="text-base sm:text-lg font-semibold text-slate-900 dark:text-slate-100">
+            <div className="mb-6 flex items-center justify-between gap-4">
+              <h2 className="text-[22px] font-bold text-ink">
                 {t('status_page.maintenance_history')}
-              </h3>
+              </h2>
               <Link
                 to="/history/maintenance"
-                className="text-sm text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200"
+                className="shrink-0 text-sm text-ink-3 hover:text-ink"
               >
                 {t('common.view_more')}
               </Link>
             </div>
 
             {maintenanceHistoryPreview ? (
-              <Card className="p-4 sm:p-5">
-                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 mb-2">
-                  <h4 className="font-semibold text-slate-900 dark:text-slate-100">
-                    {maintenanceHistoryPreview.title}
-                  </h4>
-                  <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
+              <article className="min-w-0 border-l-2 border-line py-1 pl-5">
+                <div className="mb-2 text-xs text-ink-3">
+                  <span>
                     {formatDateTime(maintenanceHistoryPreview.starts_at, timeZone, locale)} –{' '}
                     {formatDateTime(maintenanceHistoryPreview.ends_at, timeZone, locale)}
                   </span>
                 </div>
-                <div className="text-sm text-slate-600 dark:text-slate-300 mb-2">
+                <h3 className="mb-2 break-words text-[15px] font-medium text-ink">
+                  {maintenanceHistoryPreview.title}
+                </h3>
+                <div className="text-sm text-ink-2 mb-2">
                   {t('common.affected')}:{' '}
                   {maintenanceHistoryPreview.monitor_ids
                     .map((id) => monitorNames.get(id) ?? `#${id}`)
@@ -761,21 +692,17 @@ export function StatusPage() {
                 {maintenanceHistoryPreview.message && (
                   <Markdown text={maintenanceHistoryPreview.message} />
                 )}
-              </Card>
+              </article>
             ) : (
-              <Card className="p-6 text-center">
-                <p className="text-slate-500 dark:text-slate-400">
-                  {t('status_page.no_past_maintenance')}
-                </p>
-              </Card>
+              <p className="text-sm text-ink-3">{t('status_page.no_past_maintenance')}</p>
             )}
           </div>
         </section>
       </main>
 
       {/* Footer */}
-      <footer className="border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-800">
-        <div className="mx-auto max-w-5xl px-4 py-3 text-center text-sm text-slate-400 dark:text-slate-500 sm:px-6 sm:py-4 lg:px-8">
+      <footer className="ui-public-container">
+        <div className="py-10 text-center text-xs text-ink-3">
           {t('status_page.powered_by', { value: siteTitle })}
         </div>
       </footer>
@@ -802,41 +729,21 @@ export function StatusPage() {
           outages={currentDayOutages}
           maintenanceWindows={dayContextQuery.data?.maintenance_windows ?? []}
           incidents={dayContextQuery.data?.incidents ?? []}
+          isLoading={outagesQuery.isLoading || dayContextQuery.isLoading}
+          error={
+            outagesQuery.isError
+              ? t('status_page.failed_load_outages')
+              : dayContextQuery.isError
+                ? t('status_page.failed_load_context')
+                : undefined
+          }
+          onRetry={() => {
+            void outagesQuery.refetch();
+            void dayContextQuery.refetch();
+          }}
           timeZone={timeZone}
           onClose={() => setSelectedDay(null)}
         />
-      )}
-
-      {selectedDay && outagesQuery.isLoading && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none">
-          <div className="bg-slate-900/80 text-white text-sm px-3 py-2 rounded-lg">
-            {t('status_page.loading_outages')}
-          </div>
-        </div>
-      )}
-
-      {selectedDay && outagesQuery.isError && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none">
-          <div className="bg-red-600/90 text-white text-sm px-3 py-2 rounded-lg">
-            {t('status_page.failed_load_outages')}
-          </div>
-        </div>
-      )}
-
-      {selectedDay && dayContextQuery.isLoading && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none">
-          <div className="bg-slate-900/80 text-white text-sm px-3 py-2 rounded-lg">
-            {t('status_page.loading_context')}
-          </div>
-        </div>
-      )}
-
-      {selectedDay && dayContextQuery.isError && (
-        <div className="fixed inset-0 flex items-center justify-center pointer-events-none">
-          <div className="bg-red-600/90 text-white text-sm px-3 py-2 rounded-lg">
-            {t('status_page.failed_load_context')}
-          </div>
-        </div>
       )}
     </div>
   );

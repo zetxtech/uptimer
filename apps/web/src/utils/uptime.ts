@@ -84,7 +84,31 @@ export function getUptimeBgClasses(tier: UptimeColorTier): string {
       return 'bg-rose-600 dark:bg-rose-400';
     case 'slate':
     default:
-      return 'bg-slate-300 dark:bg-slate-600';
+      return 'bg-ink-3';
+  }
+}
+
+export function getUptimeTextClasses(tier: UptimeColorTier): string {
+  switch (tier) {
+    case 'emerald':
+      return 'text-emerald-600 dark:text-emerald-400';
+    case 'green':
+      return 'text-green-600 dark:text-green-400';
+    case 'lime':
+      return 'text-lime-600 dark:text-lime-400';
+    case 'yellow':
+      return 'text-yellow-600 dark:text-yellow-400';
+    case 'amber':
+      return 'text-amber-600 dark:text-amber-400';
+    case 'orange':
+      return 'text-orange-600 dark:text-orange-400';
+    case 'red':
+      return 'text-red-600 dark:text-red-400';
+    case 'rose':
+      return 'text-rose-600 dark:text-rose-400';
+    case 'slate':
+    default:
+      return 'text-ink-2 dark:text-ink-3';
   }
 }
 
@@ -108,7 +132,7 @@ export function getUptimePillClasses(tier: UptimeColorTier): string {
       return 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-800/60';
     case 'slate':
     default:
-      return 'bg-slate-100/80 text-slate-700 border-slate-200 dark:bg-slate-700/50 dark:text-slate-200 dark:border-slate-600/60';
+      return 'bg-surface-2 text-ink border-line dark:bg-surface-2 dark:text-ink dark:border-line';
   }
 }
 

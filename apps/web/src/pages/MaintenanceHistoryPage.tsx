@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 
 import { useI18n } from '../app/I18nContext';
 import { useApplyServerLocaleSetting } from '../app/useApplyServerLocaleSetting';
 import { ApiError, fetchPublicMaintenanceWindows, fetchStatus } from '../api/client';
 import type { MaintenanceWindow } from '../api/types';
 import { Markdown } from '../components/Markdown';
-import { Button, Card, ThemeToggle } from '../components/ui';
+import { PublicStatusHeader } from '../components/PublicStatusHeader';
+import { Button, Card } from '../components/ui';
 import { formatDateTime, getBrowserTimeZone } from '../utils/datetime';
 
 function formatError(err: unknown): string | undefined {
@@ -54,90 +54,120 @@ export function MaintenanceHistoryPage() {
     setNextCursor(query.data.next_cursor);
   }, [query.data]);
 
+  const months = useMemo(() => {
+    const formatter = new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric', timeZone });
+    const groups = new Map<string, MaintenanceWindow[]>();
+    for (const window of [...all].sort((a, b) => b.starts_at - a.starts_at)) {
+      const month = formatter.format(new Date(window.starts_at * 1000));
+      const windows = groups.get(month) ?? [];
+      windows.push(window);
+      groups.set(month, windows);
+    }
+    return [...groups.entries()];
+  }, [all, locale, timeZone]);
+
   const isInitialLoading = query.isLoading && all.length === 0;
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <header className="bg-white dark:bg-slate-800 border-b border-slate-100 dark:border-slate-700">
-        <div className="mx-auto max-w-[88rem] px-4 py-3 sm:px-6 sm:py-4 lg:px-8 flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <Link
-              to="/"
-              className="flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 transition-colors"
-              aria-label={t('history.back_aria')}
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 19l-7-7 7-7"
-                />
-              </svg>
-            </Link>
-            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100">
-              {t('maintenance_history.title')}
-            </h1>
-          </div>
-          <ThemeToggle />
-        </div>
-      </header>
+    <div className="min-h-screen bg-surface">
+      <PublicStatusHeader siteTitle={statusQuery.data?.site_title || 'Uptimer'} />
 
-      <main className="mx-auto max-w-[88rem] px-4 py-6 sm:px-6 sm:py-10 lg:px-8">
+      <main className="ui-public-container pb-16 pt-16 sm:pt-20">
+        <h1 className="ui-public-title mb-11 text-center">{t('maintenance_history.title')}</h1>
         {isInitialLoading ? (
-          <div className="space-y-3">
+          <div className="space-y-8" aria-busy="true">
             {Array.from({ length: 3 }).map((_, idx) => (
-              <div
-                key={idx}
-                className="ui-skeleton h-28 rounded-xl border border-slate-200/70 dark:border-slate-700/70"
-              />
+              <div key={idx} className="ui-skeleton h-24 rounded" />
             ))}
           </div>
-        ) : query.isError ? (
-          <Card className="p-6 text-center">
-            <p className="text-sm text-red-600 dark:text-red-400">
+        ) : query.isError && all.length === 0 ? (
+          <Card className="space-y-4 p-5">
+            <p role="alert" className="text-sm text-red-600 dark:text-red-400">
               {formatError(query.error) ?? t('history.failed_load_maintenance')}
             </p>
+            <Button
+              variant="secondary"
+              disabled={query.isFetching}
+              onClick={() => void query.refetch()}
+            >
+              {query.isFetching ? t('common.loading_ellipsis') : t('common.retry')}
+            </Button>
           </Card>
         ) : all.length > 0 ? (
           <>
-            <div className="space-y-3">
-              {all.map((w) => (
-                <Card key={w.id} className="p-4 sm:p-5">
-                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-4 mb-2">
-                    <h4 className="font-semibold text-slate-900 dark:text-slate-100">{w.title}</h4>
-                    <span className="text-xs text-slate-500 dark:text-slate-400 whitespace-nowrap">
-                      {formatDateTime(w.starts_at, timeZone, locale)} –{' '}
-                      {formatDateTime(w.ends_at, timeZone, locale)}
-                    </span>
-                  </div>
-                  <div className="text-sm text-slate-600 dark:text-slate-300 mb-2">
-                    {t('common.affected')}:{' '}
-                    {w.monitor_ids.map((id) => monitorNames.get(id) ?? `#${id}`).join(', ')}
-                  </div>
-                  {w.message && <Markdown text={w.message} />}
-                </Card>
+            <div className="space-y-11">
+              {months.map(([month, windows]) => (
+                <section
+                  key={month}
+                  className="min-w-0 overflow-hidden rounded-xl border border-line bg-surface"
+                >
+                  <h2 className="border-b border-line px-5 py-5 text-[15px] font-medium text-ink sm:px-7">
+                    {month}
+                  </h2>
+                  <ol className="min-w-0 divide-y divide-line-soft">
+                    {windows.map((window) => (
+                      <li key={window.id} className="min-w-0 px-5 py-7 sm:px-7">
+                        <div className="mb-2 text-xs leading-relaxed text-ink-3">
+                          <time dateTime={new Date(window.starts_at * 1000).toISOString()}>
+                            {formatDateTime(window.starts_at, timeZone, locale)}
+                          </time>
+                          {' – '}
+                          <time dateTime={new Date(window.ends_at * 1000).toISOString()}>
+                            {formatDateTime(window.ends_at, timeZone, locale)}
+                          </time>
+                        </div>
+                        <h3 className="mb-3 break-words text-[17px] font-medium text-ink">
+                          {window.title}
+                        </h3>
+                        <p className="mb-3 break-words text-sm text-ink-2">
+                          {t('common.affected')}:{' '}
+                          {window.monitor_ids
+                            .map((id) => monitorNames.get(id) ?? `#${id}`)
+                            .join(', ')}
+                        </p>
+                        {window.message && (
+                          <div className="min-w-0 break-words leading-relaxed">
+                            <Markdown text={window.message} />
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </section>
               ))}
             </div>
 
-            {nextCursor && (
-              <div className="mt-4">
+            {query.isError && (
+              <p className="mt-6 text-sm text-status-down">
+                {formatError(query.error) ?? t('history.failed_load_maintenance')}
+              </p>
+            )}
+            {(nextCursor || query.isError) && (
+              <div className="mt-10 flex justify-center">
                 <Button
-                  onClick={() => setCursor(nextCursor)}
+                  onClick={() => {
+                    if (query.isError) {
+                      void query.refetch();
+                    } else if (nextCursor !== null) {
+                      setCursor(nextCursor);
+                    }
+                  }}
                   disabled={query.isFetching}
                   variant="secondary"
                 >
-                  {query.isFetching ? t('common.loading_ellipsis') : t('common.load_more')}
+                  {query.isFetching
+                    ? t('common.loading_ellipsis')
+                    : query.isError
+                      ? t('common.retry')
+                      : t('common.load_more')}
                 </Button>
               </div>
             )}
           </>
         ) : (
-          <Card className="p-6 text-center">
-            <p className="text-slate-500 dark:text-slate-400">
-              {t('status_page.no_past_maintenance')}
-            </p>
-          </Card>
+          <div className="rounded-xl border border-line bg-surface px-5 py-14 text-center text-[15px] font-medium text-ink-3">
+            {t('status_page.no_past_maintenance')}
+          </div>
         )}
       </main>
     </div>
