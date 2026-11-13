@@ -72,18 +72,22 @@ function formatDurationSec(value: number | null): string {
   return parts.join(' ');
 }
 
+/**
+ * Reference KPI block: the value sits above its label, and the metrics flow in two columns with
+ * the muted 12 px label underneath.
+ */
 function StatRow({ label, value, tone }: { label: string; value: string; tone?: 'danger' }) {
   return (
-    <div className="flex items-baseline justify-between gap-4 border-b border-line-soft px-4 py-3 last:border-b-0">
-      <span className="text-[13px] text-ink-2">{label}</span>
-      <span
+    <div className="border-b border-line-soft px-4 py-3.5 last:border-b-0">
+      <div
         className={cn(
-          'text-[13px] font-medium tabular-nums',
+          'text-[16px] font-semibold tabular-nums leading-6',
           tone === 'danger' ? 'text-status-down' : 'text-ink',
         )}
       >
         {value}
-      </span>
+      </div>
+      <div className="mt-1 text-[12px] leading-4 text-ink-3">{label}</div>
     </div>
   );
 }
@@ -206,17 +210,14 @@ export function AdminReporting() {
   const rangeChips =
     report === 'incidents_overview' ? (
       <>
-        <div className="flex items-center gap-1">
+        <div className="ui-range-segments">
           {OVERVIEW_RANGES.map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setOverviewRange(value)}
               aria-pressed={overviewRange === value}
-              className={cn(
-                'rounded-md px-2 py-1 text-[12px] transition-colors',
-                overviewRange === value ? 'bg-surface-2 text-ink' : 'text-ink-3 hover:text-ink',
-              )}
+              className="ui-range-segment"
             >
               {value}
             </button>
@@ -224,17 +225,14 @@ export function AdminReporting() {
         </div>
       </>
     ) : report === 'monitors_average_sla' || report === 'monitors_compound_sla' ? (
-      <div className="flex items-center gap-1">
+      <div className="ui-range-segments">
         {(['30d', '90d'] as const).map((value) => (
           <button
             key={value}
             type="button"
             onClick={() => setSlaRange(value)}
             aria-pressed={slaRange === value}
-            className={cn(
-              'rounded-md px-2 py-1 text-[12px] transition-colors',
-              slaRange === value ? 'bg-surface-2 text-ink' : 'text-ink-3 hover:text-ink',
-            )}
+            className="ui-range-segment"
           >
             {value}
           </button>

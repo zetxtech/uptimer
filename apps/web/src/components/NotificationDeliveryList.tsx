@@ -52,7 +52,7 @@ export function NotificationDeliveryList({
 
   return (
     <div className="ui-panel overflow-hidden">
-      <div className="hidden grid-cols-[11rem_10rem_9rem_6rem_1fr_5.5rem] gap-3 border-b border-line-soft px-4 py-2.5 text-[12px] text-ink-2 md:grid">
+      <div className="hidden grid-cols-[11rem_10rem_9rem_6rem_1fr_5.5rem] gap-3 border-b border-line px-4 py-2.5 text-[13px] text-ink-2 md:grid">
         <span>{t('notification_delivery.col_time')}</span>
         <span>{t('notification_delivery.col_channel')}</span>
         <span>{t('notification_delivery.col_event')}</span>
