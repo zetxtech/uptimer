@@ -2575,6 +2575,13 @@ adminRoutes.get('/incidents', async (c) => {
     .max(120)
     .optional()
     .parse(c.req.query('q') || undefined);
+  // Reference column headers sort the list; the default keeps ongoing incidents on top.
+  const sort = z
+    .enum(['default', 'title', 'started_at', 'length'])
+    .optional()
+    .default('default')
+    .parse(c.req.query('sort'));
+  const dir = z.enum(['asc', 'desc']).optional().default('desc').parse(c.req.query('dir'));
 
   const filters: string[] = [];
   const bindings: unknown[] = [];
@@ -2602,15 +2609,22 @@ adminRoutes.get('/incidents', async (c) => {
   const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
   bindings.push(limit + 1, offset);
 
+  const direction = dir === 'asc' ? 'ASC' : 'DESC';
+  const orderBy =
+    sort === 'title'
+      ? `title COLLATE NOCASE ${direction}, id DESC`
+      : sort === 'started_at'
+        ? `started_at ${direction}, id DESC`
+        : sort === 'length'
+          ? `(COALESCE(resolved_at, CAST(strftime('%s','now') AS INTEGER)) - started_at) ${direction}, id DESC`
+          : `CASE WHEN status != 'resolved' THEN 0 ELSE 1 END, started_at DESC, id DESC`;
+
   const { results: incidentRows } = await c.env.DB.prepare(
     `
       SELECT id, title, status, impact, message, started_at, resolved_at
       FROM incidents
       ${where}
-      ORDER BY
-        CASE WHEN status != 'resolved' THEN 0 ELSE 1 END,
-        started_at DESC,
-        id DESC
+      ORDER BY ${orderBy}
       LIMIT ?${bindings.length - 1} OFFSET ?${bindings.length}
     `,
   )

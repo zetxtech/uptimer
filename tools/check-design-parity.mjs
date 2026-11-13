@@ -136,6 +136,12 @@ const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
 contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
 contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
 assert(
+  'incident sort button size',
+  /width:\s*26px/.test(cssRule('.ui-incident-sort-button')) &&
+    /border-radius:\s*6px/.test(cssRule('.ui-incident-sort-button')),
+  '26px / radius 6',
+);
+assert(
   'button type scale (14 px)',
   /md: 'h-9 px-3\.5 text-\[14px\]'/.test(read('apps/web/src/components/ui.tsx')),
   'text-[14px]',

@@ -408,6 +408,47 @@ function compareMonitors(
   return (a.id - b.id) * dir;
 }
 
+/** Reference column headers carry a 26 × 26 sort button. */
+const INCIDENT_SORT_ASC_ICON = 'M3 4.5h11.25M3 9h7.5M3 13.5h5.25m8.25-9v12m0 0-3-3m3 3 3-3';
+const INCIDENT_SORT_DESC_ICON = 'M3 4.5h11.25M3 9h7.5M3 13.5h5.25m8.25 9v-12m0 0-3 3m3-3 3 3';
+
+function IncidentSortButton({
+  label,
+  active,
+  dir,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  dir: 'asc' | 'desc';
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      aria-pressed={active}
+      onClick={onClick}
+      className="ui-icon-btn ui-incident-sort-button"
+    >
+      <svg
+        className="h-3.5 w-3.5"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.7}
+        aria-hidden
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          d={active && dir === 'asc' ? INCIDENT_SORT_ASC_ICON : INCIDENT_SORT_DESC_ICON}
+        />
+      </svg>
+    </button>
+  );
+}
+
 export function AdminDashboard() {
   const { locale, setLocaleSetting, t } = useI18n();
   const queryClient = useQueryClient();
@@ -471,6 +512,8 @@ export function AdminDashboard() {
   const [showSortMenu, setShowSortMenu] = useState(false);
   const [showBulkMenu, setShowBulkMenu] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
+  const [incidentSort, setIncidentSort] = useState<'default' | 'title' | 'length'>('default');
+  const [incidentSortDir, setIncidentSortDir] = useState<'asc' | 'desc'>('desc');
   const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const bulkMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -543,12 +586,19 @@ export function AdminDashboard() {
     queryKey: [
       'admin-incidents',
       'list',
-      { q: incidentSearchTerm || null, status: incidentStatusFilter || null },
+      {
+        q: incidentSearchTerm || null,
+        status: incidentStatusFilter || null,
+        sort: incidentSort,
+        dir: incidentSortDir,
+      },
     ],
     queryFn: ({ pageParam }) =>
       fetchAdminIncidents({
         limit: 50,
         offset: pageParam,
+        sort: incidentSort,
+        dir: incidentSortDir,
         ...(incidentSearchTerm ? { q: incidentSearchTerm } : {}),
         ...(incidentStatusFilter ? { status: incidentStatusFilter as Incident['status'] } : {}),
       }),
@@ -3257,10 +3307,36 @@ export function AdminDashboard() {
               ) : (
                 <div className="ui-incident-list">
                   <div className="ui-incident-table-head ui-incident-grid">
-                    <span>{t('admin_dashboard.incident_col_incident')}</span>
+                    <span className="flex items-center gap-1">
+                      {t('admin_dashboard.incident_col_incident')}
+                      <IncidentSortButton
+                        label={t('admin_dashboard.incident_col_incident')}
+                        active={incidentSort === 'title'}
+                        dir={incidentSortDir}
+                        onClick={() => {
+                          setIncidentSort('title');
+                          setIncidentSortDir((previous) =>
+                            incidentSort === 'title' && previous === 'asc' ? 'desc' : 'asc',
+                          );
+                        }}
+                      />
+                    </span>
                     <span className="ui-incident-monitors">{t('common.monitors')}</span>
                     <span>{t('common.state')}</span>
-                    <span className="text-right">{t('admin_dashboard.incident_col_length')}</span>
+                    <span className="flex items-center justify-end gap-1 pr-0.5">
+                      {t('admin_dashboard.incident_col_length')}
+                      <IncidentSortButton
+                        label={t('admin_dashboard.incident_col_length')}
+                        active={incidentSort === 'length'}
+                        dir={incidentSortDir}
+                        onClick={() => {
+                          setIncidentSort('length');
+                          setIncidentSortDir((previous) =>
+                            incidentSort === 'length' && previous === 'desc' ? 'asc' : 'desc',
+                          );
+                        }}
+                      />
+                    </span>
                     <span aria-hidden />
                   </div>
                   <div className="divide-y divide-line">

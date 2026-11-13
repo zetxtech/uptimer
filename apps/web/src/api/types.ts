@@ -849,6 +849,9 @@ export interface FetchAdminIncidentsOptions {
   q?: string;
   status?: IncidentStatus;
   monitorId?: number;
+  /** Column sort; `default` keeps ongoing incidents on top. */
+  sort?: 'default' | 'title' | 'started_at' | 'length';
+  dir?: 'asc' | 'desc';
 }
 
 export interface CreateIncidentInput {

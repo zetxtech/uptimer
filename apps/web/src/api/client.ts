@@ -766,6 +766,8 @@ export async function fetchAdminIncidents(
   if (opts.offset !== undefined && opts.offset > 0) qs.set('offset', String(opts.offset));
   if (opts.q) qs.set('q', opts.q);
   if (opts.status) qs.set('status', opts.status);
+  if (opts.sort) qs.set('sort', opts.sort);
+  if (opts.dir) qs.set('dir', opts.dir);
   const effectiveMonitorId = opts.monitorId ?? monitorId;
   if (effectiveMonitorId !== undefined) qs.set('monitor_id', String(effectiveMonitorId));
   const res = await fetch(`${API_BASE}/admin/incidents?${qs.toString()}`, {

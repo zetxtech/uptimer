@@ -2298,6 +2298,18 @@ button,
   color: var(--color-text-secondary);
 }
 
+/* Reference column headers carry a 26 × 26 sort control. */
+.ui-incident-sort-button {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+}
+
+.ui-incident-sort-button[aria-pressed='true'] {
+  color: var(--color-text-primary);
+}
+
 .ui-incident-table-head > *:first-child {
   font-weight: 500;
 }
