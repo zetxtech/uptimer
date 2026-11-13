@@ -1767,17 +1767,31 @@ button,
 
 .ui-monitor-list,
 .ui-resource-list {
-  /* Bare list: the reference puts rows straight on the canvas, no card chrome. */
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
+  /* Rounded card holding the group header and its rows, as in the reference list. */
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-card);
+  box-shadow: var(--shadow-card);
 }
 
 .ui-group-head {
   height: 42px;
   padding: 0 12px 0 16px;
   gap: 10px;
+}
+
+.ui-group-head-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
+.ui-group-head-actions .ui-icon-btn {
+  width: 26px;
+  height: 26px;
+  color: var(--color-text-secondary);
 }
 
 .ui-group-head-toggle {
@@ -1948,23 +1962,28 @@ button,
 /* Ongoing-incident chip: outlined pill with its own chevron segment. */
 .ui-monitor-incident-pill {
   display: inline-flex;
-  height: 30px;
+  height: 32px;
   flex: 0 0 auto;
   align-items: stretch;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--color-down) 38%, transparent);
+  border: 1px solid var(--color-border);
   border-radius: 8px;
-  background: color-mix(in srgb, var(--color-down) 7%, transparent);
+  background: var(--color-bg-secondary);
   color: var(--color-text-primary);
   font-size: 13px;
+  font-weight: 500;
   white-space: nowrap;
+}
+
+.ui-monitor-incident-pill:hover {
+  background: var(--color-card-hover);
 }
 
 .ui-monitor-incident-pill-main {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  padding: 0 10px;
+  gap: 8px;
+  padding: 0 12px;
 }
 
 .ui-monitor-incident-pill-main svg {
@@ -1976,10 +1995,10 @@ button,
 
 .ui-monitor-incident-pill-caret {
   display: inline-flex;
-  width: 26px;
+  width: 28px;
   align-items: center;
   justify-content: center;
-  border-left: 1px solid color-mix(in srgb, var(--color-down) 26%, transparent);
+  border-left: 1px solid var(--color-border);
   color: var(--color-text-secondary);
 }
 
@@ -2026,22 +2045,12 @@ button,
   height: 14px;
   flex: 0 0 auto;
   place-items: center;
-  color: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+  color: var(--color-text-muted);
 }
 
 .ui-monitor-grip svg {
   width: 14px;
   height: 14px;
-}
-
-.ui-group-head .ui-monitor-grip {
-  opacity: 0;
-  transition: opacity 0.12s ease;
-}
-
-.ui-group-head:hover .ui-monitor-grip,
-.ui-group-head .ui-monitor-grip:focus-visible {
-  opacity: 1;
 }
 
 @media (max-width: 639px) {
@@ -2182,7 +2191,9 @@ button,
 }
 
 .ui-group-head {
-  background: color-mix(in srgb, var(--color-bg-secondary) 55%, transparent);
+  /* The header sits on the card surface, separated by a hairline rather than a tint. */
+  background: transparent;
+  border-bottom: 1px solid var(--color-border);
 }
 
 /* Compact control sizing for dense toolbars */

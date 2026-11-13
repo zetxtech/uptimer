@@ -114,7 +114,7 @@ const SETTINGS_SECTION_LABEL_KEYS: Record<SettingsSection, MessageKey> = {
 
 type ModalState =
   | { type: 'none' }
-  | { type: 'create-monitor'; initialType?: MonitorType }
+  | { type: 'create-monitor'; initialType?: MonitorType; initialGroup?: string | undefined }
   | { type: 'edit-monitor'; monitor: AdminMonitor }
   | { type: 'create-channel' }
   | { type: 'edit-channel'; channel: NotificationChannel }
@@ -2438,6 +2438,17 @@ export function AdminDashboard() {
                           testingMonitorId={testingMonitorId}
                           selectionMode={selectionMode}
                           onToggleSelect={toggleMonitor}
+                          sortControl={sortMenu}
+                          onCreateInGroup={(groupLabel) => {
+                            createMonitorMut.reset();
+                            updateMonitorMut.reset();
+                            setModal({
+                              type: 'create-monitor',
+                              initialGroup: groupLabel === UNGROUPED_LABEL ? undefined : groupLabel,
+                            });
+                          }}
+                          onOpenGroupManager={() => setShowGroupManager(true)}
+                          onEnterSelectionMode={() => setSelectionMode(true)}
                           onReorderGroup={(source, target) => {
                             const ordered = orderedMonitorGroups.map((group) => group.label);
                             const toIndex = ordered.indexOf(target);
@@ -3803,6 +3814,7 @@ export function AdminDashboard() {
                     error={formatError(createMonitorMut.error)}
                     groupOptions={monitorGroupLabels.filter((label) => label !== UNGROUPED_LABEL)}
                     initialType={modal.initialType}
+                    initialGroup={modal.initialGroup}
                     stateThresholdDefaults={stateThresholdDefaults}
                   />
                 )}

@@ -91,6 +91,8 @@ type CommonProps = {
   isLoading?: boolean;
   error?: string | undefined;
   groupOptions?: string[];
+  /** Group preselected when the form opens (group header create action). */
+  initialGroup?: string | undefined;
   /** Pre-selected check type when creating from a typed entry point. */
   initialType?: MonitorType | undefined;
   /** Site-wide state machine defaults, shown as the placeholder for empty overrides. */
@@ -603,7 +605,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
   );
 
   const [name, setName] = useState(monitor?.name ?? '');
-  const [groupName, setGroupName] = useState(monitor?.group_name ?? '');
+  const [groupName, setGroupName] = useState(monitor?.group_name ?? props.initialGroup ?? '');
   const [groupSortOrderInput, setGroupSortOrderInput] = useState(
     monitor ? String(monitor.group_sort_order) : '',
   );
