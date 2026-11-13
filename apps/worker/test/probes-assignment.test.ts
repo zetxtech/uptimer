@@ -1,4 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+vi.mock('../src/monitor/tcp', () => ({ runTcpCheck: vi.fn() }));
 
 import {
   filterDueMonitors,
@@ -7,6 +9,9 @@ import {
   selectShardMonitors,
   type AssignedMonitor,
 } from '../src/probes/assignment';
+import { runProbeShard } from '../src/probes/shard-task';
+import type { Env } from '../src/env';
+import { createFakeD1Database } from './helpers/fake-d1';
 
 function monitor(id: number, overrides: Partial<AssignedMonitor> = {}): AssignedMonitor {
   return {
@@ -78,5 +83,32 @@ describe('probe assignment helpers', () => {
       1_800_000_000,
     );
     expect(due).toHaveLength(0);
+  });
+
+  it('records a heartbeat when a shard has no due checks', async () => {
+    const heartbeat = vi.fn(() => 1);
+    const db = createFakeD1Database([
+      {
+        match: 'from probes where id',
+        first: () => ({
+          id: 'cf-do',
+          name: 'Cloudflare',
+          kind: 'durable_object',
+          scope: 'overseas',
+          region: 'us',
+          is_required: 1,
+          config_version: 1,
+        }),
+      },
+      { match: 'from monitors m left join monitor_state', all: () => [] },
+      { match: 'update probes set last_seen_at', run: heartbeat },
+    ]);
+    const result = await runProbeShard({ DB: db } as Env, {} as ExecutionContext, {
+      probeId: 'cf-do',
+      shardIndex: 0,
+      shardCount: 1,
+    });
+    expect(result.probed).toBe(0);
+    expect(heartbeat).toHaveBeenCalledTimes(1);
   });
 });

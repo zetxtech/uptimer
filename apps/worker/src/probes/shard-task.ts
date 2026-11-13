@@ -78,6 +78,7 @@ async function checkMonitor(monitor: AssignedMonitor): Promise<ProbeResultInput>
         headers: monitor.http.headers,
         body: monitor.http.body,
         followRedirects: monitor.http.followRedirects,
+        keepCookies: monitor.http.keepCookies,
         expectedStatus: monitor.http.expectedStatus,
         forbiddenStatus: monitor.http.forbiddenStatus,
         responseKeyword: monitor.http.responseKeyword,
@@ -147,6 +148,12 @@ export async function runProbeShard(
   );
 
   if (due.length === 0) {
+    await env.DB.prepare(
+      `UPDATE probes SET last_seen_at = MAX(COALESCE(last_seen_at, 0), ?2)
+       WHERE id = ?1 AND is_enabled = 1`,
+    )
+      .bind(probe.id, now)
+      .run();
     return baseResult(input, {
       probeModeCount: assignedAll.length,
       assigned: assignedToShard.length,

@@ -3,6 +3,7 @@ import type { CheckStatus, MonitorStatus } from '@uptimer/db/schema';
 import type { Env } from '../env';
 import {
   computeNextState,
+  resolveStateMachineConfig,
   type MonitorStateSnapshot,
   type NextState,
 } from '../monitor/state-machine';
@@ -48,6 +49,9 @@ type IngestMonitorRow = {
   state_last_error: string | null;
   state_consecutive_failures: number | null;
   state_consecutive_successes: number | null;
+  failures_to_down_from_up: number | null;
+  successes_to_up_from_down: number | null;
+  notification_channel_ids_json: string | null;
 };
 
 type ProbeStateRow = {
@@ -126,9 +130,10 @@ const CLAIM_BATCH_SQL = `
 
 const TOUCH_PROBE_SQL = `
   UPDATE probes
-  SET last_seen_at = ?2,
-      last_result_at = COALESCE(?3, last_result_at),
-      updated_at = ?2
+  SET last_seen_at = MAX(COALESCE(last_seen_at, 0), ?2),
+      last_result_at = CASE WHEN ?3 IS NULL THEN last_result_at
+        ELSE MAX(COALESCE(last_result_at, 0), ?3) END,
+      updated_at = MAX(updated_at, ?2)
   WHERE id = ?1
 `;
 
@@ -283,6 +288,9 @@ async function loadIngestMonitors(db: D1Database, ids: number[]): Promise<Ingest
         m.target,
         m.display_url,
         m.interval_sec,
+        m.failures_to_down_from_up,
+        m.successes_to_up_from_down,
+        m.notification_channel_ids_json,
         s.status AS state_status,
         s.last_checked_at AS state_last_checked_at,
         s.last_changed_at AS state_last_changed_at,
@@ -741,10 +749,21 @@ export async function ingestProbeBatch(input: {
           };
 
     const outcome = toCheckOutcome(result);
-    const { next } = computeNextState(prev, outcome, result.checked_at, {
-      failuresToDownFromUp: settings.state_failures_to_down_from_up,
-      successesToUpFromDown: settings.state_successes_to_up_from_down,
-    });
+    const { next } = computeNextState(
+      prev,
+      outcome,
+      result.checked_at,
+      resolveStateMachineConfig(
+        {
+          failuresToDownFromUp: settings.state_failures_to_down_from_up,
+          successesToUpFromDown: settings.state_successes_to_up_from_down,
+        },
+        {
+          failuresToDownFromUp: monitor.failures_to_down_from_up,
+          successesToUpFromDown: monitor.successes_to_up_from_down,
+        },
+      ),
+    );
 
     regionUpdates.push({ monitor, result, outcome, next, checkedAt: result.checked_at });
   }
@@ -869,6 +888,7 @@ export async function ingestProbeBatch(input: {
             type: update.monitor.type,
             target: update.monitor.target,
             display_url: update.monitor.display_url,
+            notification_channel_ids_json: update.monitor.notification_channel_ids_json ?? null,
           },
           checkedAt: update.lastCheckedAt,
           prevStatus: update.prevStatus,

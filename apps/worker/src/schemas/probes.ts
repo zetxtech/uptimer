@@ -17,6 +17,7 @@ export const createProbeInputSchema = z.object({
   scope: z.enum(PROBE_SCOPES),
   region: z.string().trim().min(1).max(64),
   is_required: z.boolean().optional(),
+  offline_after_sec: z.number().int().min(60).max(86400).optional(),
 });
 
 export type CreateProbeInput = z.infer<typeof createProbeInputSchema>;
@@ -28,6 +29,7 @@ export const patchProbeInputSchema = z
     region: z.string().trim().min(1).max(64).optional(),
     is_enabled: z.boolean().optional(),
     is_required: z.boolean().optional(),
+    offline_after_sec: z.number().int().min(60).max(86400).optional(),
   })
   .refine((value) => Object.keys(value).length > 0, {
     message: 'At least one field must be provided',

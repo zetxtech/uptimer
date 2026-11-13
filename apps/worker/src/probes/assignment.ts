@@ -12,6 +12,7 @@ export type AssignedMonitorHttp = {
   headers: Record<string, string> | null;
   body: string | null;
   followRedirects: boolean;
+  keepCookies: boolean;
   expectedStatus: StatusCodeRule[] | null;
   forbiddenStatus: StatusCodeRule[] | null;
   responseKeyword: string | null;
@@ -43,6 +44,7 @@ type AssignedMonitorRow = {
   http_headers_json: string | null;
   http_body: string | null;
   follow_redirects: number | boolean;
+  keep_cookies: number | boolean;
   expected_status_json: string | null;
   forbidden_status_json: string | null;
   response_keyword: string | null;
@@ -64,6 +66,7 @@ const LIST_ASSIGNED_MONITORS_SQL = `
     m.http_headers_json,
     m.http_body,
     m.follow_redirects,
+    m.keep_cookies,
     m.expected_status_json,
     m.forbidden_status_json,
     m.response_keyword,
@@ -138,6 +141,7 @@ export async function loadAssignedMonitors(
               }),
               body: row.http_body,
               followRedirects: toBooleanDefaultTrue(row.follow_redirects),
+              keepCookies: row.keep_cookies === 1 || row.keep_cookies === true,
               expectedStatus: parseDbJsonNullable(
                 expectedStatusJsonSchema,
                 row.expected_status_json,

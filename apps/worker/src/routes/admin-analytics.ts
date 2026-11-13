@@ -26,6 +26,7 @@ export const adminAnalyticsRoutes = new Hono<{ Bindings: Env }>();
 
 const overviewRangeSchema = z.enum(['24h', '7d']);
 const monitorRangeSchema = z.enum(['24h', '7d', '30d', '90d']);
+const probeHistoryRangeSchema = z.enum(['24h', '7d', '30d', '90d']);
 
 const HISTOGRAM_SIZE = LATENCY_BUCKETS_MS.length + 1;
 const histogramSchema = z.array(z.number().int().nonnegative()).length(HISTOGRAM_SIZE);
@@ -380,6 +381,105 @@ async function computePartialDayRow(
     latency_histogram_json,
   };
 }
+
+adminAnalyticsRoutes.get('/monitors/:id/probe-history', async (c) => {
+  const parsedId = z.coerce.number().int().positive().safeParse(c.req.param('id'));
+  const parsedRange = probeHistoryRangeSchema.default('24h').safeParse(c.req.query('range'));
+  if (!parsedId.success || !parsedRange.success) {
+    return c.json(
+      { error: { code: 'INVALID_ARGUMENT', message: 'Invalid monitor or range' } },
+      400,
+    );
+  }
+  const monitorId = parsedId.data;
+  const range = parsedRange.data;
+  const monitor = await c.env.DB.prepare('SELECT id FROM monitors WHERE id = ?1')
+    .bind(monitorId)
+    .first<{ id: number }>();
+  if (!monitor) {
+    return c.json({ error: { code: 'NOT_FOUND', message: 'Monitor not found' } }, 404);
+  }
+
+  const rangeSeconds = { '24h': 86400, '7d': 604800, '30d': 2592000, '90d': 7776000 }[range];
+  const bucketSeconds = { '24h': 300, '7d': 3600, '30d': 14400, '90d': 43200 }[range];
+  const end = Math.floor(Date.now() / 1000);
+  const start = end - rangeSeconds;
+  const { results } = await c.env.DB.prepare(
+    `
+      SELECT r.probe_id, COALESCE(p.name, r.probe_id) AS probe_name,
+        p.scope, p.region, CAST(r.checked_at / ?2 AS INTEGER) * ?2 AS bucket_at,
+        ROUND(AVG(CASE WHEN r.status = 'up' THEN r.latency_ms END)) AS avg_latency_ms,
+        SUM(CASE WHEN r.status = 'up' THEN 1 ELSE 0 END) AS checks_up,
+        SUM(CASE WHEN r.status = 'down' THEN 1 ELSE 0 END) AS checks_down,
+        SUM(CASE WHEN r.status NOT IN ('up', 'down') THEN 1 ELSE 0 END) AS checks_unknown
+      FROM probe_check_results r LEFT JOIN probes p ON p.id = r.probe_id
+      WHERE r.monitor_id = ?1 AND r.checked_at >= ?3 AND r.checked_at <= ?4
+      GROUP BY r.probe_id, bucket_at
+      ORDER BY r.probe_id, bucket_at
+      LIMIT 5001
+    `,
+  )
+    .bind(monitorId, bucketSeconds, start, end)
+    .all<{
+      probe_id: string;
+      probe_name: string;
+      scope: string | null;
+      region: string | null;
+      bucket_at: number;
+      avg_latency_ms: number | null;
+      checks_up: number;
+      checks_down: number;
+      checks_unknown: number;
+    }>();
+
+  const rows = results ?? [];
+  const series = new Map<
+    string,
+    {
+      probe_id: string;
+      name: string;
+      scope: string | null;
+      region: string | null;
+      points: Array<{
+        checked_at: number;
+        avg_latency_ms: number | null;
+        checks_up: number;
+        checks_down: number;
+        checks_unknown: number;
+      }>;
+    }
+  >();
+  for (const row of rows.slice(0, 5000)) {
+    let probe = series.get(row.probe_id);
+    if (!probe) {
+      probe = {
+        probe_id: row.probe_id,
+        name: row.probe_name,
+        scope: row.scope,
+        region: row.region,
+        points: [],
+      };
+      series.set(row.probe_id, probe);
+    }
+    probe.points.push({
+      checked_at: row.bucket_at,
+      avg_latency_ms: row.avg_latency_ms,
+      checks_up: row.checks_up,
+      checks_down: row.checks_down,
+      checks_unknown: row.checks_unknown,
+    });
+  }
+
+  return c.json({
+    monitor_id: monitorId,
+    range,
+    start,
+    end,
+    bucket_seconds: bucketSeconds,
+    truncated: rows.length > 5000,
+    probes: [...series.values()],
+  });
+});
 
 adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
   const id = z.coerce.number().int().positive().parse(c.req.param('id'));

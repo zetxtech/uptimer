@@ -61,6 +61,16 @@ function rewriteAdminRequest(req: Request): Request {
   return new Request(url.toString(), req);
 }
 
+/** `/api/v1/heartbeat/<token>` is served by the public router, which mounts `/heartbeat/:token`. */
+function rewriteHeartbeatRequest(req: Request): Request {
+  const url = new URL(req.url);
+  const prefix = '/api/v1';
+  if (url.pathname.startsWith(`${prefix}/`)) {
+    url.pathname = url.pathname.slice(prefix.length);
+  }
+  return new Request(url.toString(), req);
+}
+
 // Minimal CORS support so Pages (or any web UI) can call the API when hosted on a different origin
 // (e.g. Pages on *.pages.dev and API on *.workers.dev). Same-origin single-worker deployments
 // do not need CORS. We reflect the Origin to keep it simple and
@@ -104,6 +114,13 @@ app.notFound(handleNotFound);
 app.get('/', (c) => c.text('ok'));
 
 app.route('/api/v1/public', publicHotRoutes);
+
+// Heartbeat pings are called by customer jobs, so they stay on a lazy route too.
+app.all('/api/v1/heartbeat/*', async (c) => {
+  const { publicRoutes } = await import('./routes/public');
+  const res = await publicRoutes.fetch(rewriteHeartbeatRequest(c.req.raw), c.env, c.executionCtx);
+  return applyCorsHeaders(res, c.req.header('Origin') ?? null);
+});
 
 // Admin endpoints are rarely hit compared to the public status page. Lazily load the
 // admin router so cold-start CPU stays focused on the homepage hot path.

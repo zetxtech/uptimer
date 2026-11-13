@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 const runDailyRollup = vi.fn();
 const runRetention = vi.fn();
 const runScheduledTick = vi.fn();
+const runProbeHealthChecks = vi.fn();
+const runNotificationGroupSchedules = vi.fn();
+const runNotificationRetries = vi.fn();
+const runExpiryChecks = vi.fn();
 
 vi.mock('../src/scheduler/daily-rollup', () => ({
   runDailyRollup,
@@ -14,6 +18,22 @@ vi.mock('../src/scheduler/retention', () => ({
 
 vi.mock('../src/scheduler/scheduled', () => ({
   runScheduledTick,
+}));
+
+vi.mock('../src/scheduler/probe-health', () => ({
+  runProbeHealthChecks,
+}));
+
+vi.mock('../src/scheduler/notification-groups', () => ({
+  runNotificationGroupSchedules,
+}));
+
+vi.mock('../src/scheduler/notification-retries', () => ({
+  runNotificationRetries,
+}));
+
+vi.mock('../src/scheduler/expiry-checks', () => ({
+  runExpiryChecks,
 }));
 
 import worker from '../src/index';
@@ -46,14 +66,19 @@ describe('worker scheduled dispatch', () => {
       scheduledTime: Date.UTC(2026, 1, 18, 0, 1, 0),
     } as ScheduledController;
     const env = {} as Env;
-    const { ctx, waitUntil } = createExecutionContext();
+    const { ctx, waitUntil, waitUntilPromises } = createExecutionContext();
 
     await worker.scheduled(controller, env, ctx);
+    await Promise.all(waitUntilPromises);
 
     expect(runScheduledTick).toHaveBeenCalledWith(env, ctx);
     expect(runDailyRollup).not.toHaveBeenCalled();
     expect(runRetention).not.toHaveBeenCalled();
-    expect(waitUntil).not.toHaveBeenCalled();
+    expect(waitUntil).toHaveBeenCalledTimes(3);
+    expect(runExpiryChecks).not.toHaveBeenCalled();
+    expect(runProbeHealthChecks).toHaveBeenCalledWith(env, ctx);
+    expect(runNotificationGroupSchedules).toHaveBeenCalledWith(env, ctx);
+    expect(runNotificationRetries).toHaveBeenCalledWith(env);
   });
 
   it('queues daily rollup at UTC midnight on the consolidated minute cron', async () => {
@@ -68,9 +93,12 @@ describe('worker scheduled dispatch', () => {
     await Promise.all(waitUntilPromises);
 
     expect(runScheduledTick).toHaveBeenCalledWith(env, ctx);
-    expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect(waitUntil).toHaveBeenCalledTimes(5);
     expect(runDailyRollup).toHaveBeenCalledWith(env, controller, ctx);
+    expect(runExpiryChecks).toHaveBeenCalledWith(env, ctx);
     expect(runRetention).not.toHaveBeenCalled();
+    expect(runNotificationGroupSchedules).toHaveBeenCalledWith(env, ctx);
+    expect(runNotificationRetries).toHaveBeenCalledWith(env);
   });
 
   it('queues retention at UTC 00:30 on the consolidated minute cron', async () => {
@@ -85,9 +113,29 @@ describe('worker scheduled dispatch', () => {
     await Promise.all(waitUntilPromises);
 
     expect(runScheduledTick).toHaveBeenCalledWith(env, ctx);
-    expect(waitUntil).toHaveBeenCalledTimes(1);
+    expect(waitUntil).toHaveBeenCalledTimes(5);
     expect(runRetention).toHaveBeenCalledWith(env, controller);
+    expect(runExpiryChecks).toHaveBeenCalledWith(env, ctx);
     expect(runDailyRollup).not.toHaveBeenCalled();
+    expect(runNotificationGroupSchedules).toHaveBeenCalledWith(env, ctx);
+    expect(runNotificationRetries).toHaveBeenCalledWith(env);
+  });
+
+  it('runs the expiry sweep every quarter hour without the daily jobs', async () => {
+    const controller = {
+      cron: '* * * * *',
+      scheduledTime: Date.UTC(2026, 1, 18, 0, 45, 0),
+    } as ScheduledController;
+    const env = {} as Env;
+    const { ctx, waitUntil, waitUntilPromises } = createExecutionContext();
+
+    await worker.scheduled(controller, env, ctx);
+    await Promise.all(waitUntilPromises);
+
+    expect(runExpiryChecks).toHaveBeenCalledWith(env, ctx);
+    expect(runDailyRollup).not.toHaveBeenCalled();
+    expect(runRetention).not.toHaveBeenCalled();
+    expect(waitUntil).toHaveBeenCalledTimes(4);
   });
 
   it('keeps the legacy daily rollup cron compatible during trigger propagation', async () => {

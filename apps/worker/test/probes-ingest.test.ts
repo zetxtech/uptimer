@@ -224,4 +224,107 @@ describe('handleProbeIngest', () => {
     expect(monitorStateRuns).toHaveLength(1);
     expect(monitorStateRuns[0]?.slice(0, 2)).toEqual([1, 'up']);
   });
+
+  it('holds a region up while its per-monitor failure threshold is not reached', async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const tokenSha256 = await sha256Hex(TOKEN);
+    const probeStateRuns: unknown[][] = [];
+
+    const env = createEnv([
+      probeAuthHandler(tokenSha256),
+      { match: 'insert into probe_batches', run: () => 1 },
+      {
+        match: (sql) => sql.includes('from monitors m') && sql.includes('left join monitor_state'),
+        all: () => [
+          {
+            id: 1,
+            name: 'Strict',
+            type: 'http',
+            target: 'https://example.com',
+            display_url: null,
+            interval_sec: 300,
+            // Site default is 2 failures; this monitor raises it to 4.
+            failures_to_down_from_up: 4,
+            state_status: 'up',
+            state_last_checked_at: now - 300,
+            state_last_changed_at: now - 600,
+            state_last_latency_ms: 20,
+            state_last_error: null,
+            state_consecutive_failures: 2,
+            state_consecutive_successes: 0,
+          },
+        ],
+      },
+      {
+        match: 'from monitor_probe_state where probe_id',
+        all: () => [
+          {
+            monitor_id: 1,
+            status: 'up',
+            last_checked_at: now - 300,
+            last_changed_at: now - 600,
+            last_latency_ms: 20,
+            last_error: null,
+            consecutive_failures: 2,
+            consecutive_successes: 0,
+          },
+        ],
+      },
+      { match: 'select key, value from settings', all: () => [] },
+      { match: 'insert into probe_check_results', run: () => 1 },
+      { match: 'insert into check_results', run: () => 1 },
+      {
+        match: 'insert into monitor_probe_state',
+        run: (args) => {
+          probeStateRuns.push(args);
+          return 1;
+        },
+      },
+      {
+        match: (sql) => sql.includes('from monitor_probe_state s') && sql.includes('join probes p'),
+        all: () => [
+          {
+            // The region state above is what the aggregate reads back.
+            monitor_id: 1,
+            probe_id: PROBE_ID,
+            status: 'up',
+            last_checked_at: now,
+            is_required: 1,
+          },
+        ],
+      },
+      { match: 'insert into monitor_state', run: () => 1 },
+      { match: 'update probes set last_seen_at', run: () => 1 },
+    ]);
+
+    const res = await handleProbeIngest(
+      ingestRequest({
+        probe_id: PROBE_ID,
+        batch_id: 'batch-3',
+        results: [
+          {
+            monitor_id: 1,
+            checked_at: now,
+            status: 'down',
+            latency_ms: null,
+            http_status: null,
+            error: 'timeout',
+            attempts: 1,
+          },
+        ],
+      }),
+      env,
+      createContext(),
+    );
+
+    expect(res.status).toBe(200);
+    await expect(res.json()).resolves.toMatchObject({
+      ok: true,
+      applied: [{ monitor_id: 1, status: 'up', reason: 'any_up', changed: false }],
+    });
+    // monitor_id, probe_id, status, checked_at, last_changed_at, latency, error,
+    // consecutive_failures, consecutive_successes
+    expect(probeStateRuns[0]?.slice(0, 3)).toEqual([1, PROBE_ID, 'up']);
+    expect(probeStateRuns[0]?.[7]).toBe(3);
+  });
 });

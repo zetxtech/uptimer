@@ -1,6 +1,7 @@
 name = "uptimer"
 main = "src/index.ts"
 compatibility_date = "2026-01-28"
+compatibility_flags = ["nodejs_compat"]
 minify = true
 
 [observability]

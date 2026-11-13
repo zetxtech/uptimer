@@ -36,10 +36,18 @@ type StoredMonitorRow = {
   sort_order: number;
   show_on_status_page: number;
   is_active: number;
+  probe_mode: string;
+  notification_channel_ids_json: string | null;
+  maintenance_window_json: string | null;
+  heartbeat_token: string | null;
+  heartbeat_grace_sec: number | null;
+  failures_to_down_from_up: number | null;
+  successes_to_up_from_down: number | null;
   created_at: number;
   updated_at: number;
 };
 
+/** Column order of the drizzle select on `monitors`. */
 function monitorRowToRaw(row: StoredMonitorRow): unknown[] {
   return [
     row.id,
@@ -64,6 +72,13 @@ function monitorRowToRaw(row: StoredMonitorRow): unknown[] {
     row.sort_order,
     row.show_on_status_page,
     row.is_active,
+    row.probe_mode,
+    row.notification_channel_ids_json,
+    row.maintenance_window_json,
+    row.heartbeat_token,
+    row.heartbeat_grace_sec,
+    row.failures_to_down_from_up,
+    row.successes_to_up_from_down,
     row.created_at,
     row.updated_at,
   ];
@@ -112,8 +127,15 @@ function createEnv(monitorsById: Map<number, StoredMonitorRow>): Env {
           sort_order: Number(args[18]),
           show_on_status_page: Number(args[19]),
           is_active: Number(args[20]),
-          created_at: Number(args[21]),
-          updated_at: Number(args[22]),
+          probe_mode: String(args[21] ?? 'worker'),
+          notification_channel_ids_json: (args[22] as string | null) ?? null,
+          maintenance_window_json: (args[23] as string | null) ?? null,
+          heartbeat_token: (args[24] as string | null) ?? null,
+          heartbeat_grace_sec: (args[25] as number | null) ?? null,
+          failures_to_down_from_up: (args[26] as number | null) ?? null,
+          successes_to_up_from_down: (args[27] as number | null) ?? null,
+          created_at: Number(args[28]),
+          updated_at: Number(args[29]),
         };
         monitorsById.set(row.id, row);
         nextMonitorId += 1;
@@ -127,6 +149,10 @@ function createEnv(monitorsById: Map<number, StoredMonitorRow>): Env {
         const row = monitorsById.get(id);
         return row ? [monitorRowToRaw(row)] : [];
       },
+    },
+    {
+      match: 'from monitor_metadata',
+      all: () => [],
     },
     {
       match: 'public_snapshot_guard_versions',
@@ -213,17 +239,27 @@ describe('admin monitor response assertion routes', () => {
 
     const createdId = created.monitor.id;
 
-    globalThis.fetch = vi
-      .fn()
-      .mockResolvedValueOnce(new Response('ready:42', { status: 200 }))
-      .mockResolvedValueOnce(new Response('ready:42\nFAIL_TOKEN', { status: 200 }))
-      .mockResolvedValueOnce(new Response('ready:42\nFAIL_TOKEN', { status: 200 }))
-      .mockResolvedValueOnce(new Response('ready:42\nFAIL_TOKEN', { status: 200 }))
-      .mockResolvedValueOnce(new Response('starting up', { status: 200 }))
-      .mockResolvedValueOnce(new Response('starting up', { status: 200 }))
-      .mockResolvedValueOnce(
-        new Response('starting up', { status: 200 }),
-      ) as unknown as typeof fetch;
+    const httpBodies = [
+      'ready:42',
+      'ready:42\nFAIL_TOKEN',
+      'ready:42\nFAIL_TOKEN',
+      'ready:42\nFAIL_TOKEN',
+      'starting up',
+      'starting up',
+      'starting up',
+    ];
+    globalThis.fetch = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      // Failing checks also resolve the hostname; answer those without consuming the queue.
+      if (url.startsWith('https://cloudflare-dns.com/')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ Answer: [{ type: 1, data: '203.0.113.9' }] }), {
+            status: 200,
+          }),
+        );
+      }
+      return Promise.resolve(new Response(httpBodies.shift() ?? 'ready:42', { status: 200 }));
+    }) as unknown as typeof fetch;
 
     const upRes = await requestAdmin(app, env, `/api/v1/admin/monitors/${createdId}/test`, {
       method: 'POST',

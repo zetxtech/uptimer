@@ -1,10 +1,11 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 
-import { getDb, monitors } from '@uptimer/db';
+import { and, eq, getDb, monitors } from '@uptimer/db';
 
 import type { Env } from '../env';
 import { hasValidAdminTokenRequest } from '../middleware/auth';
+import { recordHeartbeatPing } from '../monitor/heartbeat';
 import { homepageFromStatusPayload, readHomepageHistoryPreviews } from '../public/homepage';
 import { computePublicStatusPayload } from '../public/status';
 import {
@@ -1917,9 +1918,118 @@ publicRoutes.get('/monitors/:id/outages', async (c) => {
     includeHiddenMonitors,
   );
 });
+/**
+ * Heartbeat ping. Jobs call this with the token shown in the admin UI; there is no other
+ * authentication because the token itself is the credential and it only ever marks a monitor up.
+ */
+const heartbeatPingHandler = async (c: Context<{ Bindings: Env }>) => {
+  const token = c.req.param('token').trim();
+  if (!/^[a-f0-9]{32}$/.test(token)) {
+    throw new AppError(404, 'NOT_FOUND', 'Unknown heartbeat token');
+  }
+
+  const db = getDb(c.env);
+  const monitor = await db
+    .select({ id: monitors.id })
+    .from(monitors)
+    .where(
+      and(
+        eq(monitors.heartbeatToken, token),
+        eq(monitors.type, 'heartbeat'),
+        eq(monitors.isActive, true),
+      ),
+    )
+    .get();
+
+  if (!monitor) {
+    throw new AppError(404, 'NOT_FOUND', 'Unknown heartbeat token');
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const ping = await recordHeartbeatPing(c.env, monitor.id, now);
+  return c.json({ ok: true, monitor_id: monitor.id, received_at: ping.receivedAt }, 202);
+};
+
+// Jobs may use either verb, and pasting the URL into a browser (GET) should work too.
+publicRoutes.post('/heartbeat/:token', heartbeatPingHandler);
+publicRoutes.get('/heartbeat/:token', heartbeatPingHandler);
+
 publicRoutes.get('/health', async (c) => {
   // Minimal DB touch to verify the Worker can connect to D1.
   const db = getDb(c.env);
   await db.select({ id: monitors.id }).from(monitors).limit(1).all();
   return c.json({ ok: true });
+});
+
+/**
+ * Public SVG badge for README embeds. Only monitors that are visible on the status page are
+ * exposed, so a badge can never publish a hidden monitor.
+ */
+publicRoutes.get('/badge/:file', async (c) => {
+  const match = /^(\d+)\.svg$/.exec(c.req.param('file'));
+  if (!match) {
+    throw new AppError(404, 'NOT_FOUND', 'Badge not found');
+  }
+  const monitorId = Number.parseInt(match[1]!, 10);
+
+  const now = Math.floor(Date.now() / 1000);
+  const row = await c.env.DB.prepare(
+    `
+      SELECT
+        m.id,
+        m.name,
+        m.interval_sec,
+        s.status AS state_status,
+        s.last_checked_at
+      FROM monitors m
+      LEFT JOIN monitor_state s ON s.monitor_id = m.id
+      WHERE m.id = ?1 AND m.is_active = 1
+        AND ${monitorVisibilityPredicate(false, 'm')}
+    `,
+  )
+    .bind(monitorId)
+    .first<{
+      id: number;
+      name: string;
+      interval_sec: number;
+      state_status: string | null;
+      last_checked_at: number | null;
+    }>();
+
+  if (!row) {
+    throw new AppError(404, 'NOT_FOUND', 'Badge not found');
+  }
+
+  const uptimeRow = await c.env.DB.prepare(
+    `
+      SELECT SUM(uptime_sec) AS uptime_sec, SUM(total_sec) AS total_sec
+      FROM monitor_daily_rollups
+      WHERE monitor_id = ?1 AND day_start_at >= ?2
+    `,
+  )
+    .bind(monitorId, now - 30 * 86400)
+    .first<{ uptime_sec: number | null; total_sec: number | null }>();
+
+  const totalSec = uptimeRow?.total_sec ?? 0;
+  const uptimePct =
+    totalSec > 0 && uptimeRow?.uptime_sec !== null && uptimeRow?.uptime_sec !== undefined
+      ? (uptimeRow.uptime_sec / totalSec) * 100
+      : null;
+
+  const isStale = row.last_checked_at === null || now - row.last_checked_at > row.interval_sec * 2;
+  const status = row.state_status === null || isStale ? 'unknown' : row.state_status;
+
+  const { renderStatusBadgeSvg, statusBadgeSegments } = await import('../public/badge');
+  const svg = renderStatusBadgeSvg(
+    statusBadgeSegments({ name: row.name, status, uptimePct }),
+    `${row.name}: ${status}`,
+  );
+
+  return new Response(svg, {
+    headers: {
+      'Content-Type': 'image/svg+xml; charset=utf-8',
+      'Cache-Control': 'public, max-age=60, s-maxage=60',
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
 });

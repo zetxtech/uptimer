@@ -79,6 +79,8 @@ describe('scheduler/retention', () => {
         match: 'delete from probe_check_results',
         run: () => ({ meta: { changes: 0 } }),
       },
+      { match: 'delete from probe_health_events', run: () => 0 },
+      { match: 'delete from notification_deliveries', run: () => 0 },
     ]);
 
     const scheduledTime = Date.UTC(2026, 1, 18, 0, 0, 0);
@@ -139,6 +141,8 @@ describe('scheduler/retention', () => {
           return { meta: { changes: 42 } };
         },
       },
+      { match: 'delete from probe_health_events', run: () => 0 },
+      { match: 'delete from notification_deliveries', run: () => 0 },
     ]);
 
     const scheduledTime = Date.UTC(2026, 1, 18, 0, 0, 0);

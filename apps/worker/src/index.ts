@@ -1159,6 +1159,8 @@ const worker = {
       (isConsolidatedMinuteCron &&
         scheduledDate.getUTCHours() === 0 &&
         scheduledDate.getUTCMinutes() === 30);
+    const shouldRunExpiryChecks =
+      isConsolidatedMinuteCron && scheduledDate.getUTCMinutes() % 15 === 0;
 
     // Keep legacy cron branches during Cloudflare's trigger propagation window,
     // but only the consolidated minute cron runs the monitor tick.
@@ -1182,9 +1184,46 @@ const worker = {
         }),
       );
     }
+    if (shouldRunExpiryChecks) {
+      ctx.waitUntil(
+        (async () => {
+          const { runExpiryChecks } = await import('./scheduler/expiry-checks');
+          await runExpiryChecks(env, ctx);
+        })().catch((err) => {
+          console.error('scheduled: expiry checks failed', err);
+        }),
+      );
+    }
 
     if (isLegacyDailyRollupCron || isLegacyRetentionCron) {
       return;
+    }
+
+    if (isConsolidatedMinuteCron) {
+      ctx.waitUntil(
+        import('./scheduler/probe-health').then(({ runProbeHealthChecks }) =>
+          runProbeHealthChecks(env, ctx),
+        ),
+      );
+
+      // Notification-group debounce flushes and daily/weekly digests piggyback on the same
+      // minute cron but run outside the monitor tick, so they cannot delay checks.
+      ctx.waitUntil(
+        import('./scheduler/notification-groups')
+          .then(({ runNotificationGroupSchedules }) => runNotificationGroupSchedules(env, ctx))
+          .catch((err) => {
+            console.error('scheduled: notification groups failed', err);
+          }),
+      );
+
+      // Failed monitor/incident/maintenance deliveries are retried with backoff for up to 24h.
+      ctx.waitUntil(
+        import('./scheduler/notification-retries')
+          .then(({ runNotificationRetries }) => runNotificationRetries(env))
+          .catch((err) => {
+            console.error('scheduled: notification retries failed', err);
+          }),
+      );
     }
 
     const { runScheduledTick } = await import('./scheduler/scheduled');

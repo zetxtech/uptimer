@@ -4,7 +4,8 @@ import { loadAssignedMonitors } from './assignment';
 
 const TOUCH_PROBE_SQL = `
   UPDATE probes
-  SET last_seen_at = ?2, updated_at = ?2
+  SET last_seen_at = MAX(COALESCE(last_seen_at, 0), ?2),
+      updated_at = MAX(updated_at, ?2)
   WHERE id = ?1
 `;
 
@@ -54,6 +55,7 @@ export async function buildProbeConfigResponse(
     http_headers: monitor.http?.headers ?? null,
     http_body: monitor.http?.body ?? null,
     follow_redirects: monitor.http?.followRedirects ?? true,
+    keep_cookies: monitor.http?.keepCookies ?? false,
     expected_status: monitor.http?.expectedStatus ?? null,
     forbidden_status: monitor.http?.forbiddenStatus ?? null,
     response_keyword: monitor.http?.responseKeyword ?? null,

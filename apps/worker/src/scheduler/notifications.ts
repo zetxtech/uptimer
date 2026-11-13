@@ -1,9 +1,15 @@
-import { parseDbJson, webhookChannelConfigSchema } from '@uptimer/db/json';
+import {
+  notificationChannelIdsJsonSchema,
+  parseDbJson,
+  webhookChannelConfigSchema,
+} from '@uptimer/db/json';
 import type { MonitorStatus } from '@uptimer/db/schema';
 
 import type { Env } from '../env';
+import { isMaintenanceWindowActive } from '../monitor/maintenance-window';
 import type { NextState } from '../monitor/state-machine';
 import type { CheckOutcome } from '../monitor/types';
+import type { NotificationGroupRegistry } from '../notify/groups';
 import type { WebhookChannel } from '../notify/webhook';
 
 const MAINTENANCE_EVENT_LOOKBACK_SECONDS = 10 * 60;
@@ -44,6 +50,7 @@ export type NotifyContext = {
   ctx: ExecutionContext;
   envRecord: Record<string, unknown>;
   channels: WebhookChannelWithMeta[];
+  groupsByMonitor: NotificationGroupRegistry;
 };
 
 export type CompletedNotificationMonitor = {
@@ -53,6 +60,8 @@ export type CompletedNotificationMonitor = {
     type: string;
     target: string;
     display_url: string | null;
+    /** JSON array of channel ids; null/absent notifies every enabled channel. */
+    notification_channel_ids_json?: string | null;
   };
   checkedAt: number;
   prevStatus: MonitorStatus | null;
@@ -106,10 +115,15 @@ export async function createNotifyContext(
   env: Env,
   ctx: ExecutionContext,
 ): Promise<NotifyContext | null> {
-  const channels = await listActiveWebhookChannels(env.DB);
-  return channels.length === 0
-    ? null
-    : { ctx, envRecord: env as unknown as Record<string, unknown>, channels };
+  const [channels, groupsByMonitor] = await Promise.all([
+    listActiveWebhookChannels(env.DB),
+    import('../notify/groups').then(({ loadNotificationGroupRegistry }) =>
+      loadNotificationGroupRegistry(env.DB),
+    ),
+  ]);
+  if (channels.length === 0 && groupsByMonitor.size === 0) return null;
+
+  return { ctx, envRecord: env as unknown as Record<string, unknown>, channels, groupsByMonitor };
 }
 
 export async function listMaintenanceSuppressedMonitorIds(
@@ -147,11 +161,65 @@ export async function listMaintenanceSuppressedMonitorIds(
       }
     }
 
+    // Recurring daily windows live on the monitor itself; evaluate them against each zone.
+    const recurring = await listRecurringMaintenanceMonitors(db, ids);
+    for (const monitor of recurring) {
+      if (isMaintenanceWindowActive(monitor.maintenance_window_json, at)) {
+        suppressed.add(monitor.id);
+      }
+    }
+
     return suppressed;
   } catch (err) {
     console.warn('notify: failed to list maintenance-suppressed monitor ids', err);
     return new Set();
   }
+}
+
+async function listRecurringMaintenanceMonitors(
+  db: D1Database,
+  monitorIds: number[],
+): Promise<Array<{ id: number; maintenance_window_json: string }>> {
+  const rows: Array<{ id: number; maintenance_window_json: string }> = [];
+
+  for (
+    let index = 0;
+    index < monitorIds.length;
+    index += MAINTENANCE_SUPPRESSED_MONITOR_IDS_BATCH_SIZE
+  ) {
+    const chunk = monitorIds.slice(index, index + MAINTENANCE_SUPPRESSED_MONITOR_IDS_BATCH_SIZE);
+    const placeholders = chunk.map((_, idx) => `?${idx + 1}`).join(', ');
+    const { results } = await db
+      .prepare(
+        `
+        SELECT id, maintenance_window_json
+        FROM monitors
+        WHERE maintenance_window_json IS NOT NULL
+          AND id IN (${placeholders})
+      `,
+      )
+      .bind(...chunk)
+      .all<{ id: number; maintenance_window_json: string }>();
+    rows.push(...(results ?? []));
+  }
+
+  return rows;
+}
+
+/** null = notify every enabled channel (no stored selection or unreadable JSON). */
+function parseSelectedChannelIds(value: string | null | undefined): Set<number> | null {
+  if (!value) return null;
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value) as unknown;
+  } catch {
+    return null;
+  }
+
+  const result = notificationChannelIdsJsonSchema.safeParse(parsed);
+  if (!result.success || result.data.length === 0) return null;
+  return new Set(result.data);
 }
 
 async function listMaintenanceWindowMonitorIdsByWindowId(
@@ -326,7 +394,6 @@ export function queueMonitorNotification(
   }
 
   const { row, checkedAt, prevStatus, outcome, next } = completed;
-
   const prevForEvent: MonitorStatus = prevStatus ?? 'unknown';
   let eventType: 'monitor.down' | 'monitor.up' | null = null;
 
@@ -340,6 +407,7 @@ export function queueMonitorNotification(
     return;
   }
 
+  const groupEventType = eventType;
   const eventSuffix = eventType === 'monitor.down' ? 'down' : 'up';
   const eventKey = `monitor:${row.id}:${eventSuffix}:${checkedAt}`;
 
@@ -363,20 +431,123 @@ export function queueMonitorNotification(
     },
   };
 
+  // A monitor may narrow the fan-out to an explicit channel set. Falls open to every enabled
+  // channel when the stored selection is missing or unreadable, so corrupt data never silences
+  // a monitor.
+  const selectedChannelIds = parseSelectedChannelIds(row.notification_channel_ids_json);
+  const dispatchChannels =
+    selectedChannelIds === null
+      ? notify.channels
+      : notify.channels.filter((channel) => selectedChannelIds.has(channel.id));
+
+  if (dispatchChannels.length > 0) {
+    notify.ctx.waitUntil(
+      getWebhookDispatchModule()
+        .then(({ dispatchWebhookToChannels }) =>
+          dispatchWebhookToChannels({
+            db: env.DB,
+            env: notify.envRecord,
+            channels: dispatchChannels,
+            eventType,
+            eventKey,
+            payload,
+          }),
+        )
+        .catch((err) => {
+          console.error('notify: failed to dispatch webhooks', err);
+        }),
+    );
+  }
+
+  // Notification groups are independent of the legacy channel fan-out above, so a monitor can
+  // feed an immediate group, a debounced group and a digest schedule at the same time.
+  // The registry comes from the shared context, so monitors outside every group do not queue
+  // any extra background work.
+  const groups = notify.groupsByMonitor.get(row.id);
+  if (groups && groups.length > 0) {
+    notify.ctx.waitUntil(
+      import('../notify/groups')
+        .then(({ recordGroupEventsForMonitor }) =>
+          recordGroupEventsForMonitor(
+            env,
+            [{ monitorId: row.id, eventKey, eventType: groupEventType, payload, at: checkedAt }],
+            { groupsByMonitor: new Map([[row.id, groups]]) },
+          ),
+        )
+        .catch((err) => {
+          console.error('notify: failed to record notification group events', err);
+        }),
+    );
+  }
+}
+
+/**
+ * Sends one expiry warning (certificate or domain registration) through the monitor's channel
+ * selection. Threshold crossings are decided by the caller so each warning fires once.
+ */
+export function queueExpiryNotification(
+  env: Env,
+  notify: NotifyContext | null,
+  args: {
+    monitor: {
+      id: number;
+      name: string;
+      type: string;
+      target: string;
+      display_url: string | null;
+      notification_channel_ids_json?: string | null;
+    };
+    kind: 'ssl' | 'domain';
+    expiresAt: number;
+    thresholdDays: number;
+    checkedAt: number;
+  },
+): void {
+  if (!notify) return;
+  const { monitor, kind, expiresAt, thresholdDays, checkedAt } = args;
+
+  const selectedChannelIds = parseSelectedChannelIds(monitor.notification_channel_ids_json);
+  const dispatchChannels =
+    selectedChannelIds === null
+      ? notify.channels
+      : notify.channels.filter((channel) => selectedChannelIds.has(channel.id));
+  if (dispatchChannels.length === 0) return;
+
+  const eventType = kind === 'ssl' ? 'monitor.ssl_expiring' : 'monitor.domain_expiring';
+  const eventKey = `monitor:${monitor.id}:expiry:${kind}:${thresholdDays}:${expiresAt}`;
+  const payload = {
+    event: eventType,
+    event_id: eventKey,
+    timestamp: checkedAt,
+    monitor: {
+      id: monitor.id,
+      name: monitor.name,
+      type: monitor.type,
+      target: monitor.target,
+      display_url: monitor.display_url ?? null,
+    },
+    expiry: {
+      kind,
+      expires_at: expiresAt,
+      days_left: Math.floor((expiresAt - checkedAt) / 86400),
+      threshold_days: thresholdDays,
+    },
+  };
+
   notify.ctx.waitUntil(
     getWebhookDispatchModule()
       .then(({ dispatchWebhookToChannels }) =>
         dispatchWebhookToChannels({
           db: env.DB,
           env: notify.envRecord,
-          channels: notify.channels,
+          channels: dispatchChannels,
           eventType,
           eventKey,
           payload,
         }),
       )
       .catch((err) => {
-        console.error('notify: failed to dispatch webhooks', err);
+        console.error('notify: failed to dispatch expiry webhooks', err);
       }),
   );
 }

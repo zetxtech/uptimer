@@ -2,6 +2,12 @@ export interface Env {
   DB: D1Database;
   ADMIN_TOKEN: string;
 
+  // Workers AI binding; absent in local development and on accounts without it.
+  AI?: { run: (model: string, input: { prompt: string; max_tokens?: number }) => Promise<unknown> };
+
+  // Browser Rendering binding used for incident screenshots; remote-only.
+  BROWSER?: unknown;
+
   // Cron key to protect HTTP cron triggers
   CRON_KEY?: string;
 
@@ -52,6 +58,10 @@ export interface Env {
   UPTIMER_INTERNAL_CHECK_BATCH_DIAGNOSTICS?: string;
   UPTIMER_INTERNAL_CHECK_BATCH_TRUST_SCHEDULER_LEASE?: string;
   UPTIMER_SCHEDULED_REFRESH_LOGS?: string;
+
+  // Certificate expiry lookups: full URL of a JSON endpoint accepting `?host=`.
+  // Defaults to the Domainee checker; override to point at any compatible service.
+  UPTIMER_SSL_CHECK_URL?: string;
 
   // In-memory, per-instance rate limit for admin endpoints.
   // Keep optional so older deployments don't break.

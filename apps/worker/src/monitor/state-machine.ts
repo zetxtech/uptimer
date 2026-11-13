@@ -54,6 +54,26 @@ function normalizeConfig(config?: Partial<StateMachineConfig>): StateMachineConf
   };
 }
 
+function pickThreshold(raw: number | null | undefined, fallback: number): number {
+  if (raw === null || raw === undefined) return fallback;
+  return normalizeThreshold(raw, fallback);
+}
+
+/** Per-monitor overrides win over the site-wide defaults; null or invalid values fall back. */
+export function resolveStateMachineConfig(
+  fallback: Partial<StateMachineConfig> | undefined,
+  overrides: { failuresToDownFromUp?: number | null; successesToUpFromDown?: number | null },
+): StateMachineConfig {
+  const base = normalizeConfig(fallback);
+  return {
+    failuresToDownFromUp: pickThreshold(overrides.failuresToDownFromUp, base.failuresToDownFromUp),
+    successesToUpFromDown: pickThreshold(
+      overrides.successesToUpFromDown,
+      base.successesToUpFromDown,
+    ),
+  };
+}
+
 export function computeNextState(
   prev: MonitorStateSnapshot | null,
   outcome: CheckOutcome,

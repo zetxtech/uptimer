@@ -64,6 +64,7 @@ type CreateEnvOptions = {
   dueRows?: unknown[];
   channels?: unknown[];
   suppressedMonitorIds?: number[];
+  recurringWindowRows?: unknown[];
   startedWindows?: unknown[];
   endedWindows?: unknown[];
   windowMonitorLinks?: unknown[];
@@ -76,6 +77,7 @@ function createEnv(options: CreateEnvOptions = {}): Env {
     dueRows = [],
     channels = [],
     suppressedMonitorIds = [],
+    recurringWindowRows = [],
     startedWindows = [],
     endedWindows = [],
     windowMonitorLinks = [],
@@ -121,6 +123,10 @@ function createEnv(options: CreateEnvOptions = {}): Env {
     {
       match: 'select distinct mwm.monitor_id',
       all: () => suppressedMonitorIds.map((monitor_id) => ({ monitor_id })),
+    },
+    {
+      match: 'from monitors where',
+      all: () => recurringWindowRows,
     },
     {
       match: 'from maintenance_windows',
@@ -2156,6 +2162,7 @@ describe('scheduler/scheduled regression', () => {
       headers: null,
       body: null,
       followRedirects: true,
+      keepCookies: false,
       expectedStatus: null,
       forbiddenStatus: null,
       responseKeyword: null,
@@ -2172,6 +2179,11 @@ describe('scheduler/scheduled regression', () => {
       'up',
       21,
       200,
+      null,
+      null,
+      null,
+      null,
+      null,
       null,
       null,
       1,
@@ -2225,6 +2237,7 @@ describe('scheduler/scheduled regression', () => {
       headers: null,
       body: null,
       followRedirects: true,
+      keepCookies: false,
       expectedStatus: null,
       forbiddenStatus: null,
       responseKeyword: '^ready:\\\\d+$',
@@ -2463,6 +2476,63 @@ describe('scheduler/scheduled regression', () => {
     );
   });
 
+  it('notifies only the channels the monitor selected', async () => {
+    vi.mocked(runHttpCheck).mockResolvedValue({
+      status: 'down',
+      latencyMs: 55,
+      httpStatus: 503,
+      error: 'HTTP 503',
+      attempts: 1,
+    });
+    const dueRows = [
+      {
+        id: 401,
+        name: 'Selected channels',
+        type: 'http',
+        target: 'https://selected.example.com/health',
+        interval_sec: 60,
+        timeout_ms: 5000,
+        http_method: 'GET',
+        http_headers_json: null,
+        http_body: null,
+        expected_status_json: null,
+        forbidden_status_json: null,
+        response_keyword: null,
+        response_keyword_mode: null,
+        response_forbidden_keyword: null,
+        response_forbidden_keyword_mode: null,
+        notification_channel_ids_json: JSON.stringify([8]),
+        state_status: 'up',
+        state_last_error: null,
+        last_changed_at: 1700000000,
+        consecutive_failures: 1,
+        consecutive_successes: 0,
+      },
+    ];
+    const webhookConfig = JSON.stringify({
+      url: 'https://hooks.example.com/uptimer',
+      method: 'POST',
+      payload_type: 'json',
+    });
+    const env = createEnv({
+      dueRows,
+      channels: [
+        { id: 7, name: 'ops', config_json: webhookConfig, created_at: 1700000000 },
+        { id: 8, name: 'oncall', config_json: webhookConfig, created_at: 1700000000 },
+      ],
+    });
+    const waitUntil = vi.fn();
+
+    await runScheduledTick(env, { waitUntil } as unknown as ExecutionContext);
+    await Promise.all(waitUntil.mock.calls.map((call) => call[0] as Promise<unknown>));
+
+    const call = vi
+      .mocked(dispatchWebhookToChannels)
+      .mock.calls.find(([args]) => args.eventType === 'monitor.down');
+    expect(call).toBeDefined();
+    expect((call?.[0].channels ?? []).map((channel) => channel.id)).toEqual([8]);
+  });
+
   it('sends monitor.up when a down monitor recovers', async () => {
     vi.mocked(runHttpCheck).mockResolvedValue({
       status: 'up',
@@ -2576,7 +2646,7 @@ describe('scheduler/scheduled regression', () => {
     const checkInsertIndex = runSql.findIndex((sql) => sql.includes('insert into check_results'));
     expect(checkInsertIndex).toBeGreaterThan(-1);
     expect(runArgs[checkInsertIndex]?.[2]).toBe('down');
-    expect(runArgs[checkInsertIndex]?.[7]).toBe(2);
+    expect(runArgs[checkInsertIndex]?.[12]).toBe(2);
   });
 
   it('logs failed due monitor runs and still schedules homepage refresh', async () => {

@@ -13,7 +13,14 @@ import type { Env } from '../env';
 import { runInternalHomepageRefreshCore } from '../internal/homepage-refresh-core';
 import type { Trace } from '../observability/trace';
 import {
+  captureOutageScreenshot,
+  findOutageAwaitingScreenshot,
+  markScreenshotAttempt,
+} from '../monitor/screenshot';
+import { heartbeatGraceSeconds } from '../monitor/heartbeat';
+import {
   computeNextState,
+  resolveStateMachineConfig,
   type MonitorStateSnapshot,
   type NextState,
   type OutageAction,
@@ -55,7 +62,7 @@ const BATCH_EXECUTION_LOCK_RENEW_MIN_REMAINING_SECONDS = 5 * 60;
 
 const CHECK_CONCURRENCY = 5;
 const D1_MAX_SQL_VARIABLES = 100;
-const CHECK_RESULT_BINDINGS_PER_ROW = 8;
+const CHECK_RESULT_BINDINGS_PER_ROW = 13;
 const MONITOR_STATE_BINDINGS_PER_ROW = 8;
 const PERSIST_BATCH_SIZE = Math.max(
   1,
@@ -815,18 +822,23 @@ export type DueMonitorRow = {
   target: string;
   display_url: string | null;
   interval_sec: number;
+  heartbeat_grace_sec: number | null;
   created_at: number;
   timeout_ms: number;
   http_method: string | null;
   http_headers_json: string | null;
   http_body: string | null;
   follow_redirects: number | boolean | null;
+  keep_cookies: number | boolean | null;
   expected_status_json: string | null;
   forbidden_status_json: string | null;
   response_keyword: string | null;
   response_keyword_mode: HttpResponseMatchMode | null;
   response_forbidden_keyword: string | null;
   response_forbidden_keyword_mode: HttpResponseMatchMode | null;
+  failures_to_down_from_up: number | null;
+  successes_to_up_from_down: number | null;
+  notification_channel_ids_json: string | null;
   state_status: string | null;
   state_last_error: string | null;
   last_checked_at: number | null;
@@ -866,14 +878,56 @@ async function hasActiveWebhookChannels(db: D1Database): Promise<boolean> {
   return hasActive;
 }
 
+// Notification groups can exist while every channel is temporarily disabled. In that case the
+// group queue still needs the notify context so events keep accumulating for the next delivery.
+async function hasActiveNotificationGroups(db: D1Database): Promise<boolean> {
+  const cachedResult = activeNotificationGroupPresenceCacheByDb.get(db);
+  if (
+    cachedResult &&
+    Date.now() - cachedResult.fetchedAtMs < ACTIVE_WEBHOOK_PRESENCE_CACHE_TTL_MS
+  ) {
+    return cachedResult.hasActive;
+  }
+
+  const cached = hasActiveNotificationGroupsStatementByDb.get(db);
+  const statement = cached ?? db.prepare(HAS_ACTIVE_NOTIFICATION_GROUPS_SQL);
+  if (!cached) {
+    hasActiveNotificationGroupsStatementByDb.set(db, statement);
+  }
+
+  // Degrade to "no groups" if the table is unavailable (for example a database that has not been
+  // migrated yet), so notification-group support can never break the monitor tick.
+  let hasActive = false;
+  try {
+    const { results } = await statement.all<unknown>();
+    hasActive = (results?.length ?? 0) > 0;
+  } catch (err) {
+    console.warn('scheduled: notification group presence check failed', err);
+  }
+  activeNotificationGroupPresenceCacheByDb.set(db, { fetchedAtMs: Date.now(), hasActive });
+  return hasActive;
+}
+
 const listDueMonitorsStatementByDb = new WeakMap<D1Database, D1PreparedStatement>();
 const hasSchedulableMonitorsStatementByDb = new WeakMap<D1Database, D1PreparedStatement>();
 const persistStatementTemplatesByDb = new WeakMap<D1Database, PersistStatementTemplates>();
 const hasActiveWebhookChannelsStatementByDb = new WeakMap<D1Database, D1PreparedStatement>();
+const hasActiveNotificationGroupsStatementByDb = new WeakMap<D1Database, D1PreparedStatement>();
 const activeWebhookPresenceCacheByDb = new WeakMap<
   D1Database,
   { fetchedAtMs: number; hasActive: boolean }
 >();
+const activeNotificationGroupPresenceCacheByDb = new WeakMap<
+  D1Database,
+  { fetchedAtMs: number; hasActive: boolean }
+>();
+
+const HAS_ACTIVE_NOTIFICATION_GROUPS_SQL = `
+  SELECT 1 AS present
+  FROM notification_groups
+  WHERE is_active = 1
+  LIMIT 1
+`;
 
 const HAS_ACTIVE_WEBHOOK_CHANNELS_SQL = `
   SELECT 1 AS present
@@ -891,18 +945,23 @@ const LIST_DUE_MONITORS_SQL = `
     m.target,
     m.display_url,
     m.interval_sec,
+    m.heartbeat_grace_sec,
     m.created_at,
     m.timeout_ms,
     m.http_method,
     m.http_headers_json,
     m.http_body,
     m.follow_redirects,
+    m.keep_cookies,
     m.expected_status_json,
     m.forbidden_status_json,
     m.response_keyword,
     m.response_keyword_mode,
     m.response_forbidden_keyword,
     m.response_forbidden_keyword_mode,
+    m.failures_to_down_from_up,
+    m.successes_to_up_from_down,
+    m.notification_channel_ids_json,
     s.status AS state_status,
     s.last_error AS state_last_error,
     s.last_checked_at,
@@ -1062,18 +1121,23 @@ export async function listMonitorRowsByIds(
         m.target,
         m.display_url,
         m.interval_sec,
+        m.heartbeat_grace_sec,
         m.created_at,
         m.timeout_ms,
         m.http_method,
         m.http_headers_json,
         m.http_body,
         m.follow_redirects,
+        m.keep_cookies,
         m.expected_status_json,
         m.forbidden_status_json,
         m.response_keyword,
         m.response_keyword_mode,
         m.response_forbidden_keyword,
         m.response_forbidden_keyword_mode,
+        m.failures_to_down_from_up,
+        m.successes_to_up_from_down,
+        m.notification_channel_ids_json,
         s.status AS state_status,
         s.last_error AS state_last_error,
         s.last_checked_at,
@@ -1377,6 +1441,11 @@ function getInsertCheckResultStatement(
       http_status,
       error,
       location,
+      effective_url,
+      redirect_count,
+      response_headers,
+      timings,
+      resolved_ips,
       attempt
     ) VALUES ${buildNumberedTuplePlaceholders(rowCount, CHECK_RESULT_BINDINGS_PER_ROW)}
   `);
@@ -1423,6 +1492,7 @@ function getUpsertMonitorStateStatement(
 function toCheckResultBindings(completed: CompletedDueMonitor): unknown[] {
   const { row, checkedAt, outcome } = completed;
   const checkError = outcome.status === 'up' ? null : outcome.error;
+  const detail = outcome.detail ?? null;
   return [
     row.id,
     checkedAt,
@@ -1431,6 +1501,11 @@ function toCheckResultBindings(completed: CompletedDueMonitor): unknown[] {
     outcome.httpStatus,
     checkError,
     null,
+    detail?.effectiveUrl ?? null,
+    detail?.redirectCount ?? null,
+    detail?.responseHeaders ? JSON.stringify(detail.responseHeaders) : null,
+    detail?.timings ? JSON.stringify(detail.timings) : null,
+    detail?.resolvedIps ? JSON.stringify(detail.resolvedIps) : null,
     outcome.attempts,
   ];
 }
@@ -1552,7 +1627,23 @@ async function runDueMonitor(
   let outcome: CheckOutcome;
 
   try {
-    if (row.type === 'http') {
+    if (row.type === 'heartbeat') {
+      // Heartbeat monitors are driven by pings, not probes: this run only decides whether the
+      // silence since the last ping exceeded the grace window.
+      const graceSec = heartbeatGraceSeconds(row.interval_sec, row.heartbeat_grace_sec);
+      const lastSeen = row.last_checked_at;
+      const silentFor = lastSeen === null ? Number.POSITIVE_INFINITY : checkedAt - lastSeen;
+      outcome =
+        silentFor <= graceSec
+          ? { status: 'up', latencyMs: null, httpStatus: null, error: null, attempts: 1 }
+          : {
+              status: 'down',
+              latencyMs: null,
+              httpStatus: null,
+              error: `No heartbeat received for ${Math.max(0, Math.round(silentFor))}s`,
+              attempts: 1,
+            };
+    } else if (row.type === 'http') {
       const httpMethod = toHttpMethod(row.http_method);
       if (!httpMethod) {
         outcome = {
@@ -1605,6 +1696,7 @@ async function runDueMonitor(
           headers: httpHeaders,
           body: row.http_body,
           followRedirects: toBooleanDefaultTrue(row.follow_redirects),
+          keepCookies: row.keep_cookies === 1 || row.keep_cookies === true,
           expectedStatus,
           forbiddenStatus,
           responseKeyword: row.response_keyword,
@@ -1635,7 +1727,16 @@ async function runDueMonitor(
     };
   }
 
-  const { next, outageAction } = computeNextState(prev, outcome, checkedAt, stateMachineConfig);
+  // A heartbeat is already judged on a grace window, so a missed ping flips it immediately
+  // instead of waiting for consecutive-failure thresholds.
+  const stateConfig =
+    row.type === 'heartbeat'
+      ? { failuresToDownFromUp: 1, successesToUpFromDown: 1 }
+      : resolveStateMachineConfig(stateMachineConfig, {
+          failuresToDownFromUp: row.failures_to_down_from_up,
+          successesToUpFromDown: row.successes_to_up_from_down,
+        });
+  const { next, outageAction } = computeNextState(prev, outcome, checkedAt, stateConfig);
   const stateLastError = computeStateLastError(next.status, outcome, row.state_last_error);
 
   return {
@@ -1809,6 +1910,28 @@ function chunkDueMonitorRows(rows: DueMonitorRow[], size: number): DueMonitorRow
   return chunks;
 }
 
+/**
+ * Renders the target of the oldest open outage that has no screenshot yet. The
+ * Browser Rendering binding only exists in deployed environments, so this is a
+ * no-op locally; attempts are recorded so a target that cannot be rendered is
+ * not retried on every tick.
+ */
+async function capturePendingOutageScreenshot(env: Env): Promise<void> {
+  if (!(env as { BROWSER?: unknown }).BROWSER) return;
+  const pending = await findOutageAwaitingScreenshot(env).catch(() => null);
+  if (!pending) return;
+
+  await markScreenshotAttempt(env, pending.outageId).catch(() => undefined);
+  const shot = await captureOutageScreenshot(env, {
+    outageId: pending.outageId,
+    target: pending.target,
+  }).catch(() => null);
+
+  if (shouldLogScheduledRefresh(env)) {
+    console.log(`scheduled: outage_screenshot outage=${pending.outageId} ok=${shot ? 1 : 0}`);
+  }
+}
+
 export async function runScheduledTick(env: Env, ctx: ExecutionContext): Promise<void> {
   const now = Math.floor(Date.now() / 1000);
   const checkedAt = Math.floor(now / 60) * 60;
@@ -1886,8 +2009,11 @@ export async function runScheduledTick(env: Env, ctx: ExecutionContext): Promise
   };
 
   const initializeNotifications = async (): Promise<InitializedNotifications> => {
-    const hasWebhookNotifications = await hasActiveWebhookChannels(env.DB);
-    if (!hasWebhookNotifications) {
+    const [hasWebhookNotifications, hasNotificationGroups] = await Promise.all([
+      hasActiveWebhookChannels(env.DB),
+      hasActiveNotificationGroups(env.DB),
+    ]);
+    if (!hasWebhookNotifications && !hasNotificationGroups) {
       return { module: null, notify: null };
     }
 
@@ -2172,6 +2298,10 @@ export async function runScheduledTick(env: Env, ctx: ExecutionContext): Promise
     };
 
     ctx.waitUntil(queuePostCheckRefresh());
+    // Only scheduled where Browser Rendering exists; local ticks never pay for it.
+    if ((env as { BROWSER?: unknown }).BROWSER) {
+      ctx.waitUntil(capturePendingOutageScreenshot(env));
+    }
   } catch (err) {
     if (err instanceof LeaseLostError) {
       console.warn(err.message);

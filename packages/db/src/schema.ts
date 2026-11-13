@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  blob,
   index,
   integer,
   primaryKey,
@@ -8,7 +9,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 
-export type MonitorType = 'http' | 'tcp';
+export type MonitorType = 'http' | 'tcp' | 'heartbeat';
 export type MonitorStatus = 'up' | 'down' | 'maintenance' | 'paused' | 'unknown';
 export type CheckStatus = 'up' | 'down' | 'maintenance' | 'unknown';
 export type ProbeKind = 'edgeone' | 'durable_object' | 'worker' | 'server';
@@ -51,6 +52,30 @@ export const monitors = sqliteTable(
     showOnStatusPage: integer('show_on_status_page', { mode: 'boolean' }).notNull().default(true),
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
     probeMode: text('probe_mode').$type<MonitorProbeMode>().notNull().default('worker'),
+    // NULL notifies every enabled channel; otherwise the JSON array is the exact channel set.
+    notificationChannelIdsJson: text('notification_channel_ids_json'),
+    // Recurring daily maintenance window JSON; NULL disables suppression for this monitor.
+    maintenanceWindowJson: text('maintenance_window_json'),
+    // Opt-in daily certificate / domain registration expiry checks.
+    sslExpiryEnabled: integer('ssl_expiry_enabled', { mode: 'boolean' }).notNull().default(false),
+    domainExpiryEnabled: integer('domain_expiry_enabled', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    // Last results of the expiry job (unix seconds / issuer CN).
+    sslExpiresAt: integer('ssl_expires_at'),
+    sslIssuer: text('ssl_issuer'),
+    domainExpiresAt: integer('domain_expires_at'),
+    expiryCheckedAt: integer('expiry_checked_at'),
+    // Carry Set-Cookie values across redirect hops instead of dropping them.
+    keepCookies: integer('keep_cookies', { mode: 'boolean' }).notNull().default(false),
+    // Heartbeat monitors authenticate their ping with this token; NULL for probed monitors.
+    heartbeatToken: text('heartbeat_token'),
+    // Extra silence allowed beyond interval_sec before a heartbeat monitor turns down.
+    // NULL keeps the default policy (two missed intervals, at least five minutes).
+    heartbeatGraceSec: integer('heartbeat_grace_sec'),
+    // NULL falls back to the site-wide state machine defaults from settings.
+    failuresToDownFromUp: integer('failures_to_down_from_up'),
+    successesToUpFromDown: integer('successes_to_up_from_down'),
     createdAt: integer('created_at')
       .notNull()
       .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
@@ -79,6 +104,24 @@ export const monitorState = sqliteTable('monitor_state', {
   consecutiveSuccesses: integer('consecutive_successes').notNull().default(0),
 });
 
+export const monitorMetadata = sqliteTable(
+  'monitor_metadata',
+  {
+    monitorId: integer('monitor_id').notNull(),
+    key: text('key').notNull(),
+    value: text('value').notNull(),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.monitorId, t.key] }),
+  }),
+);
+
 export const checkResults = sqliteTable(
   'check_results',
   {
@@ -90,6 +133,11 @@ export const checkResults = sqliteTable(
     httpStatus: integer('http_status'),
     error: text('error'),
     location: text('location'),
+    effectiveUrl: text('effective_url'),
+    redirectCount: integer('redirect_count'),
+    responseHeaders: text('response_headers'),
+    timings: text('timings'),
+    resolvedIps: text('resolved_ips'),
     attempt: integer('attempt').notNull().default(1),
     probeId: text('probe_id'),
     batchId: text('batch_id'),
@@ -108,9 +156,47 @@ export const outages = sqliteTable(
     endedAt: integer('ended_at'),
     initialError: text('initial_error'),
     lastError: text('last_error'),
+    aiSummary: text('ai_summary'),
+    title: text('title'),
   },
   (t) => ({
     monitorStartIdx: index('idx_outages_monitor_start').on(t.monitorId, t.startedAt),
+  }),
+);
+
+export const outageScreenshots = sqliteTable('outage_screenshots', {
+  outageId: integer('outage_id').primaryKey(),
+  contentType: text('content_type').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  bytes: blob('bytes', { mode: 'buffer' }),
+  capturedAt: integer('captured_at').notNull(),
+});
+
+export const outageMetadata = sqliteTable(
+  'outage_metadata',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    outageId: integer('outage_id').notNull(),
+    key: text('key').notNull(),
+    value: text('value').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => ({
+    outageIdx: index('idx_outage_metadata_outage').on(t.outageId, t.id),
+  }),
+);
+
+export const outageUpdates = sqliteTable(
+  'outage_updates',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    outageId: integer('outage_id').notNull(),
+    body: text('body').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => ({
+    outageTimeIdx: index('idx_outage_updates_outage_time').on(t.outageId, t.createdAt),
   }),
 );
 
@@ -205,6 +291,10 @@ export const notificationDeliveries = sqliteTable(
     status: text('status').$type<NotificationDeliveryStatus>().notNull(),
     httpStatus: integer('http_status'),
     error: text('error'),
+    eventType: text('event_type'),
+    payloadJson: text('payload_json'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: integer('next_attempt_at'),
     createdAt: integer('created_at')
       .notNull()
       .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
@@ -254,6 +344,8 @@ export const probes = sqliteTable(
     configVersion: integer('config_version').notNull().default(1),
     lastSeenAt: integer('last_seen_at'),
     lastResultAt: integer('last_result_at'),
+    offlineAfterSec: integer('offline_after_sec').notNull().default(900),
+    healthStartedAt: integer('health_started_at'),
     createdAt: integer('created_at')
       .notNull()
       .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),

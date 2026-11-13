@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { Env } from '../env';
 import { AppError } from '../middleware/errors';
 import { generateProbeToken, sha256Hex } from '../probes/auth';
+import { probeHealthStatus } from '../probes/health';
 import { createProbeInputSchema, patchProbeInputSchema } from '../schemas/probes';
 
 type ProbeRow = {
@@ -17,6 +18,8 @@ type ProbeRow = {
   config_version: number;
   last_seen_at: number | null;
   last_result_at: number | null;
+  offline_after_sec: number;
+  health_started_at: number | null;
   created_at: number;
   updated_at: number;
 };
@@ -33,6 +36,8 @@ const LIST_PROBES_SQL = `
     config_version,
     last_seen_at,
     last_result_at,
+    offline_after_sec,
+    health_started_at,
     created_at,
     updated_at
   FROM probes
@@ -57,6 +62,15 @@ function probeRowToApi(row: ProbeRow) {
     config_version: row.config_version,
     last_seen_at: row.last_seen_at,
     last_result_at: row.last_result_at,
+    offline_after_sec: row.offline_after_sec,
+    health_status: probeHealthStatus({
+      enabled: toBoolean(row.is_enabled),
+      createdAt: row.created_at,
+      healthStartedAt: row.health_started_at,
+      lastSeenAt: row.last_seen_at,
+      offlineAfterSec: row.offline_after_sec,
+      now: Math.floor(Date.now() / 1000),
+    }),
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -88,8 +102,8 @@ adminProbeRoutes.post('/', async (c) => {
     `
     INSERT INTO probes (
       id, name, kind, scope, region, token_sha256, is_enabled, is_required,
-      config_version, created_at, updated_at
-    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, 1, ?8, ?8)
+      config_version, created_at, updated_at, offline_after_sec
+    ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, 1, ?7, 1, ?8, ?8, ?9)
   `,
   )
     .bind(
@@ -101,6 +115,7 @@ adminProbeRoutes.post('/', async (c) => {
       tokenSha256,
       input.is_required === false ? 0 : 1,
       now,
+      input.offline_after_sec ?? 900,
     )
     .run();
 
@@ -153,14 +168,35 @@ adminProbeRoutes.patch('/:id', async (c) => {
     sets.push(`is_required = ?${binds.length + 1}`);
     binds.push(input.is_required ? 1 : 0);
   }
+  if (input.offline_after_sec !== undefined) {
+    sets.push(`offline_after_sec = ?${binds.length + 1}`);
+    binds.push(input.offline_after_sec);
+  }
+  const enabledChanged =
+    input.is_enabled !== undefined && input.is_enabled !== toBoolean(existing.is_enabled);
+  if (enabledChanged && input.is_enabled) {
+    sets.push(`health_started_at = ?${binds.length + 1}`);
+    binds.push(now);
+  }
 
   sets.push(`updated_at = ?${binds.length + 1}`);
   binds.push(now);
 
   binds.push(id);
-  await c.env.DB.prepare(`UPDATE probes SET ${sets.join(', ')} WHERE id = ?${binds.length}`)
-    .bind(...binds)
-    .run();
+  const update = c.env.DB.prepare(
+    `UPDATE probes SET ${sets.join(', ')} WHERE id = ?${binds.length}`,
+  ).bind(...binds);
+  if (enabledChanged) {
+    await c.env.DB.batch([
+      update,
+      c.env.DB.prepare('DELETE FROM probe_health_state WHERE probe_id = ?1').bind(id),
+      c.env.DB.prepare(
+        'DELETE FROM probe_health_events WHERE probe_id = ?1 AND completed_at IS NULL',
+      ).bind(id),
+    ]);
+  } else {
+    await update.run();
+  }
 
   const updated = await c.env.DB.prepare(GET_PROBE_SQL).bind(id).first<ProbeRow>();
   return c.json({ probe: updated ? probeRowToApi(updated) : null });
@@ -211,6 +247,8 @@ adminProbeRoutes.delete('/:id', async (c) => {
   await c.env.DB.batch([
     c.env.DB.prepare('DELETE FROM monitor_probe_state WHERE probe_id = ?1').bind(id),
     c.env.DB.prepare('DELETE FROM probe_batches WHERE probe_id = ?1').bind(id),
+    c.env.DB.prepare('DELETE FROM probe_health_state WHERE probe_id = ?1').bind(id),
+    c.env.DB.prepare('DELETE FROM probe_health_events WHERE probe_id = ?1').bind(id),
     c.env.DB.prepare('DELETE FROM probes WHERE id = ?1').bind(id),
   ]);
 

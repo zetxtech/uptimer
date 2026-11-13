@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { MonitorStateSnapshot } from '../src/monitor/state-machine';
-import { computeNextState } from '../src/monitor/state-machine';
+import { computeNextState, resolveStateMachineConfig } from '../src/monitor/state-machine';
 
 const CHECKED_AT = 1_735_000_000;
 
@@ -179,5 +179,39 @@ describe('computeNextState', () => {
 
     expect(next.status).toBe('down');
     expect(next.consecutiveSuccesses).toBe(1000);
+  });
+});
+
+describe('resolveStateMachineConfig', () => {
+  it('prefers per-monitor overrides over the site defaults', () => {
+    expect(
+      resolveStateMachineConfig(
+        { failuresToDownFromUp: 2, successesToUpFromDown: 2 },
+        { failuresToDownFromUp: 5, successesToUpFromDown: null },
+      ),
+    ).toEqual({ failuresToDownFromUp: 5, successesToUpFromDown: 2 });
+  });
+
+  it('falls back to the defaults when there is no override', () => {
+    expect(
+      resolveStateMachineConfig(
+        { failuresToDownFromUp: 3, successesToUpFromDown: 4 },
+        { failuresToDownFromUp: undefined, successesToUpFromDown: null },
+      ),
+    ).toEqual({ failuresToDownFromUp: 3, successesToUpFromDown: 4 });
+  });
+
+  it('normalizes invalid overrides back to the defaults', () => {
+    expect(
+      resolveStateMachineConfig(
+        { failuresToDownFromUp: 3, successesToUpFromDown: 3 },
+        { failuresToDownFromUp: 0, successesToUpFromDown: Number.NaN },
+      ),
+    ).toEqual({ failuresToDownFromUp: 3, successesToUpFromDown: 3 });
+
+    expect(resolveStateMachineConfig(undefined, { failuresToDownFromUp: 4 })).toEqual({
+      failuresToDownFromUp: 4,
+      successesToUpFromDown: 2,
+    });
   });
 });

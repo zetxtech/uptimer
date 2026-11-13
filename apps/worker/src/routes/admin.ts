@@ -4,13 +4,15 @@ import { z } from 'zod';
 import {
   asc,
   eq,
-  type CustomWebhookChannelConfig,
   expectedStatusJsonSchema,
   forbiddenStatusJsonSchema,
   getDb,
   httpHeadersJsonSchema,
+  incidentMonitors,
+  maintenanceWindowJsonSchema,
   monitors,
   monitorState,
+  notificationChannelIdsJsonSchema,
   parseDbJson,
   parseDbJsonNullable,
   serializeDbJson,
@@ -22,7 +24,7 @@ import {
 
 import type { Env } from '../env';
 import { requireAdmin } from '../middleware/auth';
-import { AppError } from '../middleware/errors';
+import { AppError, handleError, handleNotFound } from '../middleware/errors';
 import { requireAdminRateLimit } from '../middleware/rate-limit';
 import { computePublicHomepagePayload } from '../public/homepage';
 import {
@@ -31,7 +33,10 @@ import {
   bumpHomepageMonitorGuardVersions,
   bumpHomepageSettingsGuardVersion,
 } from '../public/homepage-guard-state';
+import { buildNumberedPlaceholders, chunkPositiveIntegerIds } from '../public/visibility';
 import { refreshPublicHomepageSnapshotIfNeeded } from '../snapshots';
+import { generatePostmortem } from '../monitor/postmortem';
+import { captureOutageScreenshot, loadOutageScreenshot } from '../monitor/screenshot';
 import { runHttpCheck } from '../monitor/http';
 import {
   validateHttpResponseAssertionConfig,
@@ -40,6 +45,7 @@ import {
 import { validateHttpTarget, validateTcpTarget } from '../monitor/targets';
 import { runTcpCheck } from '../monitor/tcp';
 import {
+  dispatchWebhookToChannel,
   dispatchWebhookToChannelLegacy,
   dispatchWebhookToChannels,
   type WebhookChannel,
@@ -48,7 +54,9 @@ import { encryptTelegramBotToken } from '../notify/telegram-token';
 import { adminAnalyticsRoutes } from './admin-analytics';
 import { adminExportsRoutes } from './admin-exports';
 import { adminProbeRoutes } from './admin-probes';
+import { adminNotificationGroupRoutes } from './admin-notification-groups';
 import { adminSettingsRoutes } from './admin-settings';
+import { attachmentNamesSchema, updateAttachmentsSchema } from '../schemas/attachments';
 import {
   createIncidentInputSchema,
   createIncidentUpdateInputSchema,
@@ -72,6 +80,11 @@ import {
 } from '../schemas/notification-channels';
 
 export const adminRoutes = new Hono<{ Bindings: Env }>();
+// The admin router is also invoked as a standalone Hono app (lazily, from hono-app.ts),
+// where the parent's onError never sees its errors. Register the shared handler here so
+// auth/validation failures keep their JSON error contract and status codes.
+adminRoutes.onError(handleError);
+adminRoutes.notFound(handleNotFound);
 
 adminRoutes.use('*', requireAdminRateLimit);
 
@@ -91,6 +104,7 @@ adminRoutes.route('/analytics', adminAnalyticsRoutes);
 adminRoutes.route('/exports', adminExportsRoutes);
 adminRoutes.route('/settings', adminSettingsRoutes);
 adminRoutes.route('/probes', adminProbeRoutes);
+adminRoutes.route('/notification-groups', adminNotificationGroupRoutes);
 
 function queuePublicHomepageSnapshotRefresh(c: { env: Env; executionCtx: ExecutionContext }) {
   const now = Math.floor(Date.now() / 1000);
@@ -105,6 +119,13 @@ function queuePublicHomepageSnapshotRefresh(c: { env: Env; executionCtx: Executi
       console.warn('homepage snapshot: refresh failed', err);
     }),
   );
+}
+
+/** 32 hex chars, URL-safe and unguessable enough for a ping endpoint. */
+function createHeartbeatToken(): string {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
 }
 
 function normalizeMonitorGroupName(groupName: string | null | undefined): string | null {
@@ -262,6 +283,7 @@ function buildGroupReorderUpdate(
 function monitorRowToApi(
   row: typeof monitors.$inferSelect,
   state?: typeof monitorState.$inferSelect | null,
+  metadata: MonitorMetadataEntry[] = [],
 ) {
   const groupName = normalizeMonitorGroupName(row.groupName);
 
@@ -295,15 +317,93 @@ function monitorRowToApi(
     show_on_status_page: row.showOnStatusPage,
     is_active: row.isActive,
     probe_mode: row.probeMode,
+    notification_channel_ids: parseDbJsonNullable(
+      notificationChannelIdsJsonSchema,
+      row.notificationChannelIdsJson,
+      { field: 'notification_channel_ids_json' },
+    ),
+    maintenance_window: parseDbJsonNullable(
+      maintenanceWindowJsonSchema,
+      row.maintenanceWindowJson,
+      { field: 'maintenance_window_json' },
+    ),
+    ssl_expiry_enabled: row.sslExpiryEnabled,
+    domain_expiry_enabled: row.domainExpiryEnabled,
+    ssl_expires_at: row.sslExpiresAt ?? null,
+    ssl_issuer: row.sslIssuer ?? null,
+    domain_expires_at: row.domainExpiresAt ?? null,
+    expiry_checked_at: row.expiryCheckedAt ?? null,
+    keep_cookies: row.keepCookies,
+    metadata,
+    heartbeat_token: row.heartbeatToken ?? null,
+    heartbeat_grace_sec: row.heartbeatGraceSec ?? null,
+    failures_to_down_from_up: row.failuresToDownFromUp ?? null,
+    successes_to_up_from_down: row.successesToUpFromDown ?? null,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
 
     // Runtime state (denormalized from monitor_state for admin list).
     status: state?.status ?? 'unknown',
     last_checked_at: state?.lastCheckedAt ?? null,
+    last_status_change_at: state?.lastChangedAt ?? null,
     last_latency_ms: state?.lastLatencyMs ?? null,
     last_error: state?.lastError ?? null,
   };
+}
+
+export type MonitorMetadataEntry = { key: string; value: string };
+
+async function loadMonitorMetadataByMonitorIds(
+  db: D1Database,
+  monitorIds: number[],
+): Promise<Map<number, MonitorMetadataEntry[]>> {
+  const byMonitor = new Map<number, MonitorMetadataEntry[]>();
+  const ids = [...new Set(monitorIds.filter((id) => Number.isInteger(id) && id > 0))];
+  if (ids.length === 0) return byMonitor;
+
+  // D1 allows at most 100 bound variables per statement, so wide monitor pages are chunked.
+  for (const chunk of chunkPositiveIntegerIds(ids, 100)) {
+    const placeholders = chunk.map((_, index) => `?${index + 1}`).join(', ');
+    const { results } = await db
+      .prepare(
+        `SELECT monitor_id, key, value
+         FROM monitor_metadata
+         WHERE monitor_id IN (${placeholders})
+         ORDER BY monitor_id, key`,
+      )
+      .bind(...chunk)
+      .all<{ monitor_id: number; key: string; value: string }>();
+
+    for (const row of results ?? []) {
+      const entries = byMonitor.get(row.monitor_id) ?? [];
+      entries.push({ key: row.key, value: row.value });
+      byMonitor.set(row.monitor_id, entries);
+    }
+  }
+
+  return byMonitor;
+}
+
+async function replaceMonitorMetadata(
+  db: D1Database,
+  monitorId: number,
+  metadata: MonitorMetadataEntry[],
+  now: number,
+): Promise<void> {
+  const statements = [
+    db.prepare('DELETE FROM monitor_metadata WHERE monitor_id = ?1').bind(monitorId),
+  ];
+  for (const entry of metadata) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO monitor_metadata (monitor_id, key, value, created_at, updated_at)
+           VALUES (?1, ?2, ?3, ?4, ?4)`,
+        )
+        .bind(monitorId, entry.key, entry.value, now),
+    );
+  }
+  await db.batch(statements);
 }
 
 adminRoutes.get('/monitors', async (c) => {
@@ -315,6 +415,14 @@ adminRoutes.get('/monitors', async (c) => {
     .optional()
     .default(50)
     .parse(c.req.query('limit'));
+  const offset = z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1_000_000)
+    .optional()
+    .default(0)
+    .parse(c.req.query('offset'));
   const db = getDb(c.env);
 
   const rows = await db
@@ -327,10 +435,43 @@ adminRoutes.get('/monitors', async (c) => {
       asc(monitors.sortOrder),
       asc(monitors.id),
     )
-    .limit(limit)
+    .limit(limit + 1)
+    .offset(offset)
     .all();
 
-  return c.json({ monitors: rows.map((r) => monitorRowToApi(r.monitor, r.state)) });
+  const page = rows.slice(0, limit);
+  const metadataByMonitor = await loadMonitorMetadataByMonitorIds(
+    c.env.DB,
+    page.map((r) => r.monitor.id),
+  );
+
+  return c.json({
+    monitors: page.map((r) =>
+      monitorRowToApi(r.monitor, r.state, metadataByMonitor.get(r.monitor.id) ?? []),
+    ),
+    next_offset: rows.length > limit ? offset + limit : null,
+  });
+});
+
+adminRoutes.get('/monitors/:id', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  const db = getDb(c.env);
+  const row = await db
+    .select({ monitor: monitors, state: monitorState })
+    .from(monitors)
+    .leftJoin(monitorState, eq(monitorState.monitorId, monitors.id))
+    .where(eq(monitors.id, id))
+    .get();
+
+  if (!row) {
+    throw new AppError(404, 'NOT_FOUND', 'Monitor not found');
+  }
+
+  const metadataByMonitor = await loadMonitorMetadataByMonitorIds(c.env.DB, [row.monitor.id]);
+
+  return c.json({
+    monitor: monitorRowToApi(row.monitor, row.state, metadataByMonitor.get(row.monitor.id) ?? []),
+  });
 });
 
 adminRoutes.post('/monitors/groups/reorder', async (c) => {
@@ -445,7 +586,8 @@ adminRoutes.post('/monitors', async (c) => {
     .values({
       name: input.name,
       type: input.type,
-      target: input.target,
+      target: input.type === 'heartbeat' ? '' : (input.target ?? ''),
+      heartbeatToken: input.type === 'heartbeat' ? createHeartbeatToken() : null,
       displayUrl: input.display_url ?? null,
       intervalSec: input.interval_sec ?? 60,
       timeoutMs: input.timeout_ms ?? 10000,
@@ -499,6 +641,23 @@ adminRoutes.post('/monitors', async (c) => {
       showOnStatusPage: input.show_on_status_page ?? true,
       isActive: input.is_active ?? true,
       probeMode: input.probe_mode ?? 'worker',
+      notificationChannelIdsJson:
+        input.notification_channel_ids !== undefined
+          ? serializeDbJsonNullable(
+              notificationChannelIdsJsonSchema,
+              input.notification_channel_ids,
+            )
+          : null,
+      maintenanceWindowJson:
+        input.maintenance_window !== undefined
+          ? serializeDbJsonNullable(maintenanceWindowJsonSchema, input.maintenance_window)
+          : null,
+      sslExpiryEnabled: input.ssl_expiry_enabled ?? false,
+      domainExpiryEnabled: input.domain_expiry_enabled ?? false,
+      keepCookies: input.type === 'http' ? (input.keep_cookies ?? false) : false,
+      heartbeatGraceSec: input.type === 'heartbeat' ? (input.heartbeat_grace_sec ?? null) : null,
+      failuresToDownFromUp: input.failures_to_down_from_up ?? null,
+      successesToUpFromDown: input.successes_to_up_from_down ?? null,
       createdAt: now,
       updatedAt: now,
     })
@@ -509,10 +668,14 @@ adminRoutes.post('/monitors', async (c) => {
     await syncGroupSortOrder(c.env.DB, groupName, groupSortOrder, now, inserted.id);
   }
 
+  if (input.metadata !== undefined) {
+    await replaceMonitorMetadata(c.env.DB, inserted.id, input.metadata, now);
+  }
+
   await bumpHomepageMonitorGuardVersions(c.env.DB);
   queuePublicHomepageSnapshotRefresh(c);
 
-  return c.json({ monitor: monitorRowToApi(inserted, null) }, 201);
+  return c.json({ monitor: monitorRowToApi(inserted, null, input.metadata ?? []) }, 201);
 });
 
 adminRoutes.patch('/monitors/:id', async (c) => {
@@ -533,7 +696,11 @@ adminRoutes.patch('/monitors/:id', async (c) => {
   // Validate target if being updated
   if (input.target !== undefined) {
     const targetErr =
-      existing.type === 'http' ? validateHttpTarget(input.target) : validateTcpTarget(input.target);
+      existing.type === 'heartbeat'
+        ? 'heartbeat monitors do not take a target'
+        : existing.type === 'http'
+          ? validateHttpTarget(input.target)
+          : validateTcpTarget(input.target);
     if (targetErr) {
       throw new AppError(400, 'INVALID_ARGUMENT', targetErr);
     }
@@ -639,6 +806,45 @@ adminRoutes.patch('/monitors/:id', async (c) => {
       showOnStatusPage: input.show_on_status_page ?? existing.showOnStatusPage,
       isActive: input.is_active ?? existing.isActive,
       probeMode: input.probe_mode ?? existing.probeMode,
+      notificationChannelIdsJson:
+        input.notification_channel_ids !== undefined
+          ? serializeDbJsonNullable(
+              notificationChannelIdsJsonSchema,
+              input.notification_channel_ids,
+            )
+          : existing.notificationChannelIdsJson,
+      maintenanceWindowJson:
+        input.maintenance_window !== undefined
+          ? serializeDbJsonNullable(maintenanceWindowJsonSchema, input.maintenance_window)
+          : existing.maintenanceWindowJson,
+      sslExpiryEnabled: input.ssl_expiry_enabled ?? existing.sslExpiryEnabled,
+      domainExpiryEnabled: input.domain_expiry_enabled ?? existing.domainExpiryEnabled,
+      keepCookies: input.keep_cookies ?? existing.keepCookies,
+      // Results describe the old target, so a target change invalidates them. Turning either
+      // check on also clears the stamp so the next scheduled tick picks the monitor up.
+      ...(input.target !== undefined && input.target !== existing.target
+        ? {
+            sslExpiresAt: null,
+            sslIssuer: null,
+            domainExpiresAt: null,
+            expiryCheckedAt: null,
+          }
+        : (input.ssl_expiry_enabled === true && !existing.sslExpiryEnabled) ||
+            (input.domain_expiry_enabled === true && !existing.domainExpiryEnabled)
+          ? { expiryCheckedAt: null }
+          : {}),
+      heartbeatGraceSec:
+        input.heartbeat_grace_sec !== undefined
+          ? input.heartbeat_grace_sec
+          : existing.heartbeatGraceSec,
+      failuresToDownFromUp:
+        input.failures_to_down_from_up !== undefined
+          ? input.failures_to_down_from_up
+          : existing.failuresToDownFromUp,
+      successesToUpFromDown:
+        input.successes_to_up_from_down !== undefined
+          ? input.successes_to_up_from_down
+          : existing.successesToUpFromDown,
       updatedAt: now,
     })
     .where(eq(monitors.id, id))
@@ -653,10 +859,18 @@ adminRoutes.patch('/monitors/:id', async (c) => {
     await syncGroupSortOrder(c.env.DB, nextGroupName, nextGroupSortOrder, now, updated.id);
   }
 
+  if (input.metadata !== undefined) {
+    await replaceMonitorMetadata(c.env.DB, updated.id, input.metadata, now);
+  }
+
   await bumpHomepageMonitorGuardVersions(c.env.DB);
   queuePublicHomepageSnapshotRefresh(c);
 
-  return c.json({ monitor: monitorRowToApi(updated, null) });
+  const metadataByMonitor = await loadMonitorMetadataByMonitorIds(c.env.DB, [updated.id]);
+
+  return c.json({
+    monitor: monitorRowToApi(updated, null, metadataByMonitor.get(updated.id) ?? []),
+  });
 });
 
 adminRoutes.delete('/monitors/:id', async (c) => {
@@ -674,11 +888,18 @@ adminRoutes.delete('/monitors/:id', async (c) => {
   // (No FK constraints are enforced by D1 here.)
   await c.env.DB.batch([
     c.env.DB.prepare('DELETE FROM check_results WHERE monitor_id = ?1').bind(id),
+    c.env.DB.prepare('DELETE FROM probe_check_results WHERE monitor_id = ?1').bind(id),
+    c.env.DB.prepare('DELETE FROM monitor_probe_state WHERE monitor_id = ?1').bind(id),
+    c.env.DB.prepare('DELETE FROM notification_group_pending_events WHERE monitor_id = ?1').bind(
+      id,
+    ),
+    c.env.DB.prepare('DELETE FROM notification_group_monitors WHERE monitor_id = ?1').bind(id),
     c.env.DB.prepare('DELETE FROM outages WHERE monitor_id = ?1').bind(id),
     c.env.DB.prepare('DELETE FROM monitor_state WHERE monitor_id = ?1').bind(id),
     c.env.DB.prepare('DELETE FROM monitor_daily_rollups WHERE monitor_id = ?1').bind(id),
     c.env.DB.prepare('DELETE FROM maintenance_window_monitors WHERE monitor_id = ?1').bind(id),
     c.env.DB.prepare('DELETE FROM incident_monitors WHERE monitor_id = ?1').bind(id),
+    c.env.DB.prepare('DELETE FROM monitor_metadata WHERE monitor_id = ?1').bind(id),
     c.env.DB.prepare('DELETE FROM monitors WHERE id = ?1').bind(id),
   ]);
 
@@ -686,6 +907,88 @@ adminRoutes.delete('/monitors/:id', async (c) => {
   queuePublicHomepageSnapshotRefresh(c);
 
   return c.json({ deleted: true });
+});
+
+/** Runs the certificate / domain expiry lookups right now instead of waiting for the sweep. */
+adminRoutes.post('/monitors/:id/expiry-check', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+
+  const monitor = await c.env.DB.prepare(
+    `
+      SELECT
+        id, name, type, target, display_url,
+        ssl_expiry_enabled, domain_expiry_enabled,
+        ssl_expires_at, domain_expires_at, notification_channel_ids_json
+      FROM monitors
+      WHERE id = ?1
+    `,
+  )
+    .bind(id)
+    .first<{
+      id: number;
+      name: string;
+      type: string;
+      target: string;
+      display_url: string | null;
+      ssl_expiry_enabled: number;
+      domain_expiry_enabled: number;
+      ssl_expires_at: number | null;
+      domain_expires_at: number | null;
+      notification_channel_ids_json: string | null;
+    }>();
+
+  if (!monitor) {
+    throw new AppError(404, 'NOT_FOUND', 'Monitor not found');
+  }
+
+  if (!monitor.ssl_expiry_enabled && !monitor.domain_expiry_enabled) {
+    throw new AppError(400, 'INVALID_ARGUMENT', 'Expiry checks are disabled for this monitor');
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const { checkAndStoreMonitorExpiry, crossedExpiryThreshold } = await import('../monitor/expiry');
+  const { createNotifyContext, queueExpiryNotification } =
+    await import('../scheduler/notifications');
+
+  const outcome = await checkAndStoreMonitorExpiry(c.env, monitor, now);
+  const notify = await createNotifyContext(c.env, c.executionCtx);
+
+  if (outcome.sslExpiresAt !== null) {
+    const threshold = crossedExpiryThreshold(monitor.ssl_expires_at, outcome.sslExpiresAt, now);
+    if (threshold !== null) {
+      queueExpiryNotification(c.env, notify, {
+        monitor,
+        kind: 'ssl',
+        expiresAt: outcome.sslExpiresAt,
+        thresholdDays: threshold,
+        checkedAt: now,
+      });
+    }
+  }
+  if (outcome.domainExpiresAt !== null) {
+    const threshold = crossedExpiryThreshold(
+      monitor.domain_expires_at,
+      outcome.domainExpiresAt,
+      now,
+    );
+    if (threshold !== null) {
+      queueExpiryNotification(c.env, notify, {
+        monitor,
+        kind: 'domain',
+        expiresAt: outcome.domainExpiresAt,
+        thresholdDays: threshold,
+        checkedAt: now,
+      });
+    }
+  }
+
+  const refreshed = await getDb(c.env).select().from(monitors).where(eq(monitors.id, id)).get();
+  const metadataByMonitor = await loadMonitorMetadataByMonitorIds(c.env.DB, [id]);
+
+  return c.json({
+    monitor: refreshed ? monitorRowToApi(refreshed, null, metadataByMonitor.get(id) ?? []) : null,
+    errors: outcome.errors,
+  });
 });
 
 adminRoutes.post('/monitors/:id/test', async (c) => {
@@ -736,6 +1039,108 @@ adminRoutes.post('/monitors/:id/test', async (c) => {
       error: outcome.error,
       attempts: outcome.attempts,
     },
+  });
+});
+
+adminRoutes.post('/monitors/:id/test-alert', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+
+  const db = getDb(c.env);
+  const monitor = await db.select().from(monitors).where(eq(monitors.id, id)).get();
+
+  if (!monitor) {
+    throw new AppError(404, 'NOT_FOUND', 'Monitor not found');
+  }
+
+  const { results: channelRows } = await c.env.DB.prepare(
+    `
+      SELECT id, name, config_json
+      FROM notification_channels
+      WHERE is_active = 1 AND type = 'webhook'
+      ORDER BY id
+    `,
+  ).all<{ id: number; name: string; config_json: string }>();
+
+  // Only channels that would receive this monitor's own down alert take part in the test, so a
+  // channel restricted to incidents or maintenance is not pinged with a monitor event.
+  const channels = (channelRows ?? [])
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      config: parseDbJson(webhookChannelConfigSchema, row.config_json, {
+        field: 'config_json',
+      }),
+    }))
+    .filter((channel) => {
+      const enabled = channel.config.enabled_events;
+      return !enabled || enabled.length === 0 || enabled.includes('monitor.down');
+    });
+
+  const now = Math.floor(Date.now() / 1000);
+  const eventKey = `test:monitor:${id}:${now}`;
+  const payload = {
+    event: 'test.ping',
+    event_id: eventKey,
+    timestamp: now,
+    monitor: {
+      id: monitor.id,
+      name: monitor.name,
+      type: monitor.type,
+      target: monitor.target,
+      display_url: monitor.displayUrl ?? null,
+    },
+    state: {
+      status: 'down',
+      latency_ms: null,
+      http_status: null,
+      error: 'Test alert from Uptimer',
+      location: null,
+    },
+  };
+
+  await Promise.allSettled(
+    channels.map((channel) =>
+      dispatchWebhookToChannel({
+        db: c.env.DB,
+        env: c.env as unknown as Record<string, unknown>,
+        channel,
+        eventType: 'test.ping',
+        eventKey,
+        payload,
+      }),
+    ),
+  );
+
+  const { results: deliveries } = await c.env.DB.prepare(
+    `
+      SELECT channel_id, status, http_status, error
+      FROM notification_deliveries
+      WHERE event_key = ?1
+    `,
+  )
+    .bind(eventKey)
+    .all<{
+      channel_id: number;
+      status: 'success' | 'failed';
+      http_status: number | null;
+      error: string | null;
+    }>();
+
+  const byChannel = new Map((deliveries ?? []).map((row) => [row.channel_id, row]));
+
+  return c.json({
+    event_key: eventKey,
+    channels: channels.length,
+    results: channels.map((channel) => {
+      const delivery = byChannel.get(channel.id);
+      return {
+        channel_id: channel.id,
+        name: channel.name,
+        status: delivery?.status ?? 'failed',
+        http_status: delivery?.http_status ?? null,
+        error: delivery?.error ?? null,
+      };
+    }),
   });
 });
 
@@ -790,7 +1195,11 @@ adminRoutes.post('/monitors/:id/pause', async (c) => {
   await bumpHomepageMonitorGuardVersions(c.env.DB);
   queuePublicHomepageSnapshotRefresh(c);
 
-  return c.json({ monitor: monitorRowToApi(monitor, state ?? null) });
+  const metadataByMonitor = await loadMonitorMetadataByMonitorIds(c.env.DB, [id]);
+
+  return c.json({
+    monitor: monitorRowToApi(monitor, state ?? null, metadataByMonitor.get(id) ?? []),
+  });
 });
 
 adminRoutes.post('/monitors/:id/resume', async (c) => {
@@ -833,7 +1242,11 @@ adminRoutes.post('/monitors/:id/resume', async (c) => {
   await bumpHomepageMonitorGuardVersions(c.env.DB);
   queuePublicHomepageSnapshotRefresh(c);
 
-  return c.json({ monitor: monitorRowToApi(monitor, state ?? null) });
+  const metadataByMonitor = await loadMonitorMetadataByMonitorIds(c.env.DB, [id]);
+
+  return c.json({
+    monitor: monitorRowToApi(monitor, state ?? null, metadataByMonitor.get(id) ?? []),
+  });
 });
 
 type NotificationChannelRow = {
@@ -846,7 +1259,7 @@ type NotificationChannelRow = {
 };
 
 type NotificationChannelInputConfig =
-  | CustomWebhookChannelConfig
+  | Exclude<WebhookChannelConfig, TelegramChannelConfig>
   | TelegramChannelCreateInput
   | TelegramChannelPatchInput;
 
@@ -855,7 +1268,9 @@ type TelegramApiChannelConfig = Omit<TelegramChannelConfig, 'bot_token_encrypted
   bot_token_source: 'stored' | 'secret_ref';
 };
 
-type NotificationChannelApiConfig = CustomWebhookChannelConfig | TelegramApiChannelConfig;
+type NotificationChannelApiConfig =
+  | Exclude<WebhookChannelConfig, TelegramChannelConfig>
+  | TelegramApiChannelConfig;
 
 function isTelegramInputConfig(
   config: NotificationChannelInputConfig,
@@ -1084,6 +1499,7 @@ adminRoutes.delete('/notification-channels/:id', async (c) => {
         WHERE channel_id = ?1
       `,
     ).bind(id),
+    c.env.DB.prepare('DELETE FROM notification_group_channels WHERE channel_id = ?1').bind(id),
     c.env.DB.prepare(
       `
         DELETE FROM notification_channels
@@ -1184,6 +1600,7 @@ type IncidentUpdateRow = {
   status: string | null;
   message: string;
   created_at: number;
+  attachments: string;
 };
 
 type IncidentMonitorLinkRow = {
@@ -1224,6 +1641,7 @@ function incidentUpdateRowToApi(row: IncidentUpdateRow) {
     status: row.status === null ? null : toIncidentStatus(row.status),
     message: row.message,
     created_at: row.created_at,
+    attachments: attachmentNamesSchema.parse(parseJsonColumn(row.attachments)),
   };
 }
 
@@ -1250,24 +1668,25 @@ async function listIncidentUpdatesByIncidentId(
   incidentIds: number[],
 ): Promise<Map<number, IncidentUpdateRow[]>> {
   const byIncident = new Map<number, IncidentUpdateRow[]>();
-  if (incidentIds.length === 0) return byIncident;
 
-  const placeholders = incidentIds.map((_, idx) => `?${idx + 1}`).join(', ');
-  const sql = `
-    SELECT id, incident_id, status, message, created_at
-    FROM incident_updates
-    WHERE incident_id IN (${placeholders})
-    ORDER BY incident_id, created_at, id
-  `;
+  for (const ids of chunkPositiveIntegerIds(incidentIds, 100)) {
+    const placeholders = buildNumberedPlaceholders(ids.length);
+    const sql = `
+      SELECT id, incident_id, status, message, created_at, attachments
+      FROM incident_updates
+      WHERE incident_id IN (${placeholders})
+      ORDER BY incident_id, created_at, id
+    `;
 
-  const { results } = await db
-    .prepare(sql)
-    .bind(...incidentIds)
-    .all<IncidentUpdateRow>();
-  for (const r of results ?? []) {
-    const existing = byIncident.get(r.incident_id) ?? [];
-    existing.push(r);
-    byIncident.set(r.incident_id, existing);
+    const { results } = await db
+      .prepare(sql)
+      .bind(...ids)
+      .all<IncidentUpdateRow>();
+    for (const r of results ?? []) {
+      const existing = byIncident.get(r.incident_id) ?? [];
+      existing.push(r);
+      byIncident.set(r.incident_id, existing);
+    }
   }
   return byIncident;
 }
@@ -1277,24 +1696,25 @@ async function listIncidentMonitorIdsByIncidentId(
   incidentIds: number[],
 ): Promise<Map<number, number[]>> {
   const byIncident = new Map<number, number[]>();
-  if (incidentIds.length === 0) return byIncident;
 
-  const placeholders = incidentIds.map((_, idx) => `?${idx + 1}`).join(', ');
-  const sql = `
-    SELECT incident_id, monitor_id
-    FROM incident_monitors
-    WHERE incident_id IN (${placeholders})
-    ORDER BY incident_id, monitor_id
-  `;
+  for (const ids of chunkPositiveIntegerIds(incidentIds, 100)) {
+    const placeholders = buildNumberedPlaceholders(ids.length);
+    const sql = `
+      SELECT incident_id, monitor_id
+      FROM incident_monitors
+      WHERE incident_id IN (${placeholders})
+      ORDER BY incident_id, monitor_id
+    `;
 
-  const { results } = await db
-    .prepare(sql)
-    .bind(...incidentIds)
-    .all<IncidentMonitorLinkRow>();
-  for (const r of results ?? []) {
-    const existing = byIncident.get(r.incident_id) ?? [];
-    existing.push(r.monitor_id);
-    byIncident.set(r.incident_id, existing);
+    const { results } = await db
+      .prepare(sql)
+      .bind(...ids)
+      .all<IncidentMonitorLinkRow>();
+    for (const r of results ?? []) {
+      const existing = byIncident.get(r.incident_id) ?? [];
+      existing.push(r.monitor_id);
+      byIncident.set(r.incident_id, existing);
+    }
   }
 
   return byIncident;
@@ -1418,6 +1838,694 @@ adminRoutes.post('/notification-channels/:id/test', async (c) => {
   });
 });
 
+adminRoutes.get('/notification-deliveries', async (c) => {
+  const limit = z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .default(50)
+    .parse(c.req.query('limit'));
+  const status = z
+    .enum(['all', 'success', 'failed'])
+    .optional()
+    .default('all')
+    .parse(c.req.query('status'));
+
+  const filters = ['1 = 1'];
+  const bindings: unknown[] = [];
+  if (status !== 'all') {
+    bindings.push(status);
+    filters.push(`d.status = ?${bindings.length}`);
+  }
+  bindings.push(limit);
+
+  const { results } = await c.env.DB.prepare(
+    `
+      SELECT d.id, d.event_key, d.event_type, d.channel_id, c.name AS channel_name,
+             d.status, d.http_status, d.error, d.attempts, d.next_attempt_at, d.created_at,
+             CASE WHEN d.payload_json IS NULL THEN 0 ELSE 1 END AS can_retry
+      FROM notification_deliveries d
+      LEFT JOIN notification_channels c ON c.id = d.channel_id
+      WHERE ${filters.join(' AND ')}
+      ORDER BY d.id DESC
+      LIMIT ?${bindings.length}
+    `,
+  )
+    .bind(...bindings)
+    .all<{
+      id: number;
+      event_key: string;
+      event_type: string | null;
+      channel_id: number;
+      channel_name: string | null;
+      status: 'success' | 'failed';
+      http_status: number | null;
+      error: string | null;
+      attempts: number;
+      next_attempt_at: number | null;
+      created_at: number;
+      can_retry: number;
+    }>();
+
+  return c.json({
+    deliveries: (results ?? []).map((row) => ({
+      id: row.id,
+      event_key: row.event_key,
+      event_type: row.event_type,
+      channel_id: row.channel_id,
+      channel_name: row.channel_name,
+      status: row.status,
+      http_status: row.http_status,
+      error: row.error,
+      attempts: row.attempts,
+      next_attempt_at: row.next_attempt_at,
+      created_at: row.created_at,
+      can_retry: row.status === 'failed' && row.can_retry === 1,
+    })),
+  });
+});
+
+adminRoutes.post('/notification-deliveries/:id/retry', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+
+  const row = await c.env.DB.prepare(
+    `
+      SELECT d.id, d.event_key, d.event_type, d.payload_json, d.status, d.channel_id,
+             ch.name AS channel_name, ch.config_json, ch.is_active, ch.type
+      FROM notification_deliveries d
+      LEFT JOIN notification_channels ch ON ch.id = d.channel_id
+      WHERE d.id = ?1
+    `,
+  )
+    .bind(id)
+    .first<{
+      id: number;
+      event_key: string;
+      event_type: string | null;
+      payload_json: string | null;
+      status: string;
+      channel_id: number;
+      channel_name: string | null;
+      config_json: string | null;
+      is_active: number | null;
+      type: string | null;
+    }>();
+
+  if (!row) {
+    throw new AppError(404, 'NOT_FOUND', 'Delivery not found');
+  }
+  if (row.status === 'success') {
+    throw new AppError(409, 'CONFLICT', 'Delivery already succeeded');
+  }
+  if (!row.payload_json || !row.event_type) {
+    throw new AppError(409, 'CONFLICT', 'Delivery payload is not available for retry');
+  }
+  if (!row.config_json || row.is_active !== 1 || row.type !== 'webhook') {
+    throw new AppError(409, 'CONFLICT', 'Notification channel is not active');
+  }
+
+  const channel = {
+    id: row.channel_id,
+    name: row.channel_name ?? `#${row.channel_id}`,
+    config: parseDbJson(webhookChannelConfigSchema, row.config_json, { field: 'config_json' }),
+  };
+
+  let payload: unknown;
+  try {
+    payload = JSON.parse(row.payload_json);
+  } catch {
+    throw new AppError(409, 'CONFLICT', 'Delivery payload is not valid JSON');
+  }
+
+  await dispatchWebhookToChannel({
+    db: c.env.DB,
+    env: c.env as unknown as Record<string, unknown>,
+    channel,
+    eventType: row.event_type,
+    eventKey: row.event_key,
+    payload,
+    retryFailed: true,
+    forceRetry: true,
+  });
+
+  const delivery = await c.env.DB.prepare(
+    `
+      SELECT id, status, http_status, error, attempts, next_attempt_at, created_at
+      FROM notification_deliveries
+      WHERE id = ?1
+    `,
+  )
+    .bind(id)
+    .first<{
+      id: number;
+      status: string;
+      http_status: number | null;
+      error: string | null;
+      attempts: number;
+      next_attempt_at: number | null;
+      created_at: number;
+    }>();
+
+  return c.json({ delivery });
+});
+
+adminRoutes.get('/events', async (c) => {
+  const limit = z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .default(50)
+    .parse(c.req.query('limit'));
+  const cursor = z.coerce.number().int().positive().optional().parse(c.req.query('cursor'));
+  const monitorId = z.coerce.number().int().positive().optional().parse(c.req.query('monitor_id'));
+  const status = z
+    .enum(['all', 'open', 'resolved'])
+    .optional()
+    .default('all')
+    .parse(c.req.query('status'));
+  const q = z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .parse(c.req.query('q') || undefined);
+
+  const filters: string[] = [];
+  const bindings: unknown[] = [];
+  if (monitorId !== undefined) {
+    bindings.push(monitorId);
+    filters.push(`o.monitor_id = ?${bindings.length}`);
+  }
+  if (status === 'open') filters.push('o.ended_at IS NULL');
+  if (status === 'resolved') filters.push('o.ended_at IS NOT NULL');
+  if (q) {
+    bindings.push(`%${q}%`);
+    const p = `?${bindings.length}`;
+    filters.push(
+      `(m.name LIKE ${p} OR m.target LIKE ${p} OR o.initial_error LIKE ${p} OR o.last_error LIKE ${p})`,
+    );
+  }
+  if (cursor !== undefined) {
+    bindings.push(cursor);
+    filters.push(`o.id < ?${bindings.length}`);
+  }
+  const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+  bindings.push(limit + 1);
+
+  const { results } = await c.env.DB.prepare(
+    `
+      SELECT
+        o.id, o.monitor_id, o.started_at, o.ended_at, o.initial_error, o.last_error,
+        m.name AS monitor_name, m.type AS monitor_type, m.target AS monitor_target
+      FROM outages o
+      INNER JOIN monitors m ON m.id = o.monitor_id
+      ${where}
+      ORDER BY o.id DESC
+      LIMIT ?${bindings.length}
+    `,
+  )
+    .bind(...bindings)
+    .all<{
+      id: number;
+      monitor_id: number;
+      started_at: number;
+      ended_at: number | null;
+      initial_error: string | null;
+      last_error: string | null;
+      monitor_name: string;
+      monitor_type: string;
+      monitor_target: string;
+    }>();
+
+  const rows = results ?? [];
+  const page = rows.slice(0, limit);
+
+  return c.json({
+    events: page.map((row) => ({
+      id: row.id,
+      monitor_id: row.monitor_id,
+      monitor_name: row.monitor_name,
+      monitor_type: row.monitor_type,
+      monitor_target: row.monitor_target,
+      started_at: row.started_at,
+      ended_at: row.ended_at,
+      initial_error: row.initial_error,
+      last_error: row.last_error,
+    })),
+    next_cursor: rows.length > limit ? (page[page.length - 1]?.id ?? null) : null,
+  });
+});
+
+/** Reads a JSON column written by the scheduler; malformed values degrade to null. */
+function parseJsonColumn<T>(value: string | null): T | null {
+  if (!value) return null;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return null;
+  }
+}
+
+adminRoutes.get('/events/:id', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+
+  const event = await c.env.DB.prepare(
+    `
+      SELECT
+        o.id, o.monitor_id, o.started_at, o.ended_at, o.initial_error, o.last_error, o.ai_summary,
+        o.title,
+        m.name AS monitor_name, m.type AS monitor_type, m.target AS monitor_target
+      FROM outages o
+      INNER JOIN monitors m ON m.id = o.monitor_id
+      WHERE o.id = ?1
+    `,
+  )
+    .bind(id)
+    .first<{
+      id: number;
+      monitor_id: number;
+      started_at: number;
+      ended_at: number | null;
+      initial_error: string | null;
+      last_error: string | null;
+      monitor_name: string;
+      monitor_type: string;
+      monitor_target: string;
+      ai_summary: string | null;
+      title: string | null;
+    }>();
+
+  if (!event) {
+    throw new AppError(404, 'NOT_FOUND', 'Event not found');
+  }
+
+  const windowEnd = event.ended_at ?? Math.floor(Date.now() / 1000);
+  const screenshot = await c.env.DB.prepare(
+    `
+      SELECT content_type, width, height, captured_at, bytes IS NOT NULL AS has_image
+      FROM outage_screenshots
+      WHERE outage_id = ?1
+    `,
+  )
+    .bind(id)
+    .first<{
+      content_type: string;
+      width: number | null;
+      height: number | null;
+      captured_at: number;
+      has_image: number;
+    }>();
+
+  const metadata = await c.env.DB.prepare(
+    `
+      SELECT id, key, value, created_at
+      FROM outage_metadata
+      WHERE outage_id = ?1
+      ORDER BY id ASC
+      LIMIT 100
+    `,
+  )
+    .bind(id)
+    .all<{ id: number; key: string; value: string; created_at: number }>();
+
+  const updates = await c.env.DB.prepare(
+    `
+      SELECT id, body, created_at,
+        (SELECT json_group_array(json_object('name', json_extract(value, '$.name')))
+         FROM json_each(outage_updates.attachments)) AS attachments
+      FROM outage_updates
+      WHERE outage_id = ?1
+      ORDER BY created_at ASC, id ASC
+      LIMIT 200
+    `,
+  )
+    .bind(id)
+    .all<{ id: number; body: string; created_at: number; attachments: string }>();
+
+  const { results } = await c.env.DB.prepare(
+    `
+      SELECT
+        checked_at, status, latency_ms, http_status, error, location,
+        effective_url, redirect_count, response_headers, timings, resolved_ips
+      FROM check_results
+      WHERE monitor_id = ?1 AND checked_at >= ?2 AND checked_at <= ?3
+      ORDER BY checked_at ASC
+      LIMIT 200
+    `,
+  )
+    .bind(event.monitor_id, event.started_at, windowEnd)
+    .all<{
+      checked_at: number;
+      status: string;
+      latency_ms: number | null;
+      http_status: number | null;
+      error: string | null;
+      location: string | null;
+      effective_url: string | null;
+      redirect_count: number | null;
+      response_headers: string | null;
+      timings: string | null;
+      resolved_ips: string | null;
+    }>();
+
+  return c.json({
+    event: {
+      id: event.id,
+      monitor_id: event.monitor_id,
+      monitor_name: event.monitor_name,
+      monitor_type: event.monitor_type,
+      monitor_target: event.monitor_target,
+      started_at: event.started_at,
+      ended_at: event.ended_at,
+      initial_error: event.initial_error,
+      last_error: event.last_error,
+      ai_summary: event.ai_summary,
+      title: event.title,
+    },
+    screenshot: screenshot
+      ? {
+          content_type: screenshot.content_type,
+          width: screenshot.width,
+          height: screenshot.height,
+          captured_at: screenshot.captured_at,
+          has_image: screenshot.has_image === 1,
+        }
+      : null,
+    metadata: (metadata.results ?? []).map((row) => ({
+      id: row.id,
+      key: row.key,
+      value: row.value,
+      created_at: row.created_at,
+    })),
+    updates: (updates.results ?? []).map((row) => ({
+      id: row.id,
+      body: row.body,
+      created_at: row.created_at,
+      attachments: attachmentNamesSchema.parse(parseJsonColumn(row.attachments)),
+    })),
+    checks: (results ?? []).map((row) => ({
+      checked_at: row.checked_at,
+      status: row.status,
+      latency_ms: row.latency_ms,
+      http_status: row.http_status,
+      error: row.error,
+      location: row.location,
+      effective_url: row.effective_url,
+      redirect_count: row.redirect_count,
+      response_headers: parseJsonColumn(row.response_headers),
+      timings: parseJsonColumn(row.timings),
+      resolved_ips: parseJsonColumn(row.resolved_ips),
+    })),
+  });
+});
+
+const eventUpdateSchema = z.object({
+  body: z.string().trim().min(1).max(4000),
+  attachments: updateAttachmentsSchema.default([]),
+});
+
+adminRoutes.post('/events/:id/updates', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  const payload = eventUpdateSchema.parse(await c.req.json());
+
+  const event = await c.env.DB.prepare('SELECT id FROM outages WHERE id = ?1').bind(id).first();
+  if (!event) {
+    throw new AppError(404, 'NOT_FOUND', 'Event not found');
+  }
+
+  const createdAt = Math.floor(Date.now() / 1000);
+  const inserted = await c.env.DB.prepare(
+    'INSERT INTO outage_updates (outage_id, body, created_at, attachments) VALUES (?1, ?2, ?3, ?4) RETURNING id',
+  )
+    .bind(id, payload.body, createdAt, JSON.stringify(payload.attachments))
+    .first<{ id: number }>();
+
+  return c.json({
+    update: {
+      id: inserted?.id ?? 0,
+      body: payload.body,
+      created_at: createdAt,
+      attachments: payload.attachments.map(({ name }) => ({ name })),
+    },
+  });
+});
+
+adminRoutes.get('/events/:id/updates/:updateId/attachments/:index', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  const updateId = z.coerce.number().int().positive().parse(c.req.param('updateId'));
+  const index = z.coerce.number().int().min(0).max(2).parse(c.req.param('index'));
+  const row = await c.env.DB.prepare(
+    'SELECT attachments FROM outage_updates WHERE id = ?1 AND outage_id = ?2',
+  )
+    .bind(updateId, id)
+    .first<{ attachments: string }>();
+  const attachment = row && updateAttachmentsSchema.parse(parseJsonColumn(row.attachments))[index];
+  if (!attachment) throw new AppError(404, 'NOT_FOUND', 'Attachment not found');
+  const binary = atob(attachment.data);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new Response(bytes, {
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': 'attachment',
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'no-store',
+    },
+  });
+});
+
+const eventRenameSchema = z.object({
+  title: z.string().trim().max(200).nullable(),
+});
+
+const eventMetadataSchema = z.object({
+  key: z.string().trim().min(1).max(100),
+  value: z.string().trim().max(1000),
+});
+
+async function requireEvent(c: { env: Env }, id: number): Promise<void> {
+  const row = await c.env.DB.prepare('SELECT id FROM outages WHERE id = ?1').bind(id).first();
+  if (!row) {
+    throw new AppError(404, 'NOT_FOUND', 'Event not found');
+  }
+}
+
+adminRoutes.patch('/events/:id', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  const payload = eventRenameSchema.parse(await c.req.json());
+  await requireEvent(c, id);
+
+  const title = payload.title && payload.title.length > 0 ? payload.title : null;
+  await c.env.DB.prepare('UPDATE outages SET title = ?1 WHERE id = ?2').bind(title, id).run();
+
+  return c.json({ event: { id, title } });
+});
+
+adminRoutes.post('/events/:id/reopen', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  await requireEvent(c, id);
+
+  await c.env.DB.prepare('UPDATE outages SET ended_at = NULL WHERE id = ?1').bind(id).run();
+
+  return c.json({ event: { id, ended_at: null } });
+});
+
+adminRoutes.delete('/events/:id', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  await requireEvent(c, id);
+
+  await c.env.DB.batch([
+    c.env.DB.prepare('DELETE FROM outage_updates WHERE outage_id = ?1').bind(id),
+    c.env.DB.prepare('DELETE FROM outage_metadata WHERE outage_id = ?1').bind(id),
+    c.env.DB.prepare('DELETE FROM outages WHERE id = ?1').bind(id),
+  ]);
+
+  return c.json({ deleted: true });
+});
+
+adminRoutes.delete('/events/:id/updates/:updateId', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  const updateId = z.coerce.number().int().positive().parse(c.req.param('updateId'));
+  await requireEvent(c, id);
+
+  await c.env.DB.prepare('DELETE FROM outage_updates WHERE id = ?1 AND outage_id = ?2')
+    .bind(updateId, id)
+    .run();
+
+  return c.json({ deleted: true });
+});
+
+adminRoutes.post('/events/:id/metadata', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  const payload = eventMetadataSchema.parse(await c.req.json());
+  await requireEvent(c, id);
+
+  const createdAt = Math.floor(Date.now() / 1000);
+  const inserted = await c.env.DB.prepare(
+    'INSERT INTO outage_metadata (outage_id, key, value, created_at) VALUES (?1, ?2, ?3, ?4) RETURNING id',
+  )
+    .bind(id, payload.key, payload.value, createdAt)
+    .first<{ id: number }>();
+
+  return c.json({
+    metadata: {
+      id: inserted?.id ?? 0,
+      key: payload.key,
+      value: payload.value,
+      created_at: createdAt,
+    },
+  });
+});
+
+adminRoutes.delete('/events/:id/metadata/:metadataId', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  const metadataId = z.coerce.number().int().positive().parse(c.req.param('metadataId'));
+  await requireEvent(c, id);
+
+  await c.env.DB.prepare('DELETE FROM outage_metadata WHERE id = ?1 AND outage_id = ?2')
+    .bind(metadataId, id)
+    .run();
+
+  return c.json({ deleted: true });
+});
+
+adminRoutes.get('/events/:id/screenshot', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  await requireEvent(c, id);
+
+  const shot = await loadOutageScreenshot(c.env, id);
+  if (!shot?.bytes) {
+    return c.json({ screenshot: null, captured_at: shot?.capturedAt ?? null });
+  }
+
+  return new Response(shot.bytes as BodyInit, {
+    headers: {
+      'Content-Type': shot.contentType,
+      'Cache-Control': 'private, max-age=60',
+      'Content-Length': String(shot.bytes.byteLength),
+    },
+  });
+});
+
+adminRoutes.post('/events/:id/screenshot', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+
+  const event = await c.env.DB.prepare(
+    `
+      SELECT o.id, o.monitor_id, m.target AS monitor_target, m.type AS monitor_type
+      FROM outages o
+      INNER JOIN monitors m ON m.id = o.monitor_id
+      WHERE o.id = ?1
+    `,
+  )
+    .bind(id)
+    .first<{ id: number; monitor_id: number; monitor_target: string; monitor_type: string }>();
+
+  if (!event) {
+    throw new AppError(404, 'NOT_FOUND', 'Event not found');
+  }
+
+  const shot = await captureOutageScreenshot(c.env, {
+    outageId: id,
+    target: event.monitor_target,
+  });
+
+  return c.json({
+    screenshot: shot
+      ? {
+          content_type: shot.contentType,
+          width: shot.width,
+          height: shot.height,
+          captured_at: shot.capturedAt,
+        }
+      : null,
+  });
+});
+
+adminRoutes.post('/events/:id/postmortem', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+
+  const event = await c.env.DB.prepare(
+    `
+      SELECT
+        o.id, o.monitor_id, o.started_at, o.ended_at, o.initial_error, o.last_error, o.ai_summary,
+        o.title,
+        m.name AS monitor_name, m.type AS monitor_type, m.target AS monitor_target
+      FROM outages o
+      INNER JOIN monitors m ON m.id = o.monitor_id
+      WHERE o.id = ?1
+    `,
+  )
+    .bind(id)
+    .first<{
+      id: number;
+      monitor_id: number;
+      started_at: number;
+      ended_at: number | null;
+      initial_error: string | null;
+      last_error: string | null;
+      ai_summary: string | null;
+      monitor_name: string;
+      monitor_type: string;
+      monitor_target: string;
+    }>();
+
+  if (!event) {
+    throw new AppError(404, 'NOT_FOUND', 'Event not found');
+  }
+
+  if (event.ai_summary) {
+    return c.json({ ai_summary: event.ai_summary });
+  }
+
+  const windowEnd = event.ended_at ?? Math.floor(Date.now() / 1000);
+  const { results } = await c.env.DB.prepare(
+    `
+      SELECT checked_at, status, latency_ms, http_status, error, location
+      FROM check_results
+      WHERE monitor_id = ?1 AND checked_at >= ?2 AND checked_at <= ?3
+      ORDER BY checked_at ASC
+      LIMIT 200
+    `,
+  )
+    .bind(event.monitor_id, event.started_at, windowEnd)
+    .all<{
+      checked_at: number;
+      status: string;
+      latency_ms: number | null;
+      http_status: number | null;
+      error: string | null;
+      location: string | null;
+    }>();
+
+  const summary = await generatePostmortem(
+    c.env,
+    {
+      monitorName: event.monitor_name,
+      monitorType: event.monitor_type,
+      monitorTarget: event.monitor_target,
+      startedAt: event.started_at,
+      endedAt: event.ended_at,
+      initialError: event.initial_error,
+      lastError: event.last_error,
+    },
+    results ?? [],
+  );
+
+  if (!summary) {
+    return c.json({ ai_summary: null });
+  }
+
+  await c.env.DB.prepare('UPDATE outages SET ai_summary = ?1 WHERE id = ?2')
+    .bind(summary, id)
+    .run();
+
+  return c.json({ ai_summary: summary });
+});
+
 adminRoutes.get('/incidents', async (c) => {
   const limit = z.coerce
     .number()
@@ -1427,22 +2535,69 @@ adminRoutes.get('/incidents', async (c) => {
     .optional()
     .default(50)
     .parse(c.req.query('limit'));
+  const offset = z.coerce
+    .number()
+    .int()
+    .min(0)
+    .max(1_000_000)
+    .optional()
+    .default(0)
+    .parse(c.req.query('offset'));
+  const monitorId = z.coerce.number().int().positive().optional().parse(c.req.query('monitor_id'));
+  const status = z
+    .enum(['investigating', 'identified', 'monitoring', 'resolved'])
+    .optional()
+    .parse(c.req.query('status'));
+  const q = z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .parse(c.req.query('q') || undefined);
+
+  const filters: string[] = [];
+  const bindings: unknown[] = [];
+  if (monitorId !== undefined) {
+    bindings.push(monitorId);
+    filters.push(
+      `id IN (SELECT incident_id FROM incident_monitors WHERE monitor_id = ?${bindings.length})`,
+    );
+  }
+  if (status !== undefined) {
+    bindings.push(status);
+    filters.push(`status = ?${bindings.length}`);
+  }
+  if (q) {
+    bindings.push(`%${q}%`);
+    const p = `?${bindings.length}`;
+    filters.push(
+      `(title LIKE ${p} OR message LIKE ${p} OR id IN (
+        SELECT im.incident_id FROM incident_monitors im
+        INNER JOIN monitors m ON m.id = im.monitor_id
+        WHERE m.name LIKE ${p}
+      ))`,
+    );
+  }
+  const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
+  bindings.push(limit + 1, offset);
 
   const { results: incidentRows } = await c.env.DB.prepare(
     `
       SELECT id, title, status, impact, message, started_at, resolved_at
       FROM incidents
+      ${where}
       ORDER BY
         CASE WHEN status != 'resolved' THEN 0 ELSE 1 END,
         started_at DESC,
         id DESC
-      LIMIT ?1
+      LIMIT ?${bindings.length - 1} OFFSET ?${bindings.length}
     `,
   )
-    .bind(limit)
+    .bind(...bindings)
     .all<IncidentRow>();
 
-  const incidentsList = incidentRows ?? [];
+  const rows = incidentRows ?? [];
+  const incidentsList = rows.slice(0, limit);
   const monitorIdsByIncidentId = await listIncidentMonitorIdsByIncidentId(
     c.env.DB,
     incidentsList.map((r) => r.id),
@@ -1460,6 +2615,43 @@ adminRoutes.get('/incidents', async (c) => {
         monitorIdsByIncidentId.get(r.id) ?? [],
       ),
     ),
+    next_offset: rows.length > limit ? offset + limit : null,
+  });
+});
+
+adminRoutes.get('/incidents/:id', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  const row = await c.env.DB.prepare(
+    `
+      SELECT id, title, status, impact, message, started_at, resolved_at
+      FROM incidents
+      WHERE id = ?1
+    `,
+  )
+    .bind(id)
+    .first<IncidentRow>();
+
+  if (!row) {
+    throw new AppError(404, 'NOT_FOUND', 'Incident not found');
+  }
+
+  const monitorIdsByIncidentId = await listIncidentMonitorIdsByIncidentId(c.env.DB, [id]);
+  const updatesByIncidentId = await listIncidentUpdatesByIncidentId(c.env.DB, [id]);
+  const relatedMonitors = await getDb(c.env)
+    .select({ id: monitors.id, name: monitors.name })
+    .from(incidentMonitors)
+    .innerJoin(monitors, eq(monitors.id, incidentMonitors.monitorId))
+    .where(eq(incidentMonitors.incidentId, id))
+    .orderBy(asc(incidentMonitors.monitorId))
+    .all();
+
+  return c.json({
+    incident: incidentRowToApi(
+      row,
+      updatesByIncidentId.get(id) ?? [],
+      monitorIdsByIncidentId.get(id) ?? [],
+    ),
+    monitors: relatedMonitors,
   });
 });
 
@@ -1567,12 +2759,12 @@ adminRoutes.post('/incidents/:id/updates', async (c) => {
 
   const updateRow = await c.env.DB.prepare(
     `
-      INSERT INTO incident_updates (incident_id, status, message, created_at)
-      VALUES (?1, ?2, ?3, ?4)
-      RETURNING id, incident_id, status, message, created_at
+      INSERT INTO incident_updates (incident_id, status, message, created_at, attachments)
+      VALUES (?1, ?2, ?3, ?4, ?5)
+      RETURNING id, incident_id, status, message, created_at, attachments
     `,
   )
-    .bind(id, input.status ?? null, input.message, now)
+    .bind(id, input.status ?? null, input.message, now, JSON.stringify(input.attachments))
     .first<IncidentUpdateRow>();
 
   if (!updateRow) {
@@ -1641,6 +2833,29 @@ adminRoutes.post('/incidents/:id/updates', async (c) => {
   });
 });
 
+adminRoutes.get('/incidents/:id/updates/:updateId/attachments/:index', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  const updateId = z.coerce.number().int().positive().parse(c.req.param('updateId'));
+  const index = z.coerce.number().int().min(0).max(2).parse(c.req.param('index'));
+  const row = await c.env.DB.prepare(
+    'SELECT attachments FROM incident_updates WHERE id = ?1 AND incident_id = ?2',
+  )
+    .bind(updateId, id)
+    .first<{ attachments: string }>();
+  const attachment = row && updateAttachmentsSchema.parse(parseJsonColumn(row.attachments))[index];
+  if (!attachment) throw new AppError(404, 'NOT_FOUND', 'Attachment not found');
+  const binary = atob(attachment.data);
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+  return new Response(bytes, {
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'Content-Disposition': 'attachment',
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'no-store',
+    },
+  });
+});
+
 adminRoutes.patch('/incidents/:id/resolve', async (c) => {
   const id = z.coerce.number().int().positive().parse(c.req.param('id'));
 
@@ -1688,7 +2903,7 @@ adminRoutes.patch('/incidents/:id/resolve', async (c) => {
     `
       INSERT INTO incident_updates (incident_id, status, message, created_at)
       VALUES (?1, 'resolved', ?2, ?3)
-      RETURNING id, incident_id, status, message, created_at
+      RETURNING id, incident_id, status, message, created_at, attachments
     `,
   )
     .bind(id, message, now)

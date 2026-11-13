@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { notificationEventTypeSchema } from '@uptimer/db';
+
 import {
   defaultMessageForEvent,
   renderJsonTemplate,
@@ -110,5 +112,13 @@ describe('notify/template', () => {
     expect(defaultMessageForEvent('custom.event', { event: circular })).toBe(
       'Uptimer event: [object Object]',
     );
+  });
+
+  it('supports probe offline and recovery notifications', () => {
+    const probe = { name: 'EdgeOne', region: 'cn' };
+    expect(notificationEventTypeSchema.parse('probe.offline')).toBe('probe.offline');
+    expect(notificationEventTypeSchema.parse('probe.online')).toBe('probe.online');
+    expect(defaultMessageForEvent('probe.offline', { probe })).toBe('Probe OFFLINE: EdgeOne (cn)');
+    expect(defaultMessageForEvent('probe.online', { probe })).toBe('Probe ONLINE: EdgeOne (cn)');
   });
 });

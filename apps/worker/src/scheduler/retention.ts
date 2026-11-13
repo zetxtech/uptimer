@@ -32,6 +32,30 @@ const DELETE_PROBE_CHECK_RESULTS_SQL = `
   )
 `;
 
+const DELETE_PROBE_HEALTH_EVENTS_SQL = `
+  DELETE FROM probe_health_events
+  WHERE event_key IN (
+    SELECT event_key FROM probe_health_events
+    WHERE occurred_at < ?1
+    ORDER BY occurred_at
+    LIMIT ?2
+  )
+`;
+
+// Delivery rows only exist to deduplicate sends and back the delivery log; 30 days is enough to
+// investigate an incident and keeps the table from growing without bound.
+const NOTIFICATION_DELIVERY_RETENTION_SECONDS = 30 * 86400;
+
+const DELETE_NOTIFICATION_DELIVERIES_SQL = `
+  DELETE FROM notification_deliveries
+  WHERE id IN (
+    SELECT id FROM notification_deliveries
+    WHERE created_at < ?1
+    ORDER BY created_at
+    LIMIT ?2
+  )
+`;
+
 /** Table names come from a fixed allowlist, never from input. */
 async function deleteOlderThan(db: D1Database, sql: string, cutoff: number): Promise<number> {
   let totalDeleted = 0;
@@ -62,8 +86,14 @@ export async function runRetention(env: Env, controller: ScheduledController): P
 
   const totalDeleted = await deleteOlderThan(env.DB, DELETE_CHECK_RESULTS_SQL, cutoff);
   const probeDeleted = await deleteOlderThan(env.DB, DELETE_PROBE_CHECK_RESULTS_SQL, cutoff);
+  const probeEventsDeleted = await deleteOlderThan(env.DB, DELETE_PROBE_HEALTH_EVENTS_SQL, cutoff);
+  const deliveriesDeleted = await deleteOlderThan(
+    env.DB,
+    DELETE_NOTIFICATION_DELIVERIES_SQL,
+    now - NOTIFICATION_DELIVERY_RETENTION_SECONDS,
+  );
 
   console.log(
-    `retention: deleted=${totalDeleted} probe_deleted=${probeDeleted} cutoff=${cutoff} days=${retentionDays}`,
+    `retention: deleted=${totalDeleted} probe_deleted=${probeDeleted} probe_events_deleted=${probeEventsDeleted} deliveries_deleted=${deliveriesDeleted} cutoff=${cutoff} days=${retentionDays}`,
   );
 }

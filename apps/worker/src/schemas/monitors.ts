@@ -2,6 +2,8 @@ import {
   expectedStatusJsonSchema,
   forbiddenStatusJsonSchema,
   httpHeadersJsonSchema,
+  maintenanceWindowJsonSchema,
+  notificationChannelIdsJsonSchema,
 } from '@uptimer/db';
 import { z } from 'zod';
 
@@ -15,6 +17,36 @@ const monitorGroupNameSchema = z.string().trim().min(1).max(64);
 const monitorGroupSortOrderSchema = z.number().int().min(-100_000).max(100_000);
 const monitorSortOrderSchema = z.number().int().min(-100_000).max(100_000);
 const httpResponseMatchModeSchema = z.enum(HTTP_RESPONSE_MATCH_MODES);
+// Per-monitor overrides for the state machine thresholds; null clears the override.
+const stateThresholdSchema = z.number().int().min(1).max(10);
+// Extra silence allowed on top of interval_sec for heartbeat monitors; null = default policy.
+const heartbeatGraceSchema = z.number().int().min(0).max(86_400).nullable().optional();
+// Explicit channel selection; null = every enabled channel, empty list is rejected so a monitor
+// can never be saved into a state where nothing could ever reach the operator.
+const notificationChannelIdsSchema = notificationChannelIdsJsonSchema.min(1).nullable().optional();
+// Recurring daily maintenance window; null removes the window.
+const maintenanceWindowSchema = maintenanceWindowJsonSchema.nullable().optional();
+const monitorMetadataEntrySchema = z.object({
+  key: z.string().trim().min(1).max(64),
+  value: z.string().max(256),
+});
+const monitorMetadataSchema = z
+  .array(monitorMetadataEntrySchema)
+  .max(20)
+  .superRefine((entries, ctx) => {
+    const seen = new Set<string>();
+    for (let index = 0; index < entries.length; index += 1) {
+      const key = entries[index]?.key ?? '';
+      if (seen.has(key)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: [index, 'key'],
+          message: 'duplicate metadata key',
+        });
+      }
+      seen.add(key);
+    }
+  });
 const displayUrlSchema = z.preprocess(
   (value) => {
     if (typeof value !== 'string') return value;
@@ -39,8 +71,9 @@ const displayUrlSchema = z.preprocess(
 export const createMonitorInputSchema = z
   .object({
     name: z.string().min(1),
-    type: z.enum(['http', 'tcp']),
-    target: z.string().min(1),
+    type: z.enum(['http', 'tcp', 'heartbeat']),
+    // Heartbeat monitors are pinged by the job they watch, so they carry no target.
+    target: z.string().min(1).optional(),
     display_url: displayUrlSchema,
 
     interval_sec: z.number().int().min(60).optional(),
@@ -63,12 +96,55 @@ export const createMonitorInputSchema = z
     show_on_status_page: z.boolean().optional(),
     is_active: z.boolean().optional(),
     probe_mode: z.enum(['worker', 'multi_region']).optional(),
+
+    failures_to_down_from_up: stateThresholdSchema.nullable().optional(),
+    successes_to_up_from_down: stateThresholdSchema.nullable().optional(),
+    heartbeat_grace_sec: heartbeatGraceSchema,
+
+    notification_channel_ids: notificationChannelIdsSchema,
+    maintenance_window: maintenanceWindowSchema,
+    metadata: monitorMetadataSchema.optional(),
+
+    ssl_expiry_enabled: z.boolean().optional(),
+    domain_expiry_enabled: z.boolean().optional(),
+    keep_cookies: z.boolean().optional(),
   })
   .superRefine((val, ctx) => {
-    const err =
-      val.type === 'http' ? validateHttpTarget(val.target) : validateTcpTarget(val.target);
-    if (err) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: err, path: ['target'] });
+    if (val.type === 'heartbeat') {
+      if (val.target !== undefined && val.target.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'heartbeat monitors do not take a target',
+          path: ['target'],
+        });
+      }
+    } else {
+      const err =
+        val.type === 'http'
+          ? validateHttpTarget(val.target ?? '')
+          : validateTcpTarget(val.target ?? '');
+      if (err) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: err, path: ['target'] });
+      }
+    }
+
+    if (
+      val.type === 'heartbeat' &&
+      (val.http_method !== undefined ||
+        val.http_headers_json !== undefined ||
+        val.http_body !== undefined ||
+        val.follow_redirects !== undefined ||
+        val.expected_status_json !== undefined ||
+        val.forbidden_status_json !== undefined ||
+        val.response_keyword !== undefined ||
+        val.response_keyword_mode !== undefined ||
+        val.response_forbidden_keyword !== undefined ||
+        val.response_forbidden_keyword_mode !== undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'http_* fields are not allowed for heartbeat monitors',
+      });
     }
 
     if (
@@ -87,6 +163,25 @@ export const createMonitorInputSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'http_* fields are not allowed for tcp monitors',
+      });
+    }
+
+    if (
+      val.type === 'heartbeat' &&
+      (val.ssl_expiry_enabled !== undefined ||
+        val.domain_expiry_enabled !== undefined ||
+        val.keep_cookies !== undefined)
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'heartbeat monitors have no host for expiry checks or cookies',
+      });
+    }
+
+    if (val.type === 'tcp' && val.keep_cookies !== undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'keep_cookies is only supported for http monitors',
       });
     }
 
@@ -132,6 +227,18 @@ export const patchMonitorInputSchema = z
     show_on_status_page: z.boolean().optional(),
     is_active: z.boolean().optional(),
     probe_mode: z.enum(['worker', 'multi_region']).optional(),
+
+    failures_to_down_from_up: stateThresholdSchema.nullable().optional(),
+    successes_to_up_from_down: stateThresholdSchema.nullable().optional(),
+    heartbeat_grace_sec: heartbeatGraceSchema,
+
+    notification_channel_ids: notificationChannelIdsSchema,
+    maintenance_window: maintenanceWindowSchema,
+    metadata: monitorMetadataSchema.optional(),
+
+    ssl_expiry_enabled: z.boolean().optional(),
+    domain_expiry_enabled: z.boolean().optional(),
+    keep_cookies: z.boolean().optional(),
   })
   .superRefine((val, ctx) => {
     for (const issue of validateHttpResponseAssertionConfig({

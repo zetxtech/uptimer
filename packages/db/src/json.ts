@@ -147,6 +147,10 @@ const notificationMessageTemplateSchema = z.string().min(1).max(10_000).optional
 export const notificationEventTypeSchema = z.enum([
   'monitor.down',
   'monitor.up',
+  'monitor.ssl_expiring',
+  'monitor.domain_expiring',
+  'probe.offline',
+  'probe.online',
   'incident.created',
   'incident.updated',
   'incident.resolved',
@@ -265,8 +269,128 @@ export const telegramChannelConfigSchema = z
   });
 export type TelegramChannelConfig = z.infer<typeof telegramChannelConfigSchema>;
 
+const notificationAddressSchema = z.string().trim().email().max(320);
+const notificationRecipientsSchema = z.array(notificationAddressSchema).min(1).max(20);
+const safeSubjectPrefixSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(100)
+  .regex(/^[^\r\n]+$/)
+  .optional();
+const sharedNotificationOptions = {
+  timeout_ms: notificationChannelTimeoutMsSchema,
+  message_template: notificationMessageTemplateSchema,
+  enabled_events: z.array(notificationEventTypeSchema).min(1).optional(),
+};
+
+export const barkChannelConfigSchema = z.object({
+  preset: z.literal('bark'),
+  server_url: z
+    .string()
+    .url()
+    .refine((value) => {
+      try {
+        const url = new URL(value);
+        return (
+          url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash
+        );
+      } catch {
+        return false;
+      }
+    }, 'Bark server must be an HTTPS URL without credentials or query parameters'),
+  device_key_secret_ref: workerSecretRefSchema,
+  ...sharedNotificationOptions,
+});
+export type BarkChannelConfig = z.infer<typeof barkChannelConfigSchema>;
+
+export const resendChannelConfigSchema = z.object({
+  preset: z.literal('resend'),
+  api_key_secret_ref: workerSecretRefSchema,
+  from: notificationAddressSchema,
+  to: notificationRecipientsSchema,
+  subject_prefix: safeSubjectPrefixSchema,
+  ...sharedNotificationOptions,
+});
+export type ResendChannelConfig = z.infer<typeof resendChannelConfigSchema>;
+
+export const smtpChannelConfigSchema = z.object({
+  preset: z.literal('smtp'),
+  host: z
+    .string()
+    .trim()
+    .min(1)
+    .max(253)
+    .regex(/^[A-Za-z0-9.-]+$/),
+  port: z
+    .number()
+    .int()
+    .min(1)
+    .max(65535)
+    .refine((value) => value !== 25, 'SMTP port 25 is not supported'),
+  username: z
+    .string()
+    .trim()
+    .min(1)
+    .max(320)
+    .regex(/^[^\r\n]+$/),
+  password_secret_ref: workerSecretRefSchema,
+  from: notificationAddressSchema,
+  to: notificationRecipientsSchema,
+  subject_prefix: safeSubjectPrefixSchema,
+  ...sharedNotificationOptions,
+});
+export type SmtpChannelConfig = z.infer<typeof smtpChannelConfigSchema>;
+
 export const webhookChannelConfigSchema = z.union([
   customWebhookChannelConfigSchema,
   telegramChannelConfigSchema,
+  barkChannelConfigSchema,
+  resendChannelConfigSchema,
+  smtpChannelConfigSchema,
 ]);
 export type WebhookChannelConfig = z.infer<typeof webhookChannelConfigSchema>;
+
+/**
+ * Recurring daily maintenance window of a monitor. `days` holds ISO weekdays (1 = Monday …
+ * 7 = Sunday) and refers to the day the window starts, so a window that ends before it starts
+ * runs past midnight into the following day. Times are minutes since local midnight in
+ * `timezone` (an IANA zone name).
+ */
+export const maintenanceWindowJsonSchema = z
+  .object({
+    start_minute: z.number().int().min(0).max(1439),
+    end_minute: z.number().int().min(0).max(1439),
+    days: z.array(z.number().int().min(1).max(7)).min(1).max(7),
+    timezone: z.string().trim().min(1).max(64),
+  })
+  .superRefine((val, ctx) => {
+    if (val.start_minute === val.end_minute) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['end_minute'],
+        message: 'maintenance window start and end must differ',
+      });
+    }
+    if (new Set(val.days).size !== val.days.length) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['days'],
+        message: 'maintenance window days must be unique',
+      });
+    }
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: val.timezone });
+    } catch {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['timezone'],
+        message: 'unknown timezone',
+      });
+    }
+  });
+export type MaintenanceWindowJson = z.infer<typeof maintenanceWindowJsonSchema>;
+
+/** Explicit channel selection of a monitor; NULL means every enabled channel is notified. */
+export const notificationChannelIdsJsonSchema = z.array(z.number().int().positive()).max(50);
+export type NotificationChannelIdsJson = z.infer<typeof notificationChannelIdsJsonSchema>;
