@@ -2819,9 +2819,9 @@ export function AdminDashboard() {
                   </ul>
                 </nav>
 
-                <div className="space-y-10">
+                <div className="space-y-[60px]">
                   {settingsSection === 'general' && (
-                    <div className="space-y-10">
+                    <div className="space-y-[60px]">
                       <SettingsGroup
                         title={t('admin_settings.branding.title')}
                         description={t('admin_settings.branding.help')}
@@ -2986,7 +2986,7 @@ export function AdminDashboard() {
                   )}
 
                   {settingsSection === 'monitoring' && (
-                    <div className="space-y-10">
+                    <div className="space-y-[60px]">
                       <SettingsGroup
                         title={t('admin_settings.monitoring.title')}
                         description={t('admin_settings.monitoring.help')}
@@ -3158,6 +3158,23 @@ export function AdminDashboard() {
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Reference settings keep one primary save action at the page bottom. */}
+              <div className="flex items-center gap-3">
+                <Button
+                  disabled={
+                    patchSettingsMut.isPending || Object.keys(unsavedSettingsPatch).length === 0
+                  }
+                  onClick={() => patchSettingsMut.mutate(unsavedSettingsPatch)}
+                >
+                  {patchSettingsMut.isPending
+                    ? t('admin_dashboard.settings_saving')
+                    : t('admin_dashboard.settings_save_changes')}
+                </Button>
+                <span className="text-[12px] text-ink-3">
+                  {t('admin_dashboard.settings_autosave_hint')}
+                </span>
               </div>
             </div>
           )}

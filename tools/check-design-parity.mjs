@@ -136,6 +136,18 @@ const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
 contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
 contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
 assert(
+  'settings section rhythm (60 px)',
+  /space-y-\[60px\]/.test(read('apps/web/src/pages/AdminDashboard.tsx')),
+  'settings sections keep the reference 60px gap',
+);
+assert(
+  'settings save action present',
+  /settings_save_changes/.test(read('apps/web/src/pages/AdminDashboard.tsx')) &&
+    (read('apps/web/src/i18n/messages.ts').match(/'admin_dashboard\.settings_save_changes'/g) ?? [])
+      .length === 5,
+  'bottom save action with all five locales',
+);
+assert(
   'keyboard hint chip (22x22, radius 4)',
   /width:\s*1\.375rem/.test(cssRule('\n.ui-kbd')) &&
     /border-radius:\s*0\.25rem/.test(cssRule('\n.ui-kbd')),
