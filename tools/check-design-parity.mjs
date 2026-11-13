@@ -132,6 +132,13 @@ const cssRule = (selector) => {
 };
 assert('group header height', /height:\s*42px/.test(cssRule('.ui-group-head')), 'height: 42px');
 assert('range segment width', /width:\s*64px/.test(cssRule('.ui-range-segment')), 'width: 64px');
+assert(
+  'admin section rhythm (40px)',
+  /space-y-10/.test(read('apps/web/src/pages/AdminDashboard.tsx')) &&
+    /space-y-10/.test(read('apps/web/src/pages/AdminProbes.tsx')) &&
+    /space-y-10/.test(read('apps/web/src/pages/AdminAnalytics.tsx')),
+  'space-y-10',
+);
 contains(
   'monitor detail action gap',
   read('apps/web/src/pages/AdminMonitorDetail.tsx'),

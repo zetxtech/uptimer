@@ -1896,7 +1896,7 @@ export function AdminDashboard() {
         {/* Tab bodies swap in place with a short fade instead of an instant clear. */}
         <div key={tab} className="ui-page-enter">
           {tab === 'monitors' && (
-            <div className="space-y-5">
+            <div className="space-y-10">
               <AdminPageHeader
                 title={t('admin_dashboard.tab.monitors')}
                 description={t('admin_dashboard.monitors_description')}
@@ -2509,7 +2509,7 @@ export function AdminDashboard() {
           )}
 
           {tab === 'notifications' && (
-            <div className="ui-monitor-page space-y-8">
+            <div className="ui-monitor-page space-y-10">
               <AdminPageHeader
                 title={t('admin_dashboard.tab.notifications')}
                 className="ui-monitor-page-header"
@@ -2674,7 +2674,7 @@ export function AdminDashboard() {
           )}
 
           {tab === 'settings' && (
-            <div className="space-y-8">
+            <div className="space-y-10">
               <header className="flex flex-wrap items-center justify-between gap-4">
                 <h1 className="text-[28px] font-semibold leading-[33.6px] tracking-[-0.02em] text-ink">
                   {t('admin_dashboard.tab.settings')}
@@ -2731,7 +2731,7 @@ export function AdminDashboard() {
                 </div>
               ) : null}
 
-              <div className="space-y-8">
+              <div className="space-y-10">
                 <nav aria-label={t('admin_dashboard.tab.settings')} className="mt-6">
                   <ul className="mb-8 flex overflow-x-auto border-b border-line text-ink-2">
                     {SETTINGS_SECTIONS.map((section) => (
@@ -2758,9 +2758,9 @@ export function AdminDashboard() {
                   </ul>
                 </nav>
 
-                <div className="space-y-8">
+                <div className="space-y-10">
                   {settingsSection === 'general' && (
-                    <div className="space-y-8">
+                    <div className="space-y-10">
                       <SettingsGroup
                         title={t('admin_settings.branding.title')}
                         description={t('admin_settings.branding.help')}
@@ -2925,7 +2925,7 @@ export function AdminDashboard() {
                   )}
 
                   {settingsSection === 'monitoring' && (
-                    <div className="space-y-8">
+                    <div className="space-y-10">
                       <SettingsGroup
                         title={t('admin_settings.monitoring.title')}
                         description={t('admin_settings.monitoring.help')}
@@ -3421,7 +3421,7 @@ export function AdminDashboard() {
           )}
 
           {tab === 'maintenance' && (
-            <div className="ui-monitor-page space-y-8">
+            <div className="ui-monitor-page space-y-10">
               <AdminPageHeader
                 title={t('admin_dashboard.maintenance_windows_title')}
                 className="ui-monitor-page-header"
