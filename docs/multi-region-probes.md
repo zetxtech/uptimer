@@ -59,6 +59,19 @@ Probe tokens (`Authorization: Bearer upt_probe_...`) are separate from the admin
   `POST /api/v1/admin/probes/:id/rotate-token`, `POST /api/v1/admin/probes/:id/bump-config`,
   `DELETE /api/v1/admin/probes/:id`.
 
+Probe health is evaluated every minute using the latest heartbeat and `offline_after_sec`
+(default 900, range 60–86400 seconds). New or re-enabled probes have a grace period; disabled
+probes do not alert. Config requests, result reports, and idle overseas shards update the heartbeat.
+
+The analytics page shows regional average latency and check success rate, plus counts of successful,
+failed, and unknown checks. Success rate is `up / (up + down)` and excludes unknown results. Missing
+buckets remain gaps. Raw probe history follows `retention_check_results_days`.
+
+Transitions emit `probe.offline` and `probe.online` through configured Webhook and Telegram channels.
+Add these events to `enabled_events` when a channel uses an explicit event whitelist. Failed deliveries
+are retried after at least 120 seconds for up to 24 hours; delivery may be repeated after network or
+process failures, so consumers should deduplicate by `event_id`.
+
 ## Overseas Durable Object shards
 
 Enabled by `UPTIMER_DO_PROBES = "1"` plus a registered probe (default id `cf-do`,

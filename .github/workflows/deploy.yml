@@ -345,6 +345,26 @@ jobs:
                   'run_worker_first = ["/api/*"]\n'
               )
 
+          # Workers AI powers the event post-mortem summaries. It is injected only in the
+          # deployed config: the binding is remote-only, so keeping it out of
+          # apps/worker/wrangler.toml lets `wrangler dev` run without credentials.
+          if os.environ.get("UPTIMER_ENABLE_AI", "true").strip().lower() not in ("0", "false", "no"):
+              final = final.rstrip() + (
+                  '\n\n'
+                  '# Event post-mortem summaries (injected by CI).\n'
+                  '[ai]\n'
+                  'binding = "AI"\n'
+              )
+
+          # Browser Rendering captures the incident screenshot when a monitor fails.
+          if os.environ.get("UPTIMER_ENABLE_BROWSER", "true").strip().lower() not in ("0", "false", "no"):
+              final = final.rstrip() + (
+                  '\n\n'
+                  '# Incident screenshots (injected by CI).\n'
+                  '[browser]\n'
+                  'binding = "BROWSER"\n'
+              )
+
           try:
               parsed = tomllib.loads(final)
           except tomllib.TOMLDecodeError as exc:

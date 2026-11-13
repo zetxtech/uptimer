@@ -101,13 +101,19 @@ Cloudflare Cron (1 min)
 
 页面：`/admin/probes`（管理后台头部入口），可以创建探针、启停、切换必需标记、轮换 token、递增配置版本、删除，并把监控在 `worker` 与 `multi_region` 之间切换。
 
+探针页面显示健康状态和最近心跳，并允许配置 `offline_after_sec`（默认 900 秒，范围 60–86400 秒）。新建或重新启用后，在该时限内等待首次心跳。健康检查由每分钟调度触发；停用探针不会告警。EdgeOne 获取配置、探针上报结果及空闲的海外分片运行都会更新心跳。
+
+分析页选择监控和时间范围后，可查看每个探针的平均延迟或探测成功率，以及成功、失败和未知的检查次数。成功率按 `up / (up + down)` 计算，不含未知结果；无数据的时间桶不会被连线。原始探针记录的保留时间由 `retention_check_results_days` 控制。
+
+探针离线或恢复时分别产生 `probe.offline` 和 `probe.online` 通知，不改变监控目标本身的状态。默认接收全部事件的 Webhook 或 Telegram 渠道会收到通知；使用 `enabled_events` 白名单时需明确选择这两个事件。失败投递至少间隔 120 秒重试，事件最多重试 24 小时；网络中断或处理进程异常时可能出现重复通知，应按 `event_id` 去重。
+
 管理端 API（需要脚本化时）：
 
 | 方法     | 路径                                    | 说明                         |
 | -------- | --------------------------------------- | ---------------------------- |
 | `GET`    | `/api/v1/admin/probes`                  | 探针列表与最近上报时间       |
 | `POST`   | `/api/v1/admin/probes`                  | 创建探针，返回一次性 token   |
-| `PATCH`  | `/api/v1/admin/probes/:id`              | 改名、启停、是否必需、region |
+| `PATCH`  | `/api/v1/admin/probes/:id`              | 改名、启停、离线阈值、region |
 | `POST`   | `/api/v1/admin/probes/:id/rotate-token` | 轮换 token                   |
 | `POST`   | `/api/v1/admin/probes/:id/bump-config`  | 递增配置版本                 |
 | `DELETE` | `/api/v1/admin/probes/:id`              | 删除探针及其区域状态         |
@@ -146,14 +152,13 @@ pnpm migrate:local   # 本地
 - `GET /probe/config` 会返回监控的自定义 Headers/Body，务必只走 HTTPS，且不要把探针 token 放进前端或日志。
 - 公共状态页快照在全局状态变化后通过 guard version 失效，由下一次 Cron（≤60 秒）重建。
 - `probe_batches` 每个探针每 5 分钟约新增 1 行，可按需定期清理。
+- 探针健康事件按检查结果保留天数清理；超过 24 小时仍未送达的事件不会继续重试。
 - 免费 Worker 的 CPU 预算约束仍然适用；探针上报路径没有引入大规模快照计算。
 
 ## 8. 已完成与后续
 
-已完成：多区域数据面（上报、区域状态机、聚合）、EdgeOne 国内探针、海外 Durable Object 分片、历史数据口径拆分（`check_results` 聚合 + `probe_check_results` 区域明细）、保留策略同步清理、管理端探针页面。
+已完成：多区域数据面（上报、区域状态机、聚合）、EdgeOne 国内探针、海外 Durable Object 分片、区域历史曲线、探针离线与恢复告警，以及管理端探针页面。
 
 后续可做：
 
-- **按区域的历史曲线**：前端目前只展示聚合时间线；`probe_check_results` 已经就位，可加区域对比图。
 - **DO 分片的生产验证**：启用前建议先在一个监控上验证分片分配与到期判断。
-- **探针离线告警**：目前只在 `probes` 页面展示 `last_seen_at` / `last_result_at`，可接入通知事件。
