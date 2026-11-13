@@ -16,7 +16,7 @@ export function PublicStatusHeader({ siteTitle = 'Uptimer' }: { siteTitle?: stri
       <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 py-4 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:py-[10.5px]">
         <Link
           to="/"
-          className="flex min-w-0 max-w-[200px] items-center gap-2 rounded-sm text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
+          className="flex min-w-0 max-w-[200px] items-center gap-2 rounded text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
         >
           <img src="/favicon.svg" alt="" className="h-6 w-6 shrink-0" />
           <span className="truncate text-[16px] font-semibold tracking-tight">{siteTitle}</span>

@@ -147,7 +147,7 @@ function IncidentCard({
     <button
       type="button"
       onClick={onClick}
-      className="w-full rounded-sm border-l-2 border-line py-1 pl-5 text-left transition-colors hover:border-ink-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
+      className="w-full rounded border-l-2 border-line py-1 pl-5 text-left transition-colors hover:border-ink-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
     >
       <div className="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-3">
         <time dateTime={new Date(incident.started_at * 1000).toISOString()}>

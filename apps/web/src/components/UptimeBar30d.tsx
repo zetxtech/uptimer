@@ -300,7 +300,7 @@ export function UptimeBar30d({
         >
           <div
             data-bar-chart
-            className="relative h-full w-full rounded-md bg-surface-2"
+            className="relative h-full w-full rounded-lg bg-surface-2"
             style={{
               backgroundImage,
               backgroundPosition: 'center',
@@ -343,7 +343,7 @@ export function UptimeBar30d({
           )}
           {tooltip && (
             <div
-              className="pointer-events-none absolute inset-y-0 rounded-sm ring-1 ring-white/70 shadow-[0_0_0_1px_rgba(15,23,42,0.08)]"
+              className="pointer-events-none absolute inset-y-0 rounded ring-1 ring-white/70 shadow-[0_0_0_1px_rgba(15,23,42,0.08)]"
               style={{
                 left: `${(tooltip.index / slotCount) * 100}%`,
                 width: `${100 / slotCount}%`,

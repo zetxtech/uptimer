@@ -1017,7 +1017,7 @@ function EventDetail({ eventId }: { eventId: number }) {
                   className="ui-input h-[42px] w-full pr-11"
                   aria-label={t('events.update_placeholder')}
                 />
-                <label className="absolute right-1.5 top-1 grid h-8 w-8 cursor-pointer place-items-center rounded-md text-ink-2 hover:bg-surface-2">
+                <label className="absolute right-1.5 top-1 grid h-8 w-8 cursor-pointer place-items-center rounded-lg text-ink-2 hover:bg-surface-2">
                   <input
                     type="file"
                     multiple

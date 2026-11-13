@@ -63,7 +63,7 @@ function RangeTabs<T extends string>({
           aria-pressed={current === value}
           onClick={() => onChange(value)}
           className={cn(
-            'rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-3',
+            'rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-3',
             current === value
               ? 'bg-surface text-ink dark:bg-surface-2 dark:text-ink'
               : 'text-ink-2 hover:text-ink dark:text-ink-3 dark:hover:text-ink',

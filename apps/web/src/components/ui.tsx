@@ -18,7 +18,7 @@ export const PANEL_BASE_CLASS = 'ui-panel rounded-xl border border-line';
 export const PANEL_INTERACTIVE_CLASS = 'ui-panel-hover hover:border-line';
 
 export const TABLE_ACTION_BUTTON_CLASS =
-  'inline-flex items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] font-medium transition-colors focus-visible:outline-none';
+  'inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] font-medium transition-colors focus-visible:outline-none';
 
 export const MODAL_OVERLAY_CLASS = 'ui-modal-overlay animate-fade-in';
 
@@ -353,7 +353,7 @@ export function Toast({
         type="button"
         onClick={onClose}
         aria-label={closeLabel}
-        className="-mr-1 -mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink dark:hover:bg-surface-2 dark:hover:text-ink"
+        className="-mr-1 -mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink dark:hover:bg-surface-2 dark:hover:text-ink"
       >
         <svg
           className="h-3.5 w-3.5"

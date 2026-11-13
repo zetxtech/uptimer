@@ -363,7 +363,7 @@ export function HeartbeatBar({
           })}
           className={cn(
             'relative h-full w-full',
-            bare ? 'rounded-[2px]' : 'rounded-md bg-surface-2',
+            bare ? 'rounded-[2px]' : 'rounded-lg bg-surface-2',
           )}
           style={{
             backgroundImage,
@@ -377,7 +377,7 @@ export function HeartbeatBar({
         {tooltip && (
           <div
             key={`heartbeat-overlay-${tooltip.index}-${tooltip.heartbeat.from_checked_at}-${tooltip.heartbeat.to_checked_at}`}
-            className="pointer-events-none absolute inset-y-0 rounded-sm ring-1 ring-white/70 shadow-[0_0_0_1px_rgba(15,23,42,0.08)]"
+            className="pointer-events-none absolute inset-y-0 rounded ring-1 ring-white/70 shadow-[0_0_0_1px_rgba(15,23,42,0.08)]"
             style={{
               left: `${(tooltip.index / slotCount) * 100}%`,
               width: `${100 / slotCount}%`,

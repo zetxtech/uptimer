@@ -175,7 +175,7 @@ export function KeyValueRows({
               aria-label={removeLabel}
               title={removeLabel}
               disabled={disabled}
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
             >
               <svg
                 className="h-3.5 w-3.5"

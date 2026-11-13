@@ -517,7 +517,7 @@ function IncidentDetail({ incidentId }: { incidentId: number }) {
                 />
 
                 <div className="flex flex-wrap items-center gap-3">
-                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink">
+                  <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink">
                     <input
                       type="file"
                       multiple

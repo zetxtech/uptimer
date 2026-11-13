@@ -138,7 +138,7 @@ export function MonitorCard({
           <button
             type="button"
             onClick={onSelect}
-            className="flex max-w-full items-center gap-2 rounded-sm text-left hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
+            className="flex max-w-full items-center gap-2 rounded text-left hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
           >
             <span
               aria-hidden="true"
@@ -183,7 +183,7 @@ export function MonitorCard({
       </div>
 
       <details className="group mt-3 text-sm">
-        <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded-sm text-xs text-ink-3 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink [&::-webkit-details-marker]:hidden">
+        <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded text-xs text-ink-3 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink [&::-webkit-details-marker]:hidden">
           {t('incident_detail.details')}
           <svg
             aria-hidden="true"
@@ -195,7 +195,7 @@ export function MonitorCard({
             <path d="m4 6 4 4 4-4" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </summary>
-        <div className="mt-4 space-y-4 rounded-md bg-surface-2 p-4">
+        <div className="mt-4 space-y-4 rounded-lg bg-surface-2 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-2">
             <div className="flex flex-wrap items-center gap-2">
               <span>{statusLabel(monitor.status, t)}</span>
@@ -246,7 +246,7 @@ export function MonitorCard({
             <button
               type="button"
               onClick={onSelect}
-              className="rounded-sm text-xs font-medium text-ink underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
+              className="rounded text-xs font-medium text-ink underline underline-offset-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink"
             >
               {t('monitor_detail.response_times')}
             </button>

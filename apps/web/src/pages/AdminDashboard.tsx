@@ -2126,7 +2126,7 @@ export function AdminDashboard() {
                               updateMonitorMut.reset();
                               setModal({ type: 'create-monitor', initialType: 'http' });
                             }}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
                           >
                             <svg
                               className="h-3.5 w-3.5 shrink-0"
@@ -2153,7 +2153,7 @@ export function AdminDashboard() {
                               updateMonitorMut.reset();
                               setModal({ type: 'create-monitor', initialType: 'heartbeat' });
                             }}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
                           >
                             <svg
                               className="h-3.5 w-3.5 shrink-0"
@@ -2180,7 +2180,7 @@ export function AdminDashboard() {
                               updateMonitorMut.reset();
                               setModal({ type: 'create-monitor', initialType: 'tcp' });
                             }}
-                            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
+                            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-ink-2 transition-colors hover:bg-surface-2 hover:text-ink"
                           >
                             <svg
                               className="h-3.5 w-3.5 shrink-0"
@@ -2342,7 +2342,7 @@ export function AdminDashboard() {
                                 <div
                                   key={group.label}
                                   className={cn(
-                                    'group/group-row flex items-center gap-2 rounded-md',
+                                    'group/group-row flex items-center gap-2 rounded-lg',
                                     dragOverGroup === group.label &&
                                       'bg-blue-100 dark:bg-blue-900/40',
                                   )}

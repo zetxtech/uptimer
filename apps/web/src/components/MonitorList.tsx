@@ -142,7 +142,7 @@ export function MenuItem({
         onClick();
       }}
       className={cn(
-        'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        'flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] transition-colors disabled:cursor-not-allowed disabled:opacity-50',
         tone === 'danger'
           ? 'text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-500/10'
           : 'text-ink-2 hover:bg-surface-2 hover:text-ink',

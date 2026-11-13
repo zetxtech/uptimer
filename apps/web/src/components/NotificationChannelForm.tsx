@@ -486,7 +486,7 @@ export function NotificationChannelForm({
                     aria-pressed={active}
                     onClick={() => handlePresetChange(item.value)}
                     className={cn(
-                      'h-9 whitespace-nowrap rounded-md px-3 text-sm font-medium transition-colors',
+                      'h-9 whitespace-nowrap rounded-lg px-3 text-sm font-medium transition-colors',
                       active
                         ? 'bg-surface text-ink shadow-sm dark:bg-surface-2 dark:text-ink'
                         : 'text-ink-2 hover:bg-surface hover:text-ink dark:text-ink-3 dark:hover:bg-surface-2 dark:hover:text-ink',

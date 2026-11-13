@@ -136,6 +136,21 @@ const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
 contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
 contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
 assert(
+  'radii limited to the reference set (4/8/12/pill)',
+  !/rounded-(md|sm)\b/.test(
+    [
+      'apps/web/src/components/ui.tsx',
+      'apps/web/src/components/MonitorList.tsx',
+      'apps/web/src/components/MonitorCard.tsx',
+      'apps/web/src/pages/StatusPage.tsx',
+      'apps/web/src/pages/AdminDashboard.tsx',
+    ]
+      .map(read)
+      .join('\n'),
+  ),
+  'no 2/6 px radii',
+);
+assert(
   'type scale limited to 11/12/13/14/16/20/28',
   !/text-\[(?!11px\]|12px\]|13px\]|14px\]|16px\]|20px\]|28px\])[0-9]+px\]/.test(
     [

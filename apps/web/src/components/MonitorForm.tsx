@@ -2281,7 +2281,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
                         {enabledProbeRegions.map(([region, count]) => (
                           <span
                             key={region}
-                            className="inline-flex items-center gap-1.5 rounded-md border border-line bg-surface-2 px-2.5 py-1 text-[13px] text-ink-2"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-2.5 py-1 text-[13px] text-ink-2"
                           >
                             {region}
                             <span className="tabular-nums text-ink-3">{count}</span>

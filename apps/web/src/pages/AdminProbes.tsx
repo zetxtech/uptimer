@@ -203,7 +203,7 @@ export function AdminProbes() {
               <div className="text-sm font-semibold text-amber-900 dark:text-amber-200">
                 {t('probes.token_once')}
               </div>
-              <code className="block overflow-x-auto rounded-md bg-surface p-2 text-xs text-ink dark:bg-surface/60 dark:text-ink">
+              <code className="block overflow-x-auto rounded-lg bg-surface p-2 text-xs text-ink dark:bg-surface/60 dark:text-ink">
                 {issued.token}
               </code>
               <div className="text-xs text-amber-900/80 dark:text-amber-200/80">

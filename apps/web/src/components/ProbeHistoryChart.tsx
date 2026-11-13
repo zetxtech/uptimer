@@ -69,7 +69,7 @@ export function ProbeHistoryChart({
         </p>
       )}
       <div
-        className="inline-flex rounded-md border border-line p-1 dark:border-line"
+        className="inline-flex rounded-lg border border-line p-1 dark:border-line"
         role="group"
         aria-label={t('probes.history_title')}
       >

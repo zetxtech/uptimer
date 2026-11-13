@@ -261,7 +261,7 @@ export function AdminReporting() {
                         onClick={() => setReport(item.key)}
                         aria-current={report === item.key}
                         className={cn(
-                          'min-h-11 w-auto whitespace-nowrap rounded-md px-3 py-3 text-left text-[13px] leading-5 transition-colors lg:w-full lg:whitespace-normal',
+                          'min-h-11 w-auto whitespace-nowrap rounded-lg px-3 py-3 text-left text-[13px] leading-5 transition-colors lg:w-full lg:whitespace-normal',
                           report === item.key
                             ? 'bg-surface-2 font-medium text-ink'
                             : 'text-ink-2 hover:bg-surface-2 hover:text-ink',
@@ -360,7 +360,7 @@ export function AdminReporting() {
                       >
                         <div
                           className={cn(
-                            'w-full rounded-sm transition-colors',
+                            'w-full rounded transition-colors',
                             entry.count > 0 ? 'bg-accent' : 'bg-surface-2',
                           )}
                           style={{
