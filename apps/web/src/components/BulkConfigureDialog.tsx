@@ -19,6 +19,9 @@ export type BulkConfigProperty =
 
 export type BulkPatchFactory = (monitor: AdminMonitor) => PatchMonitorInput;
 
+/** Days-before-expiry choices, matching the monitor form's select. */
+const EXPIRY_ALERT_DAY_OPTIONS = [1, 3, 7, 14, 30] as const;
+
 const WEEKDAYS: Array<[number, string]> = [
   [1, 'monitor_form.weekday_mon'],
   [2, 'monitor_form.weekday_tue'],
@@ -68,7 +71,9 @@ export function BulkConfigureDialog({
   const [authUser, setAuthUser] = useState('');
   const [authPassword, setAuthPassword] = useState('');
   const [ssl, setSsl] = useState('');
+  const [sslDays, setSslDays] = useState('');
   const [domain, setDomain] = useState('');
+  const [domainDays, setDomainDays] = useState('');
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [days, setDays] = useState<number[]>([]);
@@ -102,10 +107,18 @@ export function BulkConfigureDialog({
         const token = btoa(`${authUser.trim()}:${authPassword}`);
         return { http_headers_json: { Authorization: `Basic ${token}` } };
       }
-      case 'ssl':
-        return ssl ? { ssl_expiry_enabled: ssl === 'on' } : {};
-      case 'domain':
-        return domain ? { domain_expiry_enabled: domain === 'on' } : {};
+      case 'ssl': {
+        const patch: PatchMonitorInput = {};
+        if (ssl) patch.ssl_expiry_enabled = ssl === 'on';
+        if (sslDays) patch.ssl_expiry_alert_days = Number(sslDays);
+        return patch;
+      }
+      case 'domain': {
+        const patch: PatchMonitorInput = {};
+        if (domain) patch.domain_expiry_enabled = domain === 'on';
+        if (domainDays) patch.domain_expiry_alert_days = Number(domainDays);
+        return patch;
+      }
       case 'maintenance': {
         const startMinute = minutesFromTime(start);
         const endMinute = minutesFromTime(end);
@@ -157,6 +170,9 @@ export function BulkConfigureDialog({
     </label>
   );
 
+  const expiryDayOptions = EXPIRY_ALERT_DAY_OPTIONS.map(
+    (days) => [String(days), String(days)] as [string, string],
+  );
   const toggleOption: Array<[string, string]> = [
     ['on', t('admin_dashboard.bulk_on')],
     ['off', t('admin_dashboard.bulk_off')],
@@ -226,12 +242,23 @@ export function BulkConfigureDialog({
               t('admin_dashboard.bulk_recovery'),
             )
           : null}
-        {property === 'ssl'
-          ? select(ssl, setSsl, toggleOption, t('admin_dashboard.bulk_ssl'))
-          : null}
-        {property === 'domain'
-          ? select(domain, setDomain, toggleOption, t('admin_dashboard.bulk_domain'))
-          : null}
+        {property === 'ssl' ? (
+          <>
+            {select(ssl, setSsl, toggleOption, t('admin_dashboard.bulk_ssl'))}
+            {select(sslDays, setSslDays, expiryDayOptions, t('monitor_form.expiry_alert_days'))}
+          </>
+        ) : null}
+        {property === 'domain' ? (
+          <>
+            {select(domain, setDomain, toggleOption, t('admin_dashboard.bulk_domain'))}
+            {select(
+              domainDays,
+              setDomainDays,
+              expiryDayOptions,
+              t('monitor_form.expiry_alert_days'),
+            )}
+          </>
+        ) : null}
         {property === 'request' ? (
           <>
             <div className="grid gap-4 sm:grid-cols-2">
