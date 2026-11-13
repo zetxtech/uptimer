@@ -1372,7 +1372,6 @@ export function AdminDashboard() {
   const allVisibleMonitorsSelected =
     visibleMonitorIds.length > 0 && visibleMonitorIds.every((id) => selectedMonitorIdSet.has(id));
 
-  const someVisibleMonitorsSelected = visibleMonitorIds.some((id) => selectedMonitorIdSet.has(id));
   const hiddenSelectedCount =
     selectedMonitorIds.length -
     visibleMonitorIds.filter((id) => selectedMonitorIdSet.has(id)).length;
@@ -1939,6 +1938,26 @@ export function AdminDashboard() {
                           <button
                             type="button"
                             onClick={() => {
+                              setSelectionMode(true);
+                              setShowMonitorFilters(false);
+                            }}
+                            className="w-full border-t border-line-soft pt-3 text-left text-[12px] font-medium text-ink-2 transition-colors hover:text-ink"
+                          >
+                            {t('admin_dashboard.monitor_enter_selection')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectionMode(true);
+                              toggleVisibleMonitors();
+                            }}
+                            className="w-full text-left text-[12px] font-medium text-ink-2 transition-colors hover:text-ink"
+                          >
+                            {t('admin_dashboard.monitor_select_all')}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => {
                               setShowGroupManager(true);
                               setShowMonitorFilters(false);
                             }}
@@ -1949,6 +1968,8 @@ export function AdminDashboard() {
                         </div>
                       ) : null}
                     </div>
+
+                    {sortMenu}
 
                     <div className="ui-split-button" ref={createMenuRef}>
                       <Button
@@ -2349,8 +2370,6 @@ export function AdminDashboard() {
                           groupLabelText={toUiGroupLabel}
                           groupCounts={monitorCountsByGroup}
                           selectedIds={selectedMonitorIdSet}
-                          allSelected={allVisibleMonitorsSelected}
-                          someSelected={someVisibleMonitorsSelected}
                           bulkBusy={bulkBusy}
                           ratingLevel={ratingLevel}
                           timeZone={settings?.site_timezone ?? 'UTC'}
@@ -2358,28 +2377,11 @@ export function AdminDashboard() {
                           testingMonitorId={testingMonitorId}
                           selectionMode={selectionMode}
                           onToggleSelect={toggleMonitor}
-                          onToggleSelectAll={toggleVisibleMonitors}
-                          onEnterSelectionMode={() => setSelectionMode(true)}
-                          onSelectAll={() => {
-                            setSelectionMode(true);
-                            toggleVisibleMonitors();
-                          }}
                           onReorderGroup={(source, target) => {
                             const ordered = orderedMonitorGroups.map((group) => group.label);
                             const toIndex = ordered.indexOf(target);
                             if (toIndex < 0 || source === target) return;
                             moveMonitorGroupMut.mutate({ groupLabel: source, toIndex });
-                          }}
-                          onBulkDelete={() => {
-                            if (
-                              window.confirm(
-                                t('admin_dashboard.bulk_delete_confirm', {
-                                  count: selectedMonitorIds.length,
-                                }),
-                              )
-                            ) {
-                              bulkDeleteMut.mutate([...selectedMonitorIds]);
-                            }
                           }}
                           onOpen={(monitor) => navigate(adminMonitorDetailPath(monitor.id))}
                           onTest={(monitor) => {
@@ -2400,14 +2402,8 @@ export function AdminDashboard() {
                               deleteMonitorMut.mutate(monitor.id);
                             }
                           }}
-                          onCreate={() => {
-                            createMonitorMut.reset();
-                            updateMonitorMut.reset();
-                            setModal({ type: 'create-monitor' });
-                          }}
-                          sortControl={sortMenu}
                           footer={
-                            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-line-soft px-4 py-2 text-[11px] text-ink-2 dark:border-line dark:text-ink-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-[11px] text-ink-2 dark:text-ink-3">
                               <span>
                                 {t('admin_dashboard.monitor_list_summary', {
                                   filtered: filteredMonitors.length,

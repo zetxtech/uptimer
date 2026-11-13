@@ -130,10 +130,11 @@ const cssRule = (selector) => {
   if (start === -1) return '';
   return styles.slice(start, styles.indexOf('}', start));
 };
+assert('group header height', /height:\s*42px/.test(cssRule('.ui-group-head')), 'height: 42px');
 assert(
-  'list header band height',
-  /height:\s*42px/.test(cssRule('.ui-monitor-list-header')),
-  'height: 42px',
+  'no list header chrome',
+  !/ui-monitor-list-header/.test(styles) && !/ui-monitor-list-header/.test(monitorList),
+  'removed',
 );
 assert(
   'incident header band height',

@@ -26,8 +26,6 @@ type MonitorListProps = {
   groupLabelText: (label: string) => string;
   groupCounts: Map<string, number>;
   selectedIds: Set<number>;
-  allSelected: boolean;
-  someSelected: boolean;
   bulkBusy: boolean;
   ratingLevel: UptimeRatingLevel;
   timeZone: string;
@@ -37,10 +35,6 @@ type MonitorListProps = {
   /** Selection is a mode, not a side effect: checkboxes only render while it is on. */
   selectionMode: boolean;
   onToggleSelect: (id: number) => void;
-  onToggleSelectAll: () => void;
-  onEnterSelectionMode: () => void;
-  onSelectAll: () => void;
-  onBulkDelete: () => void;
   /** Group headers double as drag handles, like the reference. */
   onReorderGroup?: (sourceLabel: string, targetLabel: string) => void;
   onOpen: (monitor: AdminMonitor) => void;
@@ -49,9 +43,6 @@ type MonitorListProps = {
   onEdit: (monitor: AdminMonitor) => void;
   onDelete: (monitor: AdminMonitor) => void;
   /** Opens the create form from the list header and group actions. */
-  onCreate?: () => void;
-  /** Header control for sorting, rendered next to the list actions. */
-  sortControl?: ReactNode;
   footer?: ReactNode;
 };
 
@@ -251,25 +242,17 @@ export function MonitorList({
   groupLabelText,
   groupCounts,
   selectedIds,
-  allSelected,
-  someSelected,
   bulkBusy,
   ratingLevel: _ratingLevel,
   testingMonitorId,
   selectionMode,
   onToggleSelect,
-  onToggleSelectAll,
-  onEnterSelectionMode,
-  onSelectAll,
-  onBulkDelete,
   onReorderGroup,
   onOpen,
   onTest,
   onTogglePause,
   onEdit,
   onDelete,
-  onCreate,
-  sortControl,
   footer,
 }: MonitorListProps) {
   const { t } = useI18n();
@@ -305,134 +288,6 @@ export function MonitorList({
 
   return (
     <div className="ui-monitor-list">
-      <div className="ui-monitor-list-header flex items-center justify-between border-b border-line-soft">
-        <div className="flex min-w-0 items-center gap-2">
-          {selectionMode ? (
-            <SelectionCheckbox
-              checked={allSelected}
-              indeterminate={!allSelected && someSelected}
-              disabled={bulkBusy}
-              label={t('admin_dashboard.monitor_select_visible')}
-              onToggle={onToggleSelectAll}
-            />
-          ) : (
-            <span className="ui-monitor-grip" aria-hidden>
-              <svg viewBox="0 0 16 16" fill="currentColor">
-                <circle cx="6" cy="4" r="1.1" />
-                <circle cx="10" cy="4" r="1.1" />
-                <circle cx="6" cy="8" r="1.1" />
-                <circle cx="10" cy="8" r="1.1" />
-                <circle cx="6" cy="12" r="1.1" />
-                <circle cx="10" cy="12" r="1.1" />
-              </svg>
-            </span>
-          )}
-          <button
-            type="button"
-            aria-expanded={collapsedGroups.length === 0}
-            aria-label={t('admin_dashboard.monitor_toggle_all_groups')}
-            title={t('admin_dashboard.monitor_toggle_all_groups')}
-            onClick={() =>
-              setCollapsedGroups((previous) =>
-                previous.length === 0
-                  ? groupMembers.size > 0
-                    ? [...groupMembers.keys()]
-                    : []
-                  : [],
-              )
-            }
-            className="ui-monitor-list-title-button"
-          >
-            <svg
-              className="ui-chevron ui-group-head-chevron"
-              data-open={collapsedGroups.length === 0}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={2.6}
-              aria-hidden
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 6l6 6-6 6" />
-            </svg>
-            <span className="ui-monitor-list-title truncate">
-              {t('admin_dashboard.tab.monitors')}
-            </span>
-          </button>
-        </div>
-        <div className="ui-monitor-head-actions">
-          {sortControl}
-          {onCreate ? (
-            <button
-              type="button"
-              onClick={onCreate}
-              aria-label={t('admin_dashboard.create_monitor')}
-              title={t('admin_dashboard.create_monitor')}
-              className="ui-icon-btn"
-            >
-              <svg
-                className="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.8}
-                aria-hidden
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-              </svg>
-            </button>
-          ) : null}
-          <RowMenu label={t('admin_dashboard.monitor_actions')}>
-            {(close) => (
-              <>
-                {onCreate ? (
-                  <MenuItem
-                    icon="M12 4.5v15m7.5-7.5h-15"
-                    onClick={() => {
-                      close();
-                      onCreate();
-                    }}
-                  >
-                    {t('admin_dashboard.create_monitor')}
-                  </MenuItem>
-                ) : null}
-                <MenuItem
-                  icon="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-                  disabled={selectionMode}
-                  onClick={() => {
-                    close();
-                    onEnterSelectionMode();
-                  }}
-                >
-                  {t('admin_dashboard.monitor_enter_selection')}
-                </MenuItem>
-                <MenuItem
-                  icon="M8.25 7.5V6.108c0-1.135.845-2.098 1.976-2.192.373-.03.748-.057 1.123-.08M15.75 18H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08M15.75 18.75v-1.875a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 9.75 12.375v-6.75"
-                  disabled={bulkBusy}
-                  onClick={() => {
-                    close();
-                    onSelectAll();
-                  }}
-                >
-                  {t('admin_dashboard.monitor_select_all')}
-                </MenuItem>
-                <div className="my-1 border-t border-line-soft" />
-                <MenuItem
-                  icon="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165"
-                  tone="danger"
-                  disabled={bulkBusy || selectedIds.size === 0}
-                  onClick={() => {
-                    close();
-                    onBulkDelete();
-                  }}
-                >
-                  {t('common.delete')}
-                </MenuItem>
-              </>
-            )}
-          </RowMenu>
-        </div>
-      </div>
-
       <div className="divide-y divide-line">
         {monitors.map((monitor, index) => {
           const previous = index > 0 ? monitors[index - 1] : null;

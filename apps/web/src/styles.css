@@ -1758,12 +1758,6 @@ button,
   background: var(--color-border-light);
 }
 
-.ui-monitor-list-header .ui-icon-btn {
-  width: 26px;
-  height: 26px;
-  color: var(--color-text-secondary);
-}
-
 .ui-monitor-list,
 .ui-resource-list {
   /* Bare list: the reference puts rows straight on the canvas, no card chrome. */
@@ -1771,31 +1765,6 @@ button,
   border: 0;
   border-radius: 0;
   box-shadow: none;
-}
-
-.ui-monitor-list-header {
-  height: 42px;
-  padding: 0 20px;
-  border-bottom: 1px solid var(--color-border);
-}
-
-.ui-monitor-list-title {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--color-text-primary);
-}
-
-.ui-monitor-head-actions {
-  display: flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: 4px;
-}
-
-.ui-monitor-head-actions .ui-icon-btn {
-  width: 26px;
-  height: 26px;
-  color: var(--color-text-secondary);
 }
 
 .ui-group-head {
@@ -2066,22 +2035,6 @@ button,
 .ui-group-head:hover .ui-monitor-grip,
 .ui-group-head .ui-monitor-grip:focus-visible {
   opacity: 1;
-}
-
-.ui-monitor-list-title-button {
-  display: inline-flex;
-  min-width: 0;
-  align-items: center;
-  gap: 2px;
-  color: var(--color-text-primary);
-}
-
-.ui-monitor-list-header > div:first-child {
-  gap: 6px;
-}
-
-.ui-monitor-list-title-button .ui-group-head-chevron {
-  color: var(--color-text-secondary);
 }
 
 @media (max-width: 639px) {
