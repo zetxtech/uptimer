@@ -1816,7 +1816,8 @@ button,
   margin: 0 4px;
   font-size: 13px;
   font-weight: 500;
-  color: var(--color-text-primary);
+  /* Reference group header title is the muted secondary tone, not the row white. */
+  color: var(--color-text-secondary);
 }
 
 .ui-monitor-state-up {
