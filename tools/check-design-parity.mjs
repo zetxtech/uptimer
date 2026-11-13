@@ -136,6 +136,12 @@ const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
 contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
 contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
 assert(
+  'keyboard hint chip (22x22, radius 4)',
+  /width:\s*1\.375rem/.test(cssRule('\n.ui-kbd')) &&
+    /border-radius:\s*0\.25rem/.test(cssRule('\n.ui-kbd')),
+  '22px / radius 4',
+);
+assert(
   'incident sort button size',
   /width:\s*26px/.test(cssRule('.ui-incident-sort-button')) &&
     /border-radius:\s*6px/.test(cssRule('.ui-incident-sort-button')),
