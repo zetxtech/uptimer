@@ -165,6 +165,26 @@ const BULK_CONFIG_PROPERTIES: Array<{
     labelKey: 'admin_dashboard.bulk_http_auth',
     icon: 'M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-1.5 9h12a1.5 1.5 0 0 0 1.5-1.5v-6a1.5 1.5 0 0 0-1.5-1.5h-12A1.5 1.5 0 0 0 4.5 12v6a1.5 1.5 0 0 0 1.5 1.5Z',
   },
+  {
+    property: 'ssl',
+    labelKey: 'admin_dashboard.bulk_ssl',
+    icon: 'M9 12.75 11.25 15 15 9.75M21 12c0 4.556-3.03 8.36-7.5 9.5C9.03 20.36 6 16.556 6 12V5.25l6-2.25 6 2.25V12Z',
+  },
+  {
+    property: 'domain',
+    labelKey: 'admin_dashboard.bulk_domain',
+    icon: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0 0c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3M3.6 9h16.8M3.6 15h16.8',
+  },
+  {
+    property: 'maintenance',
+    labelKey: 'admin_dashboard.bulk_maintenance',
+    icon: 'M11.42 15.17 17.25 21A2.652 2.652 0 0 0 21 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 1 1-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 0 0 4.486-6.336l-3.276 3.277a3.004 3.004 0 0 1-2.25-2.25l3.276-3.276a4.5 4.5 0 0 0-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437 1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008Z',
+  },
+  {
+    property: 'metadata',
+    labelKey: 'admin_dashboard.bulk_metadata',
+    icon: 'M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z',
+  },
 ];
 
 /** Page forms own their header, scroller and footer. */
@@ -1431,6 +1451,7 @@ export function AdminDashboard() {
     }
     setSelectedMonitorIds((previous) => [...new Set([...previous, ...visibleMonitorIds])]);
   };
+  const selectedMonitors = monitors.filter((monitor) => selectedMonitorIds.includes(monitor.id));
   const toggleMonitor = (id: number) => {
     setSelectedMonitorIds((previous) =>
       previous.includes(id)
@@ -3745,16 +3766,26 @@ export function AdminDashboard() {
             {modal.type === 'bulk-configure' && (
               <BulkConfigureDialog
                 property={modal.property}
-                count={selectedMonitorIds.length}
+                selected={selectedMonitors}
                 busy={bulkBusy}
                 onCancel={closeModal}
-                onSave={(patch) => {
-                  if (Object.keys(patch).length === 0) {
+                onSave={(patchOrFactory) => {
+                  if (typeof patchOrFactory === 'function') {
+                    runBulkMonitorOperation(
+                      selectedMonitors.map((monitor) => monitor.id),
+                      (id) => {
+                        const monitor = selectedMonitors.find((item) => item.id === id);
+                        return updateMonitor(id, monitor ? patchOrFactory(monitor) : {});
+                      },
+                    ).then(() => closeModal());
+                    return;
+                  }
+                  if (Object.keys(patchOrFactory).length === 0) {
                     closeModal();
                     return;
                   }
                   bulkEditMut.mutate(
-                    { ids: [...selectedMonitorIds], patch },
+                    { ids: [...selectedMonitorIds], patch: patchOrFactory },
                     { onSuccess: () => closeModal() },
                   );
                 }}
