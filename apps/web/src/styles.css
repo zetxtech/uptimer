@@ -2605,7 +2605,7 @@ button,
 }
 
 .ui-uptime-table th {
-  height: 42px;
+  height: 41px;
   padding: 0 16px;
   border-bottom: 1px solid var(--color-border);
   background: var(--color-table-head);
@@ -2624,6 +2624,11 @@ button,
   height: 42px;
   padding: 0 16px;
   text-align: right;
+}
+
+/* Reference availability column: right-aligned and medium weight. */
+.ui-uptime-table td.ui-uptime-availability {
+  font-weight: 500;
 }
 
 .ui-uptime-table tbody tr {

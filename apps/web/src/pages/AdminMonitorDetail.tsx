@@ -24,7 +24,6 @@ import { AdminShell } from '../components/AdminShell';
 import { DailyLatencyChart } from '../components/DailyLatencyChart';
 import { LatencyChart } from '../components/LatencyChart';
 import { MonitorForm } from '../components/MonitorForm';
-import { MonitorStatusIcon } from '../components/MonitorList';
 import { Select } from '../components/Select';
 import { Button, Toast, ToastStack, cn } from '../components/ui';
 import { incidentStatusLabel, statusLabel } from '../i18n/labels';
@@ -433,34 +432,31 @@ export function AdminMonitorDetail() {
   return (
     <AdminShell active="dashboard" layout="sidebar">
       <main className="mx-auto w-full max-w-[1160px] px-5 pb-12 pt-6 sm:pt-7">
-        <div className="flex items-center gap-3">
-          <MonitorStatusIcon status={monitor.status} />
-          <div className="min-w-0">
-            <h1 className="ui-page-title break-words">{monitor.name}</h1>
-            <div className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] leading-5">
-              <span className={cn('font-medium', `ui-monitor-state-${monitor.status}`)}>
-                {statusWord}
-              </span>
-              <span className="text-ink-3">·</span>
-              <span className="text-ink-2">
-                {t(
-                  monitor.type === 'heartbeat'
-                    ? 'monitor_detail.expected_every'
-                    : 'monitor_detail.checked_every',
-                  { interval: formatIntervalLabel(monitor.interval_sec) },
-                )}
-              </span>
-              {monitor.type === 'heartbeat' && monitor.heartbeat_grace_sec !== null ? (
-                <>
-                  <span className="text-ink-3">·</span>
-                  <span className="text-ink-2">
-                    {t('monitor_detail.grace_period', {
-                      value: formatIntervalLabel(monitor.heartbeat_grace_sec),
-                    })}
-                  </span>
-                </>
-              ) : null}
-            </div>
+        <div className="min-w-0">
+          <h1 className="ui-page-title break-words">{monitor.name}</h1>
+          <div className="mt-[17px] flex flex-wrap items-center gap-x-1.5 text-[14px] leading-5">
+            <span className={cn('font-medium', `ui-monitor-state-${monitor.status}`)}>
+              {statusWord}
+            </span>
+            <span className="text-ink-3">·</span>
+            <span className="text-ink-2">
+              {t(
+                monitor.type === 'heartbeat'
+                  ? 'monitor_detail.expected_every'
+                  : 'monitor_detail.checked_every',
+                { interval: formatIntervalLabel(monitor.interval_sec) },
+              )}
+            </span>
+            {monitor.type === 'heartbeat' && monitor.heartbeat_grace_sec !== null ? (
+              <>
+                <span className="text-ink-3">·</span>
+                <span className="text-ink-2">
+                  {t('monitor_detail.grace_period', {
+                    value: formatIntervalLabel(monitor.heartbeat_grace_sec),
+                  })}
+                </span>
+              </>
+            ) : null}
           </div>
         </div>
 
@@ -582,11 +578,11 @@ export function AdminMonitorDetail() {
 
           <div className="px-4 py-4">
             {analyticsQuery.isLoading ? (
-              <div className="ui-skeleton h-[434px] w-full" />
+              <div className="ui-skeleton h-[466px] w-full" />
             ) : analyticsQuery.isError ? (
               <div
                 role="alert"
-                className="flex h-[434px] flex-wrap items-center justify-center gap-3 text-[13px] text-status-down"
+                className="flex h-[466px] flex-wrap items-center justify-center gap-3 text-[13px] text-status-down"
               >
                 {t('common.loading_failed')}
                 <Button
@@ -599,9 +595,9 @@ export function AdminMonitorDetail() {
                 </Button>
               </div>
             ) : !analytics ? null : chartRange === '24h' ? (
-              <LatencyChart points={analytics.points} height={434} />
+              <LatencyChart points={analytics.points} height={466} />
             ) : (
-              <DailyLatencyChart points={analytics.daily} height={434} />
+              <DailyLatencyChart points={analytics.daily} height={466} />
             )}
           </div>
         </section>
@@ -654,7 +650,7 @@ export function AdminMonitorDetail() {
                 {windows.map((row) => (
                   <tr key={row.key}>
                     <td className="text-ink">{row.label}</td>
-                    <td className="tabular-nums text-ink">
+                    <td className="ui-uptime-availability tabular-nums text-ink">
                       {row.uptimePct === null
                         ? t('monitor_detail.none')
                         : formatPct4(row.uptimePct)}
@@ -677,7 +673,7 @@ export function AdminMonitorDetail() {
                       {formatRelativeTime(customWindow.from, locale)} –{' '}
                       {formatRelativeTime(customWindow.to, locale)}
                     </td>
-                    <td className="tabular-nums text-ink">
+                    <td className="ui-uptime-availability tabular-nums text-ink">
                       {customWindow.uptimePct === null
                         ? t('monitor_detail.none')
                         : formatPct4(customWindow.uptimePct)}

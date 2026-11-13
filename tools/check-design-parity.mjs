@@ -136,6 +136,27 @@ const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
 contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
 contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
 assert(
+  'monitor detail header is text-only (17 px status line)',
+  /mt-\[17px\] flex flex-wrap items-center gap-x-1\.5 text-\[14px\]/.test(
+    read('apps/web/src/pages/AdminMonitorDetail.tsx'),
+  ) &&
+    !/MonitorStatusIcon status=\{monitor\.status\}/.test(
+      read('apps/web/src/pages/AdminMonitorDetail.tsx'),
+    ),
+  'status line 14px at 17px, no header status icon',
+);
+assert(
+  'monitor detail chart body (466 px)',
+  /height=\{466\}/.test(read('apps/web/src/pages/AdminMonitorDetail.tsx')) &&
+    /h-\[466px\] w-full/.test(read('apps/web/src/pages/AdminMonitorDetail.tsx')),
+  'reference 466px chart body',
+);
+assert(
+  'uptime table header row (41 px)',
+  /height:\s*41px/.test(cssRule('\n.ui-uptime-table th')),
+  '41px header band',
+);
+assert(
   'settings section rhythm (60 px)',
   /space-y-\[60px\]/.test(read('apps/web/src/pages/AdminDashboard.tsx')),
   'settings sections keep the reference 60px gap',
