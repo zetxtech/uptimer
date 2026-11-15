@@ -459,6 +459,15 @@ export async function deleteMonitor(id: number): Promise<{ deleted: boolean }> {
   return handleResponse<{ deleted: boolean }>(res);
 }
 
+/** Copies a monitor with its configuration and metadata; the copy starts with no history. */
+export async function duplicateMonitor(id: number): Promise<{ monitor: AdminMonitor }> {
+  const res = await fetch(`${API_BASE}/admin/monitors/${id}/duplicate`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  return handleResponse<{ monitor: AdminMonitor }>(res);
+}
+
 export async function pauseMonitor(id: number): Promise<{ monitor: AdminMonitor }> {
   const res = await fetch(`${API_BASE}/admin/monitors/${id}/pause`, {
     method: 'POST',

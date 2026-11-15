@@ -20,6 +20,8 @@ import {
   reorderMonitorGroups,
   updateMonitor,
   deleteMonitor,
+  duplicateMonitor,
+  sendMonitorTestAlert,
   testMonitor,
   pauseMonitor,
   resumeMonitor,
@@ -479,6 +481,11 @@ export function AdminDashboard() {
     tone: 'success' | 'danger';
     title: string;
   } | null>(null);
+  /** Row-menu notices: duplicate and test-alert results. */
+  const [monitorActionNotice, setMonitorActionNotice] = useState<{
+    tone: 'success' | 'danger';
+    title: string;
+  } | null>(null);
   const [retryingDeliveryId, setRetryingDeliveryId] = useState<number | null>(null);
   const [deliveryNotice, setDeliveryNotice] = useState<string | null>(null);
   const [selectedMonitorIds, setSelectedMonitorIds] = useState<number[]>([]);
@@ -799,6 +806,46 @@ export function AdminDashboard() {
       );
       void queryClient.invalidateQueries({ queryKey: ['admin-monitors'] });
       void queryClient.invalidateQueries({ queryKey: ['admin-incidents'] });
+    },
+  });
+
+  const duplicateMonitorMut = useMutation({
+    mutationFn: duplicateMonitor,
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ['admin-monitors'] });
+      setMonitorActionNotice({
+        tone: 'success',
+        title: t('admin_dashboard.monitor_duplicated', { name: data.monitor.name }),
+      });
+    },
+    onError: (err) => {
+      setMonitorActionNotice({
+        tone: 'danger',
+        title: formatError(err) ?? t('admin_dashboard.monitor_duplicate_failed'),
+      });
+    },
+  });
+
+  const sendTestAlertMut = useMutation({
+    mutationFn: sendMonitorTestAlert,
+    onSuccess: (data) => {
+      const delivered = data.results.filter((r) => r.status === 'success').length;
+      setMonitorActionNotice({
+        tone: delivered > 0 ? 'success' : 'danger',
+        title:
+          delivered > 0
+            ? t('admin_dashboard.monitor_test_alert_sent', {
+                count: delivered,
+                total: data.results.length,
+              })
+            : t('admin_dashboard.monitor_test_alert_failed'),
+      });
+    },
+    onError: (err) => {
+      setMonitorActionNotice({
+        tone: 'danger',
+        title: formatError(err) ?? t('admin_dashboard.monitor_test_alert_failed'),
+      });
     },
   });
 
@@ -2115,7 +2162,7 @@ export function AdminDashboard() {
                       {showCreateMenu ? (
                         <div
                           role="menu"
-                          className="animate-fade-in ui-panel absolute right-0 top-10 z-30 w-44 overflow-hidden p-1"
+                          className="animate-fade-in ui-panel absolute right-0 top-10 z-30 w-[190px] overflow-hidden p-1"
                         >
                           <button
                             type="button"
@@ -2524,6 +2571,18 @@ export function AdminDashboard() {
                               deleteMonitorMut.mutate(monitor.id);
                             }
                           }}
+                          onViewIncidents={(monitor) => {
+                            const incident = openIncidentByMonitorId.get(monitor.id);
+                            navigate(
+                              incident
+                                ? adminIncidentDetailPath(incident.id)
+                                : adminMonitorDetailPath(monitor.id),
+                            );
+                          }}
+                          onDuplicate={(monitor) => duplicateMonitorMut.mutate(monitor.id)}
+                          onDuplicatePending={() => duplicateMonitorMut.isPending}
+                          onSendTestAlert={(monitor) => sendTestAlertMut.mutate(monitor.id)}
+                          onCreateGroup={() => setModal({ type: 'create-group' })}
                           footer={
                             <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-[11px] text-ink-2 dark:text-ink-3">
                               <span>
@@ -3602,6 +3661,14 @@ export function AdminDashboard() {
               </Toast>
             ),
         )}
+        {monitorActionNotice ? (
+          <Toast
+            tone={monitorActionNotice.tone}
+            title={monitorActionNotice.title}
+            onClose={() => setMonitorActionNotice(null)}
+            closeLabel={t('common.close')}
+          />
+        ) : null}
         {exportNotice ? (
           <Toast
             tone={exportNotice.tone}

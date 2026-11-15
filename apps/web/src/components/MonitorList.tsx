@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Link } from 'react-router-dom';
 
 import type { AdminMonitor, HomepageMonitorCard, UptimeRatingLevel } from '../api/types';
+import { adminIncidentDetailPath } from '../app/adminPaths';
 import { useI18n } from '../app/I18nContext';
 import { statusLabel } from '../i18n/labels';
 import { cn } from './ui';
@@ -37,6 +39,8 @@ type MonitorListProps = {
   onToggleSelect: (id: number) => void;
   /** Group header controls mirror the reference: sort, create, and a group menu. */
   onCreateInGroup?: (groupLabel: string) => void;
+  /** Row menu "Create group": opens the group dialog from the list. */
+  onCreateGroup?: (monitor: AdminMonitor) => void;
   onOpenGroupManager?: (groupLabel: string) => void;
   onEnterSelectionMode?: () => void;
   sortControl?: ReactNode;
@@ -47,6 +51,11 @@ type MonitorListProps = {
   onTogglePause: (monitor: AdminMonitor) => void;
   onEdit: (monitor: AdminMonitor) => void;
   onDelete: (monitor: AdminMonitor) => void;
+  /** Row menu actions from the reference: incidents, duplicate, test alert, group. */
+  onViewIncidents: (monitor: AdminMonitor) => void;
+  onDuplicate: (monitor: AdminMonitor) => void;
+  onSendTestAlert: (monitor: AdminMonitor) => void;
+  onDuplicatePending?: (monitor: AdminMonitor) => boolean;
   /** Opens the create form from the list header and group actions. */
   footer?: ReactNode;
 };
@@ -110,13 +119,18 @@ export function RowMenu({
       {open ? (
         <div
           role="menu"
-          className="animate-fade-in ui-panel absolute right-0 top-8 z-30 w-44 overflow-hidden p-1"
+          className="animate-fade-in ui-panel absolute right-0 top-8 z-30 w-[190px] overflow-hidden p-1"
         >
           {children(() => setOpen(false))}
         </div>
       ) : null}
     </div>
   );
+}
+
+/** Full-width hairline between menu sections, like the reference row menu. */
+export function MenuSeparator() {
+  return <div role="separator" className="-mx-1 my-1 h-px bg-line" />;
 }
 
 export function MenuItem({
@@ -253,6 +267,7 @@ export function MonitorList({
   selectionMode,
   onToggleSelect,
   onCreateInGroup,
+  onCreateGroup,
   onOpenGroupManager,
   onEnterSelectionMode,
   sortControl,
@@ -262,6 +277,10 @@ export function MonitorList({
   onTogglePause,
   onEdit,
   onDelete,
+  onViewIncidents,
+  onDuplicate,
+  onSendTestAlert,
+  onDuplicatePending,
   footer,
 }: MonitorListProps) {
   const { t } = useI18n();
@@ -307,6 +326,7 @@ export function MonitorList({
           const selected = selectedIds.has(monitor.id);
           const selectionActive = selectionMode;
           const testing = testingMonitorId === monitor.id;
+          const duplicating = onDuplicatePending?.(monitor) ?? false;
           const incident = incidentsByMonitorId?.get(monitor.id);
           const statusDuration =
             monitor.last_status_change_at && monitor.last_status_change_at > 0
@@ -555,39 +575,41 @@ export function MonitorList({
 
                     <div className="ui-monitor-row-actions">
                       {incident ? (
-                        <span className="ui-monitor-incident-pill">
-                          <span className="ui-monitor-incident-pill-main">
-                            <svg
-                              viewBox="0 0 16 16"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={1.4}
-                              aria-hidden
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M8 1.8 2.9 3.9v4.3c0 3 2.2 5.3 5.1 6 2.9-.7 5.1-3 5.1-6V3.9L8 1.8Z"
-                              />
-                              <path strokeLinecap="round" d="M8 6v2.4" />
-                              <path strokeLinecap="round" d="M8 10.4h.01" />
-                            </svg>
-                            {t('admin_dashboard.monitor_incident_open')}
-                          </span>
-                          <span className="ui-monitor-incident-pill-caret" aria-hidden>
-                            <svg
-                              viewBox="0 0 16 16"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={1.6}
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="m6.5 4.5 3.5 3.5-3.5 3.5"
-                              />
-                            </svg>
-                          </span>
+                        <Link
+                          to={adminIncidentDetailPath(incident.id)}
+                          className="ui-monitor-incident-pill"
+                          onClick={(event) => event.stopPropagation()}
+                        >
+                          <svg
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={1.4}
+                            aria-hidden
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M8 1.8 2.9 3.9v4.3c0 3 2.2 5.3 5.1 6 2.9-.7 5.1-3 5.1-6V3.9L8 1.8Z"
+                            />
+                            <path strokeLinecap="round" d="M8 6v2.4" />
+                            <path strokeLinecap="round" d="M8 10.4h.01" />
+                          </svg>
+                          {t('admin_dashboard.monitor_incident_open')}
+                        </Link>
+                      ) : null}
+                      {monitor.status === 'paused' ? (
+                        <span className="ui-monitor-paused-badge">
+                          <svg
+                            viewBox="0 0 16 16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={1.7}
+                            aria-hidden
+                          >
+                            <path strokeLinecap="round" d="M6 4.5v7M10 4.5v7" />
+                          </svg>
+                          {statusLabel('paused', t)}
                         </span>
                       ) : null}
                       <span
@@ -622,18 +644,24 @@ export function MonitorList({
                       <RowMenu label={t('admin_dashboard.monitor_actions')}>
                         {(close) => (
                           <>
-                            {monitor.type === 'heartbeat' ? null : (
-                              <MenuItem
-                                icon="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z"
-                                disabled={testing}
-                                onClick={() => {
-                                  close();
-                                  onTest(monitor);
-                                }}
-                              >
-                                {testing ? t('common.testing') : t('common.test')}
-                              </MenuItem>
-                            )}
+                            <MenuItem
+                              icon="M12 3l7 3v5.5c0 4.2-2.9 7.7-7 8.9-4.1-1.2-7-4.7-7-8.9V6l7-3Zm0 5.2v3.2m0 2.6h.01"
+                              onClick={() => {
+                                close();
+                                onViewIncidents(monitor);
+                              }}
+                            >
+                              {t('admin_dashboard.monitor_view_incidents')}
+                            </MenuItem>
+                            <MenuItem
+                              icon="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 0 1 1.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 0 1-1.449.12l-.738-.527c-.35-.25-.806-.272-1.203-.107-.397.165-.71.505-.781.929l-.149.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 0 1-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.505-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.107-1.204l-.527-.738a1.125 1.125 0 0 1 .12-1.45l.773-.773a1.125 1.125 0 0 1 1.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894Z"
+                              onClick={() => {
+                                close();
+                                onEdit(monitor);
+                              }}
+                            >
+                              {t('admin_dashboard.monitor_configure')}
+                            </MenuItem>
                             <MenuItem
                               icon={
                                 monitor.status === 'paused'
@@ -645,17 +673,65 @@ export function MonitorList({
                                 onTogglePause(monitor);
                               }}
                             >
-                              {monitor.status === 'paused' ? t('common.resume') : t('common.pause')}
+                              {monitor.status === 'paused'
+                                ? t('admin_dashboard.monitor_unpause')
+                                : t('common.pause')}
                             </MenuItem>
                             <MenuItem
-                              icon="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
+                              icon="M8 7V5.25A1.25 1.25 0 0 1 9.25 4h5.5A1.25 1.25 0 0 1 16 5.25V7m-8 0h8m-8 0H5.5A1.5 1.5 0 0 0 4 8.5v9A1.5 1.5 0 0 0 5.5 19h13a1.5 1.5 0 0 0 1.5-1.5v-9A1.5 1.5 0 0 0 18.5 7H16"
+                              disabled={duplicating}
                               onClick={() => {
                                 close();
-                                onEdit(monitor);
+                                onDuplicate(monitor);
                               }}
                             >
-                              {t('common.edit')}
+                              {duplicating
+                                ? t('admin_dashboard.monitor_duplicating')
+                                : t('admin_dashboard.monitor_duplicate')}
                             </MenuItem>
+                            <MenuItem
+                              icon="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z"
+                              disabled={testing}
+                              onClick={() => {
+                                close();
+                                onTest(monitor);
+                              }}
+                            >
+                              {testing
+                                ? t('common.testing')
+                                : t('admin_dashboard.monitor_run_check')}
+                            </MenuItem>
+                            <MenuItem
+                              icon="M6 12 3.269 3.125A59.769 59.769 0 0 1 21.485 12 59.768 59.768 0 0 1 3.27 20.875L5.999 12Zm0 0h7.5"
+                              disabled={monitor.type === 'heartbeat'}
+                              onClick={() => {
+                                close();
+                                onSendTestAlert(monitor);
+                              }}
+                            >
+                              {t('admin_dashboard.monitor_send_test_alert')}
+                            </MenuItem>
+                            <MenuSeparator />
+                            <MenuItem
+                              icon="m9 12.75 3 3m0 0 3-3m-3 3v-7.5M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+                              onClick={() => {
+                                close();
+                                onEnterSelectionMode?.();
+                                onToggleSelect(monitor.id);
+                              }}
+                            >
+                              {t('admin_dashboard.monitor_select')}
+                            </MenuItem>
+                            <MenuItem
+                              icon="M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"
+                              onClick={() => {
+                                close();
+                                onCreateGroup?.(monitor);
+                              }}
+                            >
+                              {t('admin_dashboard.monitor_create_group')}
+                            </MenuItem>
+                            <MenuSeparator />
                             <MenuItem
                               icon="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
                               tone="danger"

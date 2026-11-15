@@ -885,6 +885,54 @@ adminRoutes.patch('/monitors/:id', async (c) => {
   });
 });
 
+/** Copies a monitor: same configuration and metadata, fresh name, no history. */
+adminRoutes.post('/monitors/:id/duplicate', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+
+  const db = getDb(c.env);
+  const existing = await db.select().from(monitors).where(eq(monitors.id, id)).get();
+
+  if (!existing) {
+    throw new AppError(404, 'NOT_FOUND', 'Monitor not found');
+  }
+
+  const now = Math.floor(Date.now() / 1000);
+  const { id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...config } = existing;
+
+  const inserted = await db
+    .insert(monitors)
+    .values({
+      ...config,
+      name: `${existing.name} (copy)`,
+      // A copied heartbeat needs its own ping token or both monitors would share one.
+      heartbeatToken: existing.type === 'heartbeat' ? createHeartbeatToken() : null,
+      // Expiry values are per certificate/domain runs; the next sweep refills the copy's own.
+      sslExpiresAt: null,
+      sslIssuer: null,
+      domainExpiresAt: null,
+      expiryCheckedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning()
+    .get();
+
+  const { results: metadataRows } = await c.env.DB.prepare(
+    'SELECT key, value FROM monitor_metadata WHERE monitor_id = ?1 ORDER BY key',
+  )
+    .bind(id)
+    .all<{ key: string; value: string }>();
+  const metadata = (metadataRows ?? []).map((row) => ({ key: row.key, value: row.value }));
+  if (metadata.length > 0) {
+    await replaceMonitorMetadata(c.env.DB, inserted.id, metadata, now);
+  }
+
+  await bumpHomepageMonitorGuardVersions(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
+
+  return c.json({ monitor: monitorRowToApi(inserted, null, metadata) }, 201);
+});
+
 adminRoutes.delete('/monitors/:id', async (c) => {
   const id = z.coerce.number().int().positive().parse(c.req.param('id'));
 

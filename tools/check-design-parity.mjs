@@ -177,6 +177,25 @@ assert(
   'no 2/6 px radii',
 );
 assert(
+  'monitor row menu carries the reference actions',
+  [
+    'monitor_view_incidents',
+    'monitor_configure',
+    'monitor_duplicate',
+    'monitor_send_test_alert',
+    'monitor_select',
+    'monitor_create_group',
+  ].every((key) =>
+    read('apps/web/src/components/MonitorList.tsx').includes(`admin_dashboard.${key}`),
+  ) && /w-\[190px\]/.test(read('apps/web/src/components/MonitorList.tsx')),
+  'reference item set in a 190px menu',
+);
+assert(
+  'incident pill is status-tinted',
+  /color-mix\(in srgb, var\(--color-down\) 12%/.test(cssRule('\n.ui-monitor-incident-pill')),
+  'red tinted pill',
+);
+assert(
   'type scale limited to 11/12/13/14/16/20/28',
   !/text-\[(?!11px\]|12px\]|13px\]|14px\]|16px\]|20px\]|28px\])[0-9]+px\]/.test(
     [

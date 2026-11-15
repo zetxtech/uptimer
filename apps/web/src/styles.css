@@ -1974,52 +1974,52 @@ button,
   color: var(--color-text-primary);
 }
 
-/* Ongoing-incident chip: outlined pill with its own chevron segment. */
+/* Ongoing-incident pill: status-tinted, shield icon, 30 px tall like the reference. */
 .ui-monitor-incident-pill {
   display: inline-flex;
-  height: 32px;
+  height: 30px;
   flex: 0 0 auto;
-  align-items: stretch;
+  align-items: center;
+  gap: 8px;
   overflow: hidden;
-  border: 1px solid var(--color-border);
+  padding: 0 12px;
+  border: 1px solid color-mix(in srgb, var(--color-down) 35%, transparent);
   border-radius: 8px;
-  background: var(--color-bg-secondary);
-  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-down) 12%, transparent);
+  color: var(--color-down);
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
 }
 
 .ui-monitor-incident-pill:hover {
-  background: var(--color-card-hover);
+  background: color-mix(in srgb, var(--color-down) 18%, transparent);
 }
 
-.ui-monitor-incident-pill-main {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 12px;
-}
-
-.ui-monitor-incident-pill-main svg {
+.ui-monitor-incident-pill svg {
   width: 14px;
   height: 14px;
   flex: 0 0 auto;
   color: var(--color-down);
 }
 
-.ui-monitor-incident-pill-caret {
+/* Paused rows carry the reference amber indicator beside the frequency. */
+.ui-monitor-paused-badge {
   display: inline-flex;
-  width: 28px;
+  flex: 0 0 auto;
   align-items: center;
-  justify-content: center;
-  border-left: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
+  gap: 6px;
+  color: var(--color-paused);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.ui-monitor-incident-pill-caret svg {
+.ui-monitor-paused-badge svg {
   width: 14px;
   height: 14px;
+  flex: 0 0 auto;
+  color: var(--color-paused);
 }
 
 .ui-monitor-row-actions {
