@@ -199,10 +199,19 @@ assert(
   '182x30, 1px border, radius 8 (archive note)',
 );
 assert(
-  'bulk bar actions fit the 32px bar',
-  /height:\s*30px/.test(cssRule('\n.ui-bulk-bar-action')) &&
-    /height:\s*32px/.test(cssRule('\n.ui-bulk-bar')),
-  '30px action inside the 32px bar',
+  'bulk bar matches the 377x32 reference footprint',
+  /width:\s*377px/.test(cssRule('\n.ui-bulk-bar')) &&
+    /height:\s*32px/.test(cssRule('\n.ui-bulk-bar')) &&
+    /width:\s*131px/.test(cssRule('\n.ui-bulk-bar-create-group')) &&
+    /width:\s*105px/.test(cssRule('\n.ui-bulk-bar-pause')),
+  '377x32 bar, 131px create-group action, 105px pause action',
+);
+assert(
+  'monitor heading stays on one line with the toolbar',
+  !read('apps/web/src/pages/AdminDashboard.tsx').includes(
+    "description={t('admin_dashboard.monitors_description')}",
+  ),
+  'no second-line description pushing the tabs and list down',
 );
 assert(
   'selection mode matches the archived notes',
@@ -219,6 +228,12 @@ assert(
     read('apps/web/src/components/MonitorList.tsx').includes("t('common.rename')") &&
     read('apps/web/src/components/MonitorList.tsx').includes("t('common.remove')"),
   'Create monitor / Select / Select all / Rename / Remove',
+);
+assert(
+  'group menu separator spacing follows its 190px capture',
+  (read('apps/web/src/components/MonitorList.tsx').match(/<MenuSeparator compact \/>/g) ?? [])
+    .length === 2 && /my-\[3px\]/.test(read('apps/web/src/components/MonitorList.tsx')),
+  'two compact section separators in the group menu',
 );
 assert(
   'type scale limited to 11/12/13/14/16/20/28',

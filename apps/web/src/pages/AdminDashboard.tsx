@@ -1755,7 +1755,7 @@ export function AdminDashboard() {
           setMonitorGroupManageError(null);
           setModal({ type: 'bulk-move' });
         }}
-        className="ui-bulk-bar-action ui-bulk-bar-action-boxed"
+        className="ui-bulk-bar-action ui-bulk-bar-action-boxed ui-bulk-bar-create-group"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden>
           <path
@@ -1777,7 +1777,7 @@ export function AdminDashboard() {
             patch: { is_active: selectedMonitorIds.length === 0 },
           })
         }
-        className="ui-bulk-bar-action ui-bulk-bar-action-boxed"
+        className="ui-bulk-bar-action ui-bulk-bar-action-boxed ui-bulk-bar-pause"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
@@ -1928,7 +1928,6 @@ export function AdminDashboard() {
             <div className="space-y-5">
               <AdminPageHeader
                 title={t('admin_dashboard.tab.monitors')}
-                description={t('admin_dashboard.monitors_description')}
                 className="ui-monitor-page-header"
                 actions={
                   <>

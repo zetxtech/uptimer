@@ -1567,10 +1567,12 @@ button,
   left: calc(50% + 8.5rem);
   z-index: 30;
   display: flex;
+  width: 377px;
   height: 32px;
   align-items: center;
-  gap: 2px;
-  padding: 0 6px;
+  justify-content: space-between;
+  gap: 0;
+  padding: 0;
   border: 1px solid var(--color-border);
   border-radius: 8px;
   background: var(--color-card);
@@ -1582,6 +1584,7 @@ button,
   .ui-bulk-bar {
     left: 50%;
     right: 12px;
+    width: auto;
     bottom: 12px;
     transform: none;
   }
@@ -1592,6 +1595,7 @@ button,
 }
 
 .ui-bulk-bar-count {
+  flex: 0 0 70px;
   padding: 0 8px;
   font-size: 13px;
   font-weight: 500;
@@ -1610,11 +1614,10 @@ button,
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  /* The bar is 32 px tall including its 1 px borders, so the actions fill it exactly instead of
-     poking through the top and bottom edges. */
-  height: 30px;
+  /* Reference actions match the 32px selection bar height. */
+  height: 32px;
   padding: 0 10px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 500;
   color: var(--color-text-secondary);
@@ -1640,7 +1643,35 @@ button,
 }
 
 .ui-bulk-bar-more {
-  padding: 0 10px;
+  flex: 0 0 32px;
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+}
+
+.ui-bulk-bar-create-group {
+  flex: 0 0 131px;
+  width: 131px;
+  justify-content: center;
+}
+
+.ui-bulk-bar-pause {
+  flex: 0 0 105px;
+  width: 105px;
+  justify-content: center;
+}
+
+@media (max-width: 767px) {
+  .ui-bulk-bar-count {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ui-bulk-bar-create-group,
+  .ui-bulk-bar-pause {
+    flex: 0 1 auto;
+    width: auto;
+  }
 }
 
 .ui-bulk-bar-more svg {
@@ -1679,8 +1710,9 @@ button,
 
 .ui-bulk-bar-close {
   display: grid;
-  width: 30px;
-  height: 30px;
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
   place-items: center;
   border-radius: 8px;
   color: var(--color-text-muted);
