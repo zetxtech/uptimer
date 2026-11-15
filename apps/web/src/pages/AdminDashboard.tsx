@@ -1716,80 +1716,102 @@ export function AdminDashboard() {
     </form>
   );
 
-  const bulkBar =
-    selectionMode && selectedMonitorIds.length > 0 ? (
-      <div
-        role="region"
-        aria-label={t('admin_dashboard.bulk_assign_title')}
-        className="ui-bulk-bar"
+  const bulkBar = selectionMode ? (
+    <div role="region" aria-label={t('admin_dashboard.bulk_assign_title')} className="ui-bulk-bar">
+      <span className="ui-bulk-bar-count">
+        {t('admin_dashboard.bulk_assign_selected', { count: selectedMonitorIds.length })}
+      </span>
+      <button
+        type="button"
+        disabled={bulkBusy}
+        onClick={() => {
+          setMonitorGroupManageError(null);
+          setModal({ type: 'bulk-move' });
+        }}
+        className="ui-bulk-bar-action ui-bulk-bar-action-boxed"
       >
-        <span className="ui-bulk-bar-count">
-          {t('admin_dashboard.bulk_assign_selected', { count: selectedMonitorIds.length })}
-        </span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden>
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"
+          />
+        </svg>
+        {t('admin_dashboard.bulk_move')}
+      </button>
+      {/* Reference: with nothing selected the action reads Unpause and becomes Pause once rows are
+            selected; there is nothing to act on at zero, so it stays disabled until then. */}
+      <button
+        type="button"
+        disabled={bulkBusy || selectedMonitorIds.length === 0}
+        onClick={() =>
+          bulkEditMut.mutate({
+            ids: [...selectedMonitorIds],
+            patch: { is_active: selectedMonitorIds.length === 0 },
+          })
+        }
+        className="ui-bulk-bar-action ui-bulk-bar-action-boxed"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" />
+        </svg>
+        {selectedMonitorIds.length === 0 ? t('common.resume') : t('common.pause')}
+      </button>
+      <div className="relative" ref={bulkMenuRef}>
         <button
           type="button"
           disabled={bulkBusy}
-          onClick={() => {
-            setMonitorGroupManageError(null);
-            setModal({ type: 'bulk-move' });
-          }}
-          className="ui-bulk-bar-action ui-bulk-bar-action-boxed"
+          aria-haspopup="menu"
+          aria-expanded={showBulkMenu}
+          aria-label={t('admin_dashboard.bulk_actions')}
+          title={t('admin_dashboard.bulk_actions')}
+          onClick={() => setShowBulkMenu((prev) => !prev)}
+          className="ui-bulk-bar-action ui-bulk-bar-action-boxed ui-bulk-bar-more"
         >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden>
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M12 10.5v6m3-3H9m4.06-7.19-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 6v12a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z"
-            />
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+            <circle cx="6" cy="12" r="1.6" />
+            <circle cx="12" cy="12" r="1.6" />
+            <circle cx="18" cy="12" r="1.6" />
           </svg>
-          {t('admin_dashboard.bulk_move')}
         </button>
-        <button
-          type="button"
-          disabled={bulkBusy}
-          onClick={() =>
-            bulkEditMut.mutate({ ids: [...selectedMonitorIds], patch: { is_active: false } })
-          }
-          className="ui-bulk-bar-action ui-bulk-bar-action-boxed"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} aria-hidden>
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15.75 5.25v13.5m-7.5-13.5v13.5"
-            />
-          </svg>
-          {t('common.pause')}
-        </button>
-        <div className="relative" ref={bulkMenuRef}>
-          <button
-            type="button"
-            disabled={bulkBusy}
-            aria-haspopup="menu"
-            aria-expanded={showBulkMenu}
-            aria-label={t('admin_dashboard.bulk_actions')}
-            title={t('admin_dashboard.bulk_actions')}
-            onClick={() => setShowBulkMenu((prev) => !prev)}
-            className="ui-bulk-bar-action ui-bulk-bar-action-boxed ui-bulk-bar-more"
-          >
-            <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-              <circle cx="6" cy="12" r="1.6" />
-              <circle cx="12" cy="12" r="1.6" />
-              <circle cx="18" cy="12" r="1.6" />
-            </svg>
-          </button>
-          {showBulkMenu ? (
-            <div role="menu" className="ui-sort-menu ui-bulk-menu">
+        {showBulkMenu ? (
+          <div role="menu" className="ui-sort-menu ui-bulk-menu">
+            <button
+              type="button"
+              role="menuitem"
+              className="ui-sort-menu-item"
+              onClick={() => {
+                setShowBulkMenu(false);
+                bulkEditMut.mutate({
+                  ids: [...selectedMonitorIds],
+                  patch: { is_active: true },
+                });
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.7}
+                aria-hidden
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
+                />
+              </svg>
+              {t('common.resume')}
+            </button>
+            {BULK_CONFIG_PROPERTIES.map(({ property, labelKey, icon }) => (
               <button
+                key={property}
                 type="button"
                 role="menuitem"
                 className="ui-sort-menu-item"
                 onClick={() => {
                   setShowBulkMenu(false);
-                  bulkEditMut.mutate({
-                    ids: [...selectedMonitorIds],
-                    patch: { is_active: true },
-                  });
+                  setModal({ type: 'bulk-configure', property });
                 }}
               >
                 <svg
@@ -1799,95 +1821,69 @@ export function AdminDashboard() {
                   strokeWidth={1.7}
                   aria-hidden
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 0 1 0 1.972l-11.54 6.347a1.125 1.125 0 0 1-1.667-.986V5.653Z"
-                  />
+                  <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
                 </svg>
-                {t('common.resume')}
+                {t(labelKey)}
               </button>
-              {BULK_CONFIG_PROPERTIES.map(({ property, labelKey, icon }) => (
-                <button
-                  key={property}
-                  type="button"
-                  role="menuitem"
-                  className="ui-sort-menu-item"
-                  onClick={() => {
-                    setShowBulkMenu(false);
-                    setModal({ type: 'bulk-configure', property });
-                  }}
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth={1.7}
-                    aria-hidden
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
-                  </svg>
-                  {t(labelKey)}
-                </button>
-              ))}
-              <div className="ui-sort-menu-divider" />
-              <button
-                type="button"
-                role="menuitem"
-                className="ui-sort-menu-item ui-sort-menu-item-danger"
-                onClick={() => {
-                  setShowBulkMenu(false);
-                  if (
-                    window.confirm(
-                      t('admin_dashboard.bulk_delete_confirm', {
-                        count: selectedMonitorIds.length,
-                      }),
-                    )
-                  ) {
-                    bulkDeleteMut.mutate([...selectedMonitorIds]);
-                  }
-                }}
+            ))}
+            <div className="ui-sort-menu-divider" />
+            <button
+              type="button"
+              role="menuitem"
+              className="ui-sort-menu-item ui-sort-menu-item-danger"
+              onClick={() => {
+                setShowBulkMenu(false);
+                if (
+                  window.confirm(
+                    t('admin_dashboard.bulk_delete_confirm', {
+                      count: selectedMonitorIds.length,
+                    }),
+                  )
+                ) {
+                  bulkDeleteMut.mutate([...selectedMonitorIds]);
+                }
+              }}
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={1.7}
+                aria-hidden
               >
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth={1.7}
-                  aria-hidden
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165"
-                  />
-                </svg>
-                {t('admin_dashboard.bulk_delete')}
-              </button>
-            </div>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          disabled={bulkBusy}
-          aria-label={t('admin_dashboard.bulk_assign_clear')}
-          title={t('admin_dashboard.bulk_assign_clear')}
-          onClick={() => {
-            setSelectedMonitorIds([]);
-            setSelectionMode(false);
-            setShowBulkMenu(false);
-            setBulkTargetGroup('');
-            setBulkNewGroupName('');
-            setBulkTargetGroupSortOrderInput('');
-            setMonitorGroupManageError(null);
-          }}
-          className="ui-bulk-bar-close"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} aria-hidden>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
-          </svg>
-        </button>
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165"
+                />
+              </svg>
+              {t('admin_dashboard.bulk_delete')}
+            </button>
+          </div>
+        ) : null}
       </div>
-    ) : null;
+      <button
+        type="button"
+        disabled={bulkBusy}
+        aria-label={t('admin_dashboard.bulk_assign_clear')}
+        title={t('admin_dashboard.bulk_assign_clear')}
+        onClick={() => {
+          setSelectedMonitorIds([]);
+          setSelectionMode(false);
+          setShowBulkMenu(false);
+          setBulkTargetGroup('');
+          setBulkNewGroupName('');
+          setBulkTargetGroupSortOrderInput('');
+          setMonitorGroupManageError(null);
+        }}
+        className="ui-bulk-bar-close"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9} aria-hidden>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+  ) : null;
 
   return (
     <AdminShell active="dashboard" layout="sidebar" dashboardTab={tab}>
@@ -2455,7 +2451,6 @@ export function AdminDashboard() {
                               initialGroup: groupLabel === UNGROUPED_LABEL ? undefined : groupLabel,
                             });
                           }}
-                          onOpenGroupManager={() => setShowGroupManager(true)}
                           onEnterSelectionMode={() => setSelectionMode(true)}
                           onReorderGroup={(source, target) => {
                             const ordered = orderedMonitorGroups.map((group) => group.label);

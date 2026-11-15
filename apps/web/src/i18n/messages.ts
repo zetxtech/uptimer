@@ -85,6 +85,8 @@ const en = {
   'common.test': 'Test',
   'common.edit': 'Edit',
   'common.delete': 'Delete',
+  'common.rename': 'Rename',
+  'common.remove': 'Remove',
   'common.actions': 'Actions',
   'common.name': 'Name',
   'common.type': 'Type',
@@ -1262,6 +1264,8 @@ const zhCn: CompleteMessages = {
   'common.test': '测试',
   'common.edit': '编辑',
   'common.delete': '删除',
+  'common.rename': '重命名',
+  'common.remove': '移除',
   'common.actions': '操作',
   'common.name': '名称',
   'common.type': '类型',
@@ -2390,6 +2394,8 @@ const zhTw: CompleteMessages = {
   'common.test': '測試',
   'common.edit': '編輯',
   'common.delete': '刪除',
+  'common.rename': '重新命名',
+  'common.remove': '移除',
   'common.actions': '操作',
   'common.name': '名稱',
   'common.type': '類型',
@@ -3459,6 +3465,8 @@ const zhTw: CompleteMessages = {
 };
 
 const ja: LocaleMessages = {
+  'common.rename': '名前を変更',
+  'common.remove': '削除',
   'admin_dashboard.monitor_view_incidents': 'インシデントを表示',
   'admin_dashboard.monitor_configure': '設定',
   'admin_dashboard.monitor_unpause': '再開',
@@ -3659,7 +3667,7 @@ const ja: LocaleMessages = {
   'notification_group.channels': 'グループ内の通知チャネル',
   'notification_group.channels_help': '{count} 件を選択中。少なくとも 1 つ必要です。',
   'notification_group.no_channels': '先に通知チャネルを作成してください。',
-  'admin_dashboard.bulk_move': '移動',
+  'admin_dashboard.bulk_move': 'グループを作成',
   'admin_dashboard.bulk_edit': '編集',
   'admin_dashboard.bulk_edit_apply': '{count} 件を更新',
   'admin_dashboard.bulk_updated': '{count} 件の監視を更新しました。',
@@ -3806,6 +3814,8 @@ const ja: LocaleMessages = {
 };
 
 const es: LocaleMessages = {
+  'common.rename': 'Renombrar',
+  'common.remove': 'Eliminar',
   'admin_dashboard.monitor_view_incidents': 'Ver incidentes',
   'admin_dashboard.monitor_configure': 'Configurar',
   'admin_dashboard.monitor_unpause': 'Reanudar',
@@ -4013,7 +4023,7 @@ const es: LocaleMessages = {
   'notification_group.channels': 'Canales del grupo',
   'notification_group.channels_help': '{count} seleccionados. Se requiere al menos un canal.',
   'notification_group.no_channels': 'Crea primero un canal de notificacion.',
-  'admin_dashboard.bulk_move': 'Mover',
+  'admin_dashboard.bulk_move': 'Crear grupo',
   'admin_dashboard.bulk_edit': 'Editar',
   'admin_dashboard.bulk_edit_apply': 'Actualizar {count} seleccionados',
   'admin_dashboard.bulk_updated': 'Se actualizaron {count} monitores.',

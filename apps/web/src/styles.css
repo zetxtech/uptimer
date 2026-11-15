@@ -1516,12 +1516,12 @@ button,
 /* Reference-style selection controls: square, accent fill, check/dash glyph. */
 .ui-selection-checkbox {
   display: grid;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   flex: 0 0 auto;
   place-items: center;
   border: 1px solid var(--color-checkbox-border);
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   color: transparent;
   transition:
@@ -1531,7 +1531,7 @@ button,
 }
 
 .ui-selection-checkbox svg {
-  width: 12px;
+  width: 10px;
   height: 12px;
 }
 
@@ -1563,7 +1563,7 @@ button,
 .ui-bulk-bar {
   position: fixed;
   /* The reference bar sits 60 px above the viewport edge and is exactly 32 px tall. */
-  bottom: 44px;
+  bottom: 60px;
   left: calc(50% + 8.5rem);
   z-index: 30;
   display: flex;

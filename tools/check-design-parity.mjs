@@ -199,6 +199,22 @@ assert(
   '182x30, 1px border, radius 8 (archive note)',
 );
 assert(
+  'selection mode matches the archived notes',
+  /width:\s*16px/.test(cssRule('\n.ui-selection-checkbox')) &&
+    /border-radius:\s*4px/.test(cssRule('\n.ui-selection-checkbox')) &&
+    /bottom:\s*60px/.test(cssRule('\n.ui-bulk-bar')),
+  '16px square indicator, bar 60px above the edge',
+);
+assert(
+  'group menu carries the recorded items',
+  ['create_monitor', 'monitor_enter_selection', 'monitor_select_all'].every((key) =>
+    read('apps/web/src/components/MonitorList.tsx').includes(`admin_dashboard.${key}`),
+  ) &&
+    read('apps/web/src/components/MonitorList.tsx').includes("t('common.rename')") &&
+    read('apps/web/src/components/MonitorList.tsx').includes("t('common.remove')"),
+  'Create monitor / Select / Select all / Rename / Remove',
+);
+assert(
   'type scale limited to 11/12/13/14/16/20/28',
   !/text-\[(?!11px\]|12px\]|13px\]|14px\]|16px\]|20px\]|28px\])[0-9]+px\]/.test(
     [
