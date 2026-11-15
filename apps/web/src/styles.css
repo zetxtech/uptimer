@@ -2668,6 +2668,24 @@ button,
   position: relative;
   display: inline-flex;
   align-items: center;
+  gap: 0.5rem;
+  height: 36px;
+  padding: 0 10px 0 34px;
+  border: 1px solid var(--color-input-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-input-bg);
+  color: var(--color-text-primary);
+  font-size: 13px;
+  text-align: left;
+}
+
+.ui-date-field:hover {
+  border-color: var(--color-text-muted);
+}
+
+.ui-date-field:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -1px;
 }
 
 .ui-date-field-icon {
@@ -2679,20 +2697,101 @@ button,
   pointer-events: none;
 }
 
-.ui-date-field-input {
-  height: 36px;
-  width: 100%;
-  padding: 0 10px 0 34px;
-  border: 1px solid var(--color-input-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-input-bg);
-  color: var(--color-text-primary);
-  font-size: 13px;
+.ui-date-field-value {
+  white-space: nowrap;
 }
 
-.ui-date-field-input:focus-visible {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -1px;
+/* Calendar panel: card surface, 12 px radius, hairline border and the reference day grid. */
+.ui-calendar {
+  position: fixed;
+  z-index: 60;
+  padding: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-card);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.22);
+}
+
+.ui-calendar-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 8px;
+}
+
+.ui-calendar-month {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.ui-calendar-nav {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--color-text-secondary);
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.ui-calendar-nav:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.ui-calendar-nav svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ui-calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  margin-bottom: 4px;
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 500;
+  text-align: center;
+}
+
+.ui-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.ui-calendar-day {
+  display: grid;
+  place-items: center;
+  height: 32px;
+  border-radius: 6px;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.ui-calendar-day:hover {
+  background: var(--color-bg-secondary);
+}
+
+.ui-calendar-day.is-outside {
+  color: var(--color-text-muted);
+}
+
+.ui-calendar-day.is-today {
+  box-shadow: inset 0 0 0 1px var(--color-input-border);
+}
+
+.ui-calendar-day.is-selected,
+.ui-calendar-day.is-selected:hover {
+  background: var(--color-accent);
+  color: var(--color-accent-contrast);
 }
 
 /* Uptime tier colours collapse onto the reference palette (two greens, amber, red). */

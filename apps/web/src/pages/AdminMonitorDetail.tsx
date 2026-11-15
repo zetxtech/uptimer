@@ -22,6 +22,7 @@ import {
 import type { AnalyticsRange, Outage, PatchMonitorInput } from '../api/types';
 import { AdminShell } from '../components/AdminShell';
 import { DailyLatencyChart } from '../components/DailyLatencyChart';
+import { DateField } from '../components/DateField';
 import { LatencyChart } from '../components/LatencyChart';
 import { MonitorForm } from '../components/MonitorForm';
 import { Select } from '../components/Select';
@@ -731,58 +732,22 @@ export function AdminMonitorDetail() {
                 <tr className="ui-uptime-calculator">
                   <td colSpan={6}>
                     <div className="flex flex-wrap items-center gap-2">
-                      <label className="flex items-center gap-2 text-[13px] text-ink-2">
+                      <span className="flex items-center gap-2 text-[13px] text-ink-2">
                         {t('monitor_detail.calc_from')}
-                        <span className="ui-date-field">
-                          <svg
-                            className="ui-date-field-icon"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={1.7}
-                            aria-hidden
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z"
-                            />
-                          </svg>
-                          <input
-                            type="date"
-                            value={customFrom}
-                            onChange={(event) => setCustomFrom(event.target.value)}
-                            aria-label={t('monitor_detail.calc_from')}
-                            className="ui-date-field-input"
-                          />
-                        </span>
-                      </label>
-                      <label className="flex items-center gap-2 text-[13px] text-ink-2">
+                        <DateField
+                          value={customFrom}
+                          onChange={setCustomFrom}
+                          aria-label={t('monitor_detail.calc_from')}
+                        />
+                      </span>
+                      <span className="flex items-center gap-2 text-[13px] text-ink-2">
                         {t('monitor_detail.calc_to')}
-                        <span className="ui-date-field">
-                          <svg
-                            className="ui-date-field-icon"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={1.7}
-                            aria-hidden
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z"
-                            />
-                          </svg>
-                          <input
-                            type="date"
-                            value={customTo}
-                            onChange={(event) => setCustomTo(event.target.value)}
-                            aria-label={t('monitor_detail.calc_to')}
-                            className="ui-date-field-input"
-                          />
-                        </span>
-                      </label>
+                        <DateField
+                          value={customTo}
+                          onChange={setCustomTo}
+                          aria-label={t('monitor_detail.calc_to')}
+                        />
+                      </span>
                       <Button
                         className="ml-1 h-9 rounded-lg border border-line px-3"
                         variant="secondary"

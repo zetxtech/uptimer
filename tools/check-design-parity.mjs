@@ -236,9 +236,10 @@ assert(
 );
 assert(
   'range pickers follow the reference field',
-  /font-size:\s*13px/.test(cssRule('\n.ui-date-field-input')) &&
-    /height:\s*36px/.test(cssRule('\n.ui-date-field-input')),
-  '36px date field, 13px text',
+  /height:\s*36px/.test(cssRule('\n.ui-date-field')) &&
+    /font-size:\s*13px/.test(cssRule('\n.ui-date-field')) &&
+    /border-radius:\s*var\(--radius-lg\)/.test(cssRule('\n.ui-calendar')),
+  '36px field, 13px text, card-radius calendar panel',
 );
 assert(
   'monitor detail header is text-only (17 px status line)',
