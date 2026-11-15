@@ -231,15 +231,11 @@ type ChannelTestErrorState = {
   message: string;
 };
 
-type MonitorSortMode =
-  | 'configured'
-  | 'name'
-  | 'created_at'
-  | 'updated_at'
-  | 'interval_sec'
-  | 'status'
-  | 'last_status_change_at';
-type MonitorSortDirection = 'asc' | 'desc';
+import {
+  MonitorSortControl,
+  type MonitorSortDirection,
+  type MonitorSortMode,
+} from '../components/MonitorSortControl';
 type MonitorGroupMode = 'grouped' | 'flat';
 type MonitorGroupMeta = {
   label: string;
@@ -516,27 +512,23 @@ export function AdminDashboard() {
   const [showGroupManager, setShowGroupManager] = useState(false);
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const createMenuRef = useRef<HTMLDivElement | null>(null);
-  const [showSortMenu, setShowSortMenu] = useState(false);
   const [showBulkMenu, setShowBulkMenu] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [incidentSort, setIncidentSort] = useState<'default' | 'title' | 'length'>('default');
   const [incidentSortDir, setIncidentSortDir] = useState<'asc' | 'desc'>('desc');
-  const sortMenuRef = useRef<HTMLDivElement | null>(null);
   const bulkMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!showCreateMenu && !showSortMenu && !showIncidentFilters && !showBulkMenu) return;
+    if (!showCreateMenu && !showIncidentFilters && !showBulkMenu) return;
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
       if (!createMenuRef.current?.contains(target)) setShowCreateMenu(false);
-      if (!sortMenuRef.current?.contains(target)) setShowSortMenu(false);
       if (!incidentFiltersRef.current?.contains(target)) setShowIncidentFilters(false);
       if (!bulkMenuRef.current?.contains(target)) setShowBulkMenu(false);
     };
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         setShowCreateMenu(false);
-        setShowSortMenu(false);
         setShowBulkMenu(false);
         setShowIncidentFilters(false);
       }
@@ -547,7 +539,7 @@ export function AdminDashboard() {
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [showCreateMenu, showSortMenu, showIncidentFilters, showBulkMenu]);
+  }, [showCreateMenu, showIncidentFilters, showBulkMenu]);
   const [draggedGroup, setDraggedGroup] = useState<string | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
   const [serverLocalePatchSupported, setServerLocalePatchSupported] = useState(true);
@@ -1558,95 +1550,12 @@ export function AdminDashboard() {
   };
 
   const sortMenu = (
-    <div className="relative" ref={sortMenuRef}>
-      <button
-        type="button"
-        aria-haspopup="menu"
-        aria-expanded={showSortMenu}
-        aria-label={t('common.sort')}
-        title={t('common.sort')}
-        onClick={() => setShowSortMenu((previous) => !previous)}
-        className="ui-icon-btn"
-      >
-        <svg
-          className="h-4 w-4"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={1.7}
-          aria-hidden
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M3 4.5h14.25M3 9h9.75M3 13.5h9.75m4.5-4.5v12m0 0l-3.75-3.75M17.25 21L21 17.25"
-          />
-        </svg>
-      </button>
-      {showSortMenu ? (
-        <div role="menu" className="animate-fade-in ui-sort-menu">
-          {(
-            [
-              ['configured', t('admin_dashboard.monitor_sort_mode_configured')],
-              ['name', t('common.name')],
-              ['created_at', t('admin_dashboard.monitor_sort_mode_created_time')],
-              ['updated_at', t('admin_dashboard.monitor_sort_mode_updated_time')],
-              ['interval_sec', t('admin_dashboard.monitor_sort_mode_frequency')],
-              ['status', t('common.state')],
-              ['last_status_change_at', t('admin_dashboard.monitor_sort_mode_last_incident')],
-            ] as Array<[MonitorSortMode, string]>
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={monitorSortMode === value}
-              onClick={() => {
-                setMonitorSortMode(value);
-                setShowSortMenu(false);
-              }}
-              className="ui-sort-menu-item"
-              data-active={monitorSortMode === value}
-            >
-              <span className="ui-sort-menu-dot" aria-hidden />
-              <span className="truncate">{label}</span>
-            </button>
-          ))}
-          <div className="ui-sort-menu-divider" />
-          {(
-            [
-              ['asc', t('common.asc'), 'M12 19V5m0 0-5 5m5-5 5 5'],
-              ['desc', t('common.desc'), 'M12 5v14m0 0 5-5m-5 5-5-5'],
-            ] as Array<[MonitorSortDirection, string, string]>
-          ).map(([value, label, icon]) => (
-            <button
-              key={value}
-              type="button"
-              role="menuitemradio"
-              aria-checked={monitorSortDirection === value}
-              onClick={() => {
-                setMonitorSortDirection(value);
-                setShowSortMenu(false);
-              }}
-              className="ui-sort-menu-item"
-              data-active={monitorSortDirection === value}
-            >
-              <svg
-                className="h-3.5 w-3.5 shrink-0"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth={1.9}
-                aria-hidden
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
-              </svg>
-              <span className="truncate">{label}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
+    <MonitorSortControl
+      mode={monitorSortMode}
+      direction={monitorSortDirection}
+      onModeChange={setMonitorSortMode}
+      onDirectionChange={setMonitorSortDirection}
+    />
   );
 
   const bulkMovePanel = (
@@ -2127,7 +2036,9 @@ export function AdminDashboard() {
                       ) : null}
                     </div>
 
-                    {sortMenu}
+                    {/* The reference keeps sort in the group header; the flat view has no header, so it
+                        only falls back to the toolbar there. Rendering both would open two popovers. */}
+                    {monitorGroupMode === 'flat' ? sortMenu : null}
 
                     <div className="ui-split-button" ref={createMenuRef}>
                       <Button
