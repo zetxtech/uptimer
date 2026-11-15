@@ -281,6 +281,10 @@ export interface MonitorAnalyticsDayPoint {
 export interface MonitorAnalyticsResponse {
   monitor: { id: number; name: string; type: MonitorType };
   range: AnalyticsRange;
+  /** Selected probe region, when the chart is filtered to one. */
+  region?: string;
+  /** Probe regions with data for this monitor in the window. */
+  regions?: string[];
   range_start_at: number;
   range_end_at: number;
   total_sec: number;

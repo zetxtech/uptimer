@@ -1179,6 +1179,8 @@ const en = {
   'monitor_detail.calc_from': 'From',
   'monitor_detail.calc_to': 'To',
   'monitor_detail.calc': 'Calculate',
+  'monitor_detail.chart_region': 'Region',
+  'monitor_detail.chart_region_all': 'All regions',
 } as const;
 
 type MessageKey = keyof typeof en;
@@ -2297,6 +2299,8 @@ const zhCn: CompleteMessages = {
   'monitor_detail.calc_from': '从',
   'monitor_detail.calc_to': '到',
   'monitor_detail.calc': '计算',
+  'monitor_detail.chart_region': '区域',
+  'monitor_detail.chart_region_all': '全部区域',
 };
 
 const zhTw: CompleteMessages = {
@@ -3411,9 +3415,13 @@ const zhTw: CompleteMessages = {
   'monitor_detail.calc_from': '從',
   'monitor_detail.calc_to': '到',
   'monitor_detail.calc': '計算',
+  'monitor_detail.chart_region': '區域',
+  'monitor_detail.chart_region_all': '全部區域',
 };
 
 const ja: LocaleMessages = {
+  'monitor_detail.chart_region': 'リージョン',
+  'monitor_detail.chart_region_all': 'すべてのリージョン',
   'admin_nav.monitoring': '監視',
   'admin_nav.operations': 'イベントとインシデント',
   'admin_nav.insights': '分析とレポート',
@@ -3745,6 +3753,8 @@ const ja: LocaleMessages = {
 };
 
 const es: LocaleMessages = {
+  'monitor_detail.chart_region': 'Región',
+  'monitor_detail.chart_region_all': 'Todas las regiones',
   'admin_nav.monitoring': 'Monitorización',
   'admin_nav.operations': 'Eventos e incidentes',
   'admin_nav.insights': 'Análisis e informes',

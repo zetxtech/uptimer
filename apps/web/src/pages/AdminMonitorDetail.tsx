@@ -19,7 +19,7 @@ import {
   sendMonitorTestAlert,
   updateMonitor,
 } from '../api/client';
-import type { AnalyticsRange, MonitorProbeMode, Outage, PatchMonitorInput } from '../api/types';
+import type { AnalyticsRange, Outage, PatchMonitorInput } from '../api/types';
 import { AdminShell } from '../components/AdminShell';
 import { DailyLatencyChart } from '../components/DailyLatencyChart';
 import { LatencyChart } from '../components/LatencyChart';
@@ -108,6 +108,13 @@ function ActionLink({
   );
 }
 
+/** `YYYY-MM-DD` for a date-picker value, in the visitor's own calendar. */
+function isoDay(epochSec: number): string {
+  const d = new Date(epochSec * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 function outageDurationSec(outage: Outage, nowSec: number): number {
   return Math.max(0, (outage.ended_at ?? nowSec) - outage.started_at);
 }
@@ -165,10 +172,15 @@ export function AdminMonitorDetail() {
   const { locale, t } = useI18n();
 
   const [chartRange, setChartRange] = useState<AnalyticsRange>('24h');
+  /** Empty string means every region; the reference filters the chart by region. */
+  const [chartRegion, setChartRegion] = useState('');
   const [editing, setEditing] = useState(false);
   const [pingUrlCopied, setPingUrlCopied] = useState(false);
-  const [customFrom, setCustomFrom] = useState('');
-  const [customTo, setCustomTo] = useState('');
+  /** Reference range pickers open on the current window: last 30 days up to today. */
+  const [customFrom, setCustomFrom] = useState(() =>
+    isoDay(Math.floor(Date.now() / 1000) - 30 * 86_400),
+  );
+  const [customTo, setCustomTo] = useState(() => isoDay(Math.floor(Date.now() / 1000)));
   const [customWindow, setCustomWindow] = useState<{
     from: number;
     to: number;
@@ -208,8 +220,8 @@ export function AdminMonitorDetail() {
   }, [monitor, notFound, siteTitle, t]);
 
   const analyticsQuery = useQuery({
-    queryKey: ['admin-monitor-analytics', monitorId, chartRange],
-    queryFn: () => fetchAdminMonitorAnalytics(monitorId, chartRange),
+    queryKey: ['admin-monitor-analytics', monitorId, chartRange, chartRegion],
+    queryFn: () => fetchAdminMonitorAnalytics(monitorId, chartRange, chartRegion || undefined),
     enabled: !!monitor,
   });
 
@@ -390,6 +402,7 @@ export function AdminMonitorDetail() {
 
   const statusWord = statusLabel(monitor.status, t);
   const analytics = analyticsQuery.data;
+  const chartRegions = analytics?.regions ?? [];
   const rowLoading = windowsQuery.isLoading || outagesQuery.isLoading;
   const rowError = windowsQuery.isError || outagesQuery.isError;
 
@@ -557,10 +570,34 @@ export function AdminMonitorDetail() {
         </div>
 
         <section className="ui-panel mb-5 overflow-hidden">
-          <header className="flex h-[42px] items-center justify-between gap-3 border-b border-line-soft px-4">
-            <h2 className="text-[13px] font-medium text-ink">
+          <header className="flex h-[42px] items-center gap-3 border-b border-line-soft px-4">
+            <h2 className="text-[13px] font-medium text-ink-2">
               {t('monitor_detail.response_times')}
             </h2>
+          </header>
+
+          {/* Reference chart toolbar: the region selector sits left, the range control right. */}
+          <div className="flex flex-wrap items-center justify-between gap-4 px-6 pt-3">
+            {chartRegions.length > 0 ? (
+              <label className="flex items-center gap-2 text-[13px] text-ink-2">
+                <span className="sr-only">{t('monitor_detail.chart_region')}</span>
+                <Select
+                  className="ui-select ui-compact"
+                  value={chartRegion}
+                  aria-label={t('monitor_detail.chart_region')}
+                  onChange={setChartRegion}
+                >
+                  <option value="">{t('monitor_detail.chart_region_all')}</option>
+                  {chartRegions.map((region) => (
+                    <option key={region} value={region}>
+                      {region}
+                    </option>
+                  ))}
+                </Select>
+              </label>
+            ) : (
+              <span />
+            )}
             {/* Reference segmented control: 64 px segments joined by 1 px borders. */}
             <div className="ui-range-segments">
               {CHART_RANGES.map((range) => (
@@ -575,9 +612,9 @@ export function AdminMonitorDetail() {
                 </button>
               ))}
             </div>
-          </header>
+          </div>
 
-          <div className="px-4 py-4">
+          <div className="px-4 pb-4">
             {analyticsQuery.isLoading ? (
               <div className="ui-skeleton h-[466px] w-full" />
             ) : analyticsQuery.isError ? (
@@ -694,26 +731,60 @@ export function AdminMonitorDetail() {
                 <tr className="ui-uptime-calculator">
                   <td colSpan={6}>
                     <div className="flex flex-wrap items-center gap-2">
-                      <label className="flex items-center gap-2 text-[12px] text-ink-2">
+                      <label className="flex items-center gap-2 text-[13px] text-ink-2">
                         {t('monitor_detail.calc_from')}
-                        <input
-                          type="date"
-                          value={customFrom}
-                          onChange={(event) => setCustomFrom(event.target.value)}
-                          className="ui-input ui-compact w-[9.5rem]"
-                        />
+                        <span className="ui-date-field">
+                          <svg
+                            className="ui-date-field-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={1.7}
+                            aria-hidden
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z"
+                            />
+                          </svg>
+                          <input
+                            type="date"
+                            value={customFrom}
+                            onChange={(event) => setCustomFrom(event.target.value)}
+                            aria-label={t('monitor_detail.calc_from')}
+                            className="ui-date-field-input"
+                          />
+                        </span>
                       </label>
-                      <label className="flex items-center gap-2 text-[12px] text-ink-2">
+                      <label className="flex items-center gap-2 text-[13px] text-ink-2">
                         {t('monitor_detail.calc_to')}
-                        <input
-                          type="date"
-                          value={customTo}
-                          onChange={(event) => setCustomTo(event.target.value)}
-                          className="ui-input ui-compact w-[9.5rem]"
-                        />
+                        <span className="ui-date-field">
+                          <svg
+                            className="ui-date-field-icon"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth={1.7}
+                            aria-hidden
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              d="M8 3v3m8-3v3M4 9h16M5 5h14a1 1 0 011 1v13a1 1 0 01-1 1H5a1 1 0 01-1-1V6a1 1 0 011-1z"
+                            />
+                          </svg>
+                          <input
+                            type="date"
+                            value={customTo}
+                            onChange={(event) => setCustomTo(event.target.value)}
+                            aria-label={t('monitor_detail.calc_to')}
+                            className="ui-date-field-input"
+                          />
+                        </span>
                       </label>
                       <Button
-                        size="sm"
+                        className="ml-1 h-9 rounded-lg border border-line px-3"
                         variant="secondary"
                         disabled={!customFrom || !customTo || windowsQuery.isLoading}
                         onClick={calculateCustom}
@@ -769,36 +840,6 @@ export function AdminMonitorDetail() {
             </ul>
           </section>
         ) : null}
-
-        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-line-soft pt-4">
-          <label className="flex items-center gap-2 text-[12px] text-ink-3">
-            {t('monitor_detail.probe_mode')}
-            <Select
-              className="ui-select ui-compact w-[10rem]"
-              value={monitor.probe_mode}
-              disabled={updateMut.isPending || monitor.type === 'heartbeat'}
-              aria-label={t('monitor_detail.probe_mode')}
-              aria-busy={updateMut.isPending}
-              onChange={(next) => updateMut.mutate({ probe_mode: next as MonitorProbeMode })}
-            >
-              <option value="worker">{t('probes.mode_worker')}</option>
-              <option value="multi_region">{t('probes.mode_multi_region')}</option>
-            </Select>
-          </label>
-          <span className="flex-1" />
-          <button
-            type="button"
-            onClick={() => {
-              if (window.confirm(t('monitor_detail.delete_confirm', { name: monitor.name }))) {
-                deleteMut.mutate();
-              }
-            }}
-            disabled={deleteMut.isPending}
-            className="rounded px-2 py-1 text-[13px] text-status-down transition-colors hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {t('common.delete')}
-          </button>
-        </div>
       </main>
 
       <ToastStack>

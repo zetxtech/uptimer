@@ -896,8 +896,11 @@ export async function fetchAdminAnalyticsOverview(
 export async function fetchAdminMonitorAnalytics(
   monitorId: number,
   range: AnalyticsRange = '24h',
+  region?: string,
 ): Promise<MonitorAnalyticsResponse> {
-  const res = await fetch(`${API_BASE}/admin/analytics/monitors/${monitorId}?range=${range}`, {
+  const qs = new URLSearchParams({ range });
+  if (region) qs.set('region', region);
+  const res = await fetch(`${API_BASE}/admin/analytics/monitors/${monitorId}?${qs}`, {
     headers: getAuthHeaders(),
   });
   return handleResponse<MonitorAnalyticsResponse>(res);

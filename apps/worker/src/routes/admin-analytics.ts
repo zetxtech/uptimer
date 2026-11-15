@@ -487,6 +487,7 @@ adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
     .optional()
     .default('24h')
     .parse(c.req.query('range')) as UptimeRange;
+  const region = z.string().trim().min(1).max(64).optional().parse(c.req.query('region'));
 
   const monitor = await c.env.DB.prepare(
     `
@@ -504,6 +505,48 @@ adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
 
   const { start: rangeStartBase, end: rangeEnd } = computeRange(range);
   const rangeStart = Math.max(rangeStartBase, monitor.created_at);
+
+  // Probe regions that reported on this monitor inside the window: the chart's region filter.
+  const { results: regionRows } = await c.env.DB.prepare(
+    `
+      SELECT DISTINCT p.region AS region
+      FROM probe_check_results r
+      JOIN probes p ON p.id = r.probe_id
+      WHERE r.monitor_id = ?1
+        AND r.checked_at >= ?2
+        AND p.region <> ''
+      ORDER BY p.region
+    `,
+  )
+    .bind(id, rangeStartBase)
+    .all<{ region: string }>();
+  const regions = (regionRows ?? []).map((r) => r.region);
+
+  const regionPoints = async (
+    windowStart: number,
+  ): Promise<Array<{ checked_at: number; status: string; latency_ms: number | null }>> => {
+    if (!region) return [];
+    const { results } = await c.env.DB.prepare(
+      `
+        SELECT r.checked_at, r.status, r.latency_ms
+        FROM probe_check_results r
+        JOIN probes p ON p.id = r.probe_id
+        WHERE r.monitor_id = ?1
+          AND p.region = ?2
+          AND r.checked_at >= ?3
+          AND r.checked_at < ?4
+        ORDER BY r.checked_at
+        LIMIT 600
+      `,
+    )
+      .bind(id, region, windowStart, rangeEnd)
+      .all<{ checked_at: number; status: string; latency_ms: number | null }>();
+    return (results ?? []).map((r) => ({
+      checked_at: r.checked_at,
+      status: toCheckStatus(r.status),
+      latency_ms: r.latency_ms,
+    }));
+  };
 
   if (rangeEnd <= rangeStart) {
     return c.json({
@@ -523,6 +566,7 @@ adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
       checks: { total: 0, up: 0, down: 0, unknown: 0, maintenance: 0 },
       points: [],
       daily: [],
+      regions,
     });
   }
 
@@ -605,9 +649,44 @@ adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
 
     const checks_total = checks_up + checks_down + checks_unknown + checks_maintenance;
 
+    if (region) {
+      const scoped = await regionPoints(rangeStart);
+      const scopedLatencies = scoped
+        .filter((p) => p.status === 'up' && typeof p.latency_ms === 'number')
+        .map((p) => p.latency_ms as number);
+
+      return c.json({
+        monitor: { id: monitor.id, name: monitor.name, type: monitor.type },
+        range,
+        region,
+        regions,
+        range_start_at: rangeStart,
+        range_end_at: rangeEnd,
+        total_sec,
+        downtime_sec,
+        unknown_sec,
+        uptime_sec,
+        uptime_pct,
+        unknown_pct,
+        avg_latency_ms: avg(scopedLatencies),
+        p50_latency_ms: percentileFromValues(scopedLatencies, 0.5),
+        p95_latency_ms: percentileFromValues(scopedLatencies, 0.95),
+        checks: {
+          total: checks_total,
+          up: checks_up,
+          down: checks_down,
+          unknown: checks_unknown,
+          maintenance: checks_maintenance,
+        },
+        points: scoped,
+        daily: [],
+      });
+    }
+
     return c.json({
       monitor: { id: monitor.id, name: monitor.name, type: monitor.type },
       range,
+      regions,
       range_start_at: rangeStart,
       range_end_at: rangeEnd,
       total_sec,
@@ -849,8 +928,9 @@ adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
       unknown: checks_unknown,
       maintenance: checks_maintenance,
     },
-    points: [],
+    points: region ? await regionPoints(rangeStart) : [],
     daily,
+    regions,
   });
 });
 

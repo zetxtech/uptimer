@@ -223,6 +223,24 @@ assert(
   '52px bar and sidebar brand row',
 );
 assert(
+  'monitor detail chart toolbar carries the region filter',
+  /monitor_detail\.chart_region/.test(read('apps/web/src/pages/AdminMonitorDetail.tsx')) &&
+    /chartRegions\.length > 0/.test(read('apps/web/src/pages/AdminMonitorDetail.tsx')),
+  'region selector in the chart toolbar, hidden when no region has data',
+);
+assert(
+  'monitor detail has no probe-mode or delete controls',
+  !/monitor_detail\.probe_mode/.test(read('apps/web/src/pages/AdminMonitorDetail.tsx')) &&
+    !/monitor_detail\.delete_confirm/.test(read('apps/web/src/pages/AdminMonitorDetail.tsx')),
+  'removed from the detail page',
+);
+assert(
+  'range pickers follow the reference field',
+  /font-size:\s*13px/.test(cssRule('\n.ui-date-field-input')) &&
+    /height:\s*36px/.test(cssRule('\n.ui-date-field-input')),
+  '36px date field, 13px text',
+);
+assert(
   'monitor detail header is text-only (17 px status line)',
   /mt-\[17px\] flex flex-wrap items-center gap-x-1\.5 text-\[14px\]/.test(
     read('apps/web/src/pages/AdminMonitorDetail.tsx'),
