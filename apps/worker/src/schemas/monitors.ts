@@ -299,6 +299,19 @@ export const reorderMonitorGroupsInputSchema = z
 
 export type ReorderMonitorGroupsInput = z.infer<typeof reorderMonitorGroupsInputSchema>;
 
+export const renameMonitorGroupInputSchema = z.object({
+  from: monitorGroupNameSchema,
+  to: monitorGroupNameSchema,
+});
+
+export type RenameMonitorGroupInput = z.infer<typeof renameMonitorGroupInputSchema>;
+
+export const removeMonitorGroupInputSchema = z.object({
+  name: monitorGroupNameSchema,
+});
+
+export type RemoveMonitorGroupInput = z.infer<typeof removeMonitorGroupInputSchema>;
+
 export const assignMonitorsToGroupInputSchema = z
   .object({
     monitor_ids: z.array(z.number().int().positive()).min(1).max(500),

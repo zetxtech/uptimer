@@ -70,6 +70,8 @@ import {
   assignMonitorsToGroupInputSchema,
   createMonitorInputSchema,
   patchMonitorInputSchema,
+  removeMonitorGroupInputSchema,
+  renameMonitorGroupInputSchema,
   reorderMonitorGroupsInputSchema,
 } from '../schemas/monitors';
 import {
@@ -535,6 +537,74 @@ adminRoutes.post('/monitors/groups/assign', async (c) => {
     group_sort_order: targetGroupSortOrder,
     updated_monitors: result.meta.changes ?? 0,
   });
+});
+
+adminRoutes.post('/monitors/groups/rename', async (c) => {
+  const rawBody = await c.req.json().catch(() => {
+    throw new AppError(400, 'INVALID_ARGUMENT', 'Invalid JSON body');
+  });
+  const input = renameMonitorGroupInputSchema.parse(rawBody);
+  const now = Math.floor(Date.now() / 1000);
+
+  const existing = await findGroupSortOrder(c.env.DB, input.to);
+  if (existing !== null && input.to.toLowerCase() !== input.from.toLowerCase()) {
+    throw new AppError(409, 'GROUP_EXISTS', `Group "${input.to}" already exists`);
+  }
+
+  const result = await c.env.DB.prepare(
+    `
+      UPDATE monitors
+      SET group_name = ?,
+          updated_at = ?
+      WHERE group_name IS NOT NULL
+        AND trim(group_name) <> ''
+        AND lower(trim(group_name)) = lower(?)
+    `,
+  )
+    .bind(input.to, now, input.from)
+    .run();
+
+  if ((result.meta.changes ?? 0) === 0) {
+    throw new AppError(404, 'NOT_FOUND', `Group "${input.from}" was not found`);
+  }
+
+  await bumpHomepageMonitorGuardVersions(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
+
+  return c.json({ group_name: input.to, updated_monitors: result.meta.changes ?? 0 });
+});
+
+adminRoutes.post('/monitors/groups/remove', async (c) => {
+  const rawBody = await c.req.json().catch(() => {
+    throw new AppError(400, 'INVALID_ARGUMENT', 'Invalid JSON body');
+  });
+  const input = removeMonitorGroupInputSchema.parse(rawBody);
+  const now = Math.floor(Date.now() / 1000);
+
+  // Removing a group keeps its monitors: they fall back to the default (ungrouped) group.
+  const ungroupedSortOrder = (await findGroupSortOrder(c.env.DB, null)) ?? 0;
+  const result = await c.env.DB.prepare(
+    `
+      UPDATE monitors
+      SET group_name = NULL,
+          group_sort_order = ?,
+          updated_at = ?
+      WHERE group_name IS NOT NULL
+        AND trim(group_name) <> ''
+        AND lower(trim(group_name)) = lower(?)
+    `,
+  )
+    .bind(ungroupedSortOrder, now, input.name)
+    .run();
+
+  if ((result.meta.changes ?? 0) === 0) {
+    throw new AppError(404, 'NOT_FOUND', `Group "${input.name}" was not found`);
+  }
+
+  await bumpHomepageMonitorGuardVersions(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
+
+  return c.json({ removed_group: input.name, moved_monitors: result.meta.changes ?? 0 });
 });
 
 adminRoutes.get('/settings/uptime-rating', async (c) => {

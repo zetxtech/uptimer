@@ -451,6 +451,31 @@ export async function updateMonitor(
   return handleResponse<{ monitor: AdminMonitor }>(res);
 }
 
+/** Renames a monitor group; the default (ungrouped) group cannot be renamed. */
+export async function renameMonitorGroup(
+  from: string,
+  to: string,
+): Promise<{ group_name: string; updated_monitors: number }> {
+  const res = await fetch(`${API_BASE}/admin/monitors/groups/rename`, {
+    method: 'POST',
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ from, to }),
+  });
+  return handleResponse<{ group_name: string; updated_monitors: number }>(res);
+}
+
+/** Removes a group; its monitors return to the default (ungrouped) group. */
+export async function removeMonitorGroup(
+  name: string,
+): Promise<{ removed_group: string; moved_monitors: number }> {
+  const res = await fetch(`${API_BASE}/admin/monitors/groups/remove`, {
+    method: 'POST',
+    headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  return handleResponse<{ removed_group: string; moved_monitors: number }>(res);
+}
+
 export async function deleteMonitor(id: number): Promise<{ deleted: boolean }> {
   const res = await fetch(`${API_BASE}/admin/monitors/${id}`, {
     method: 'DELETE',

@@ -1610,9 +1610,11 @@ button,
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  height: 34px;
-  padding: 0 12px;
-  border-radius: 8px;
+  /* The bar is 32 px tall including its 1 px borders, so the actions fill it exactly instead of
+     poking through the top and bottom edges. */
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
   color: var(--color-text-secondary);
@@ -1620,6 +1622,10 @@ button,
     background-color 0.13s ease,
     color 0.13s ease,
     border-color 0.13s ease;
+}
+
+.ui-bulk-bar-action:disabled {
+  opacity: 0.45;
 }
 
 /* The reference frames each selection action as its own outlined button. */

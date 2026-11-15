@@ -199,6 +199,12 @@ assert(
   '182x30, 1px border, radius 8 (archive note)',
 );
 assert(
+  'bulk bar actions fit the 32px bar',
+  /height:\s*30px/.test(cssRule('\n.ui-bulk-bar-action')) &&
+    /height:\s*32px/.test(cssRule('\n.ui-bulk-bar')),
+  '30px action inside the 32px bar',
+);
+assert(
   'selection mode matches the archived notes',
   /width:\s*16px/.test(cssRule('\n.ui-selection-checkbox')) &&
     /border-radius:\s*4px/.test(cssRule('\n.ui-selection-checkbox')) &&

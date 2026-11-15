@@ -569,6 +569,9 @@ const en = {
   'admin_dashboard.tab_all_monitors': 'All monitors',
   'admin_dashboard.monitor_toggle_active': 'Toggle monitoring for {name}',
   'admin_dashboard.monitor_col_latency': 'Latency',
+  'admin_dashboard.group_name': 'Group name',
+  'admin_dashboard.group_remove_help':
+    'Remove “{name}”? Its monitors move back to the default group.',
   'admin_dashboard.monitor_actions': 'Actions',
   'admin_dashboard.monitor_view_incidents': 'View incidents',
   'admin_dashboard.monitor_configure': 'Configure',
@@ -1734,6 +1737,8 @@ const zhCn: CompleteMessages = {
   'admin_dashboard.tab_all_monitors': '全部监控项',
   'admin_dashboard.monitor_toggle_active': '启用/停用 {name}',
   'admin_dashboard.monitor_col_latency': '延迟',
+  'admin_dashboard.group_name': '分组名称',
+  'admin_dashboard.group_remove_help': '移除「{name}」？组内监控项会回到默认分组。',
   'admin_dashboard.monitor_actions': '操作',
   'admin_dashboard.monitor_view_incidents': '查看事件',
   'admin_dashboard.monitor_configure': '编辑配置',
@@ -2334,6 +2339,8 @@ const zhCn: CompleteMessages = {
 };
 
 const zhTw: CompleteMessages = {
+  'admin_dashboard.group_name': '群組名稱',
+  'admin_dashboard.group_remove_help': '移除「{name}」？群組內的監控項會回到預設群組。',
   'admin_nav.monitoring': '監控',
   'admin_nav.operations': '事件與問題',
   'admin_nav.insights': '分析與報表',
@@ -3465,6 +3472,9 @@ const zhTw: CompleteMessages = {
 };
 
 const ja: LocaleMessages = {
+  'admin_dashboard.group_name': 'グループ名',
+  'admin_dashboard.group_remove_help':
+    '「{name}」を削除しますか？監視はデフォルトのグループに戻ります。',
   'common.rename': '名前を変更',
   'common.remove': '削除',
   'admin_dashboard.monitor_view_incidents': 'インシデントを表示',
@@ -3814,6 +3824,9 @@ const ja: LocaleMessages = {
 };
 
 const es: LocaleMessages = {
+  'admin_dashboard.group_name': 'Nombre del grupo',
+  'admin_dashboard.group_remove_help':
+    '¿Eliminar «{name}»? Sus monitores vuelven al grupo predeterminado.',
   'common.rename': 'Renombrar',
   'common.remove': 'Eliminar',
   'admin_dashboard.monitor_view_incidents': 'Ver incidentes',

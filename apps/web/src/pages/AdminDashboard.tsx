@@ -21,6 +21,8 @@ import {
   updateMonitor,
   deleteMonitor,
   duplicateMonitor,
+  removeMonitorGroup,
+  renameMonitorGroup,
   sendMonitorTestAlert,
   testMonitor,
   pauseMonitor,
@@ -75,7 +77,7 @@ import { IncidentUpdateForm } from '../components/IncidentUpdateForm';
 import { MaintenanceWindowForm } from '../components/MaintenanceWindowForm';
 import { MonitorForm } from '../components/MonitorForm';
 import { EmptyState, SettingsGroup, SettingsRow } from '../components/AdminSection';
-import { MenuItem, MonitorList, RowMenu } from '../components/MonitorList';
+import { DEFAULT_GROUP_LABEL, MenuItem, MonitorList, RowMenu } from '../components/MonitorList';
 import { NotificationChannelForm } from '../components/NotificationChannelForm';
 import { NotificationDeliveryList } from '../components/NotificationDeliveryList';
 import { NotificationGroupForm } from '../components/NotificationGroupForm';
@@ -129,6 +131,8 @@ type ModalState =
   | { type: 'edit-maintenance'; window: MaintenanceWindow }
   | { type: 'bulk-move' }
   | { type: 'bulk-edit' }
+  | { type: 'rename-group'; label: string }
+  | { type: 'remove-group'; label: string }
   | { type: 'bulk-configure'; property: BulkConfigProperty };
 
 /** Reference selection-mode menu entries; each opens its own dialog. */
@@ -257,7 +261,7 @@ function percentile(values: number[], ratio: number): number {
 }
 
 const GROUP_ORDER_STEP = 10;
-const UNGROUPED_LABEL = 'Ungrouped';
+const UNGROUPED_LABEL = DEFAULT_GROUP_LABEL;
 const UNGROUPED_LABEL_ALIASES = [
   UNGROUPED_LABEL,
   ...new Set(
@@ -510,6 +514,7 @@ export function AdminDashboard() {
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general');
   const [showMonitorFilters, setShowMonitorFilters] = useState(false);
   const [showGroupManager, setShowGroupManager] = useState(false);
+  const [groupNameDraft, setGroupNameDraft] = useState('');
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const createMenuRef = useRef<HTMLDivElement | null>(null);
   const [showBulkMenu, setShowBulkMenu] = useState(false);
@@ -1558,6 +1563,28 @@ export function AdminDashboard() {
     />
   );
 
+  const renameGroupMut = useMutation({
+    mutationFn: ({ from, to }: { from: string; to: string }) => renameMonitorGroup(from, to),
+    onSuccess: async () => {
+      setModal({ type: 'none' });
+      setMonitorGroupManageError(null);
+      await queryClient.invalidateQueries({ queryKey: ['admin-monitors'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-homepage'] });
+    },
+    onError: (error) => setMonitorGroupManageError(formatError(error) ?? ''),
+  });
+
+  const removeGroupMut = useMutation({
+    mutationFn: (name: string) => removeMonitorGroup(name),
+    onSuccess: async () => {
+      setModal({ type: 'none' });
+      setMonitorGroupManageError(null);
+      await queryClient.invalidateQueries({ queryKey: ['admin-monitors'] });
+      await queryClient.invalidateQueries({ queryKey: ['admin-homepage'] });
+    },
+    onError: (error) => setMonitorGroupManageError(formatError(error) ?? ''),
+  });
+
   const bulkMovePanel = (
     <>
       <div className="flex flex-wrap items-end gap-3">
@@ -1898,7 +1925,7 @@ export function AdminDashboard() {
         {/* Tab bodies swap in place with a short fade instead of an instant clear. */}
         <div key={tab} className="ui-page-enter">
           {tab === 'monitors' && (
-            <div className="space-y-10">
+            <div className="space-y-5">
               <AdminPageHeader
                 title={t('admin_dashboard.tab.monitors')}
                 description={t('admin_dashboard.monitors_description')}
@@ -2221,7 +2248,7 @@ export function AdminDashboard() {
                   ))}
                 </div>
               ) : !monitors.length ? (
-                <Card className="p-6 sm:p-8 text-center text-ink-2 dark:text-ink-3">
+                <Card className="mt-3 p-6 text-center text-ink-2 sm:p-8 dark:text-ink-3">
                   {t('admin_dashboard.no_monitors_yet')}
                 </Card>
               ) : (
@@ -2489,6 +2516,15 @@ export function AdminDashboard() {
                           onDuplicatePending={() => duplicateMonitorMut.isPending}
                           onSendTestAlert={(monitor) => sendTestAlertMut.mutate(monitor.id)}
                           onCreateGroup={() => setModal({ type: 'create-group' })}
+                          onRenameGroup={(label) => {
+                            setMonitorGroupManageError(null);
+                            setGroupNameDraft(label);
+                            setModal({ type: 'rename-group', label });
+                          }}
+                          onRemoveGroup={(label) => {
+                            setMonitorGroupManageError(null);
+                            setModal({ type: 'remove-group', label });
+                          }}
                           footer={
                             <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-[11px] text-ink-2 dark:text-ink-3">
                               <span>
@@ -3820,6 +3856,8 @@ export function AdminDashboard() {
                 {modal.type === 'edit-maintenance' && t('admin_dashboard.edit_maintenance')}
                 {modal.type === 'bulk-move' && t('admin_dashboard.bulk_move')}
                 {modal.type === 'bulk-edit' && t('admin_dashboard.bulk_edit')}
+                {modal.type === 'rename-group' && t('common.rename')}
+                {modal.type === 'remove-group' && t('common.remove')}
               </h2>
             )}
 
@@ -3840,6 +3878,66 @@ export function AdminDashboard() {
             )}
 
             {modal.type === 'bulk-edit' && <div className="space-y-3">{bulkEditPanel}</div>}
+
+            {modal.type === 'rename-group' && (
+              <div className="space-y-4">
+                <label className="ui-label" htmlFor="rename-group-input">
+                  {t('admin_dashboard.group_name')}
+                </label>
+                <input
+                  id="rename-group-input"
+                  className="ui-input w-full"
+                  value={groupNameDraft}
+                  maxLength={64}
+                  onChange={(event) => setGroupNameDraft(event.target.value)}
+                />
+                {monitorGroupManageError ? (
+                  <p role="alert" className="text-[13px] text-status-down">
+                    {monitorGroupManageError}
+                  </p>
+                ) : null}
+                <div className="flex justify-end gap-2">
+                  <Button variant="secondary" type="button" onClick={closeModal}>
+                    {t('common.cancel')}
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={groupNameDraft.trim().length === 0 || renameGroupMut.isPending}
+                    onClick={() =>
+                      renameGroupMut.mutate({ from: modal.label, to: groupNameDraft.trim() })
+                    }
+                  >
+                    {t('common.save')}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {modal.type === 'remove-group' && (
+              <div className="space-y-4">
+                <p className="text-[13px] text-ink-2">
+                  {t('admin_dashboard.group_remove_help', { name: modal.label })}
+                </p>
+                {monitorGroupManageError ? (
+                  <p role="alert" className="text-[13px] text-status-down">
+                    {monitorGroupManageError}
+                  </p>
+                ) : null}
+                <div className="flex justify-end gap-2">
+                  <Button variant="secondary" type="button" onClick={closeModal}>
+                    {t('common.cancel')}
+                  </Button>
+                  <Button
+                    variant="danger"
+                    type="button"
+                    disabled={removeGroupMut.isPending}
+                    onClick={() => removeGroupMut.mutate(modal.label)}
+                  >
+                    {t('common.remove')}
+                  </Button>
+                </div>
+              </div>
+            )}
 
             {modal.type === 'bulk-configure' && (
               <BulkConfigureDialog
