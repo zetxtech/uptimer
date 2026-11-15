@@ -191,13 +191,12 @@ assert(
   'reference item set in a 190px menu',
 );
 assert(
-  'incident control matches the captured anatomy',
-  /color-mix\(in srgb, var\(--color-down\) 20%/.test(cssRule('\n.ui-monitor-incident-chip')) &&
-    /width:\s*26px/.test(cssRule('\n.ui-monitor-incident-chip')) &&
-    /border-radius:\s*6px/.test(cssRule('\n.ui-monitor-incident-chip')) &&
-    /width:\s*12px/.test(cssRule('\n.ui-monitor-incident-caret')) &&
-    /color:\s*var\(--color-text-secondary\)/.test(cssRule('\n.ui-monitor-incident-label')),
-  'red icon chip + muted label + chevron',
+  'row incident pill matches the archived measurement',
+  /height:\s*30px/.test(cssRule('\n.ui-monitor-incident-pill')) &&
+    /border:\s*1px solid var\(--color-border\)/.test(cssRule('\n.ui-monitor-incident-pill')) &&
+    /border-radius:\s*8px/.test(cssRule('\n.ui-monitor-incident-pill')) &&
+    /width:\s*12px/.test(cssRule('\n.ui-monitor-incident-caret')),
+  '182x30, 1px border, radius 8 (archive note)',
 );
 assert(
   'type scale limited to 11/12/13/14/16/20/28',

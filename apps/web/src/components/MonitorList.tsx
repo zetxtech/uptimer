@@ -576,7 +576,7 @@ export function MonitorList({
                           className="ui-monitor-incident-pill"
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <span className="ui-monitor-incident-chip">
+                          <span className="ui-monitor-incident-icon">
                             <svg
                               viewBox="0 0 16 16"
                               fill="none"
@@ -593,9 +593,7 @@ export function MonitorList({
                               <path strokeLinecap="round" d="M8 10.4h.01" />
                             </svg>
                           </span>
-                          <span className="ui-monitor-incident-label">
-                            {t('admin_dashboard.monitor_incident_open')}
-                          </span>
+                          <span>{t('admin_dashboard.monitor_incident_open')}</span>
                           <span className="ui-monitor-incident-caret" aria-hidden>
                             <svg
                               viewBox="0 0 16 16"
