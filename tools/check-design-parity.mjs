@@ -136,6 +136,26 @@ const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
 contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
 contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
 assert(
+  'no off-scale Tailwind type sizes',
+  !/text-(2xl|3xl|4xl|5xl|lg)\b/.test(
+    [
+      'apps/web/src/pages/StatusPage.tsx',
+      'apps/web/src/pages/IncidentHistoryPage.tsx',
+      'apps/web/src/pages/MaintenanceHistoryPage.tsx',
+      'apps/web/src/components/MonitorForm.tsx',
+      'apps/web/src/components/DayDowntimeModal.tsx',
+    ]
+      .map(read)
+      .join('\n'),
+  ),
+  'text-lg and text-2xl are off the scale',
+);
+assert(
+  'public status title on the page scale',
+  /font-size:\s*28px/.test(cssRule('\n.ui-public-title')),
+  '28px heading',
+);
+assert(
   'field pitch (label 6 px, help 10 px)',
   /margin-bottom:\s*0\.375rem/.test(cssRule('\n.ui-label')) &&
     /margin-top:\s*0\.625rem/.test(cssRule('\n.ui-help')),

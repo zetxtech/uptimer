@@ -3163,6 +3163,7 @@ export function AdminDashboard() {
               {/* Reference settings keep one primary save action at the page bottom. */}
               <div className="flex items-center gap-3">
                 <Button
+                  size="lg"
                   disabled={
                     patchSettingsMut.isPending || Object.keys(unsavedSettingsPatch).length === 0
                   }

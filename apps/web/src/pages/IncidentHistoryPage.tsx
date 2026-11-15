@@ -106,7 +106,7 @@ function IncidentDetail({
     <PublicDialog label={incident.title} onClose={onClose} panelClassName="sm:max-w-2xl p-5 sm:p-6">
       <div className="flex justify-between items-start mb-4 sm:mb-6">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-ink mb-2">{incident.title}</h2>
+          <h2 className="text-base sm:text-xl font-semibold text-ink mb-2">{incident.title}</h2>
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant={

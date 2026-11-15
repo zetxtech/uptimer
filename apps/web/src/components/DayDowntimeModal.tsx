@@ -233,7 +233,7 @@ export function DayDowntimeModal({
           <div className="text-xs uppercase tracking-wide text-ink-3 dark:text-ink-2 mb-1">
             {t('day_downtime.title')}
           </div>
-          <h2 className="text-lg sm:text-xl font-semibold text-ink">
+          <h2 className="text-base sm:text-xl font-semibold text-ink">
             {formatDay(dayStartAt, timeZone, locale)}
           </h2>
           {!isLoading && !error && (

@@ -431,7 +431,8 @@ export function AdminMonitorDetail() {
 
   return (
     <AdminShell active="dashboard" layout="sidebar">
-      <main className="mx-auto w-full max-w-[1160px] px-5 pb-12 pt-6 sm:pt-7">
+      {/* Reference detail page: the h1 sits 80px below the 52px top bar. */}
+      <main className="mx-auto w-full max-w-[1160px] px-5 pb-12 pt-20">
         <div className="min-w-0">
           <h1 className="ui-page-title break-words">{monitor.name}</h1>
           <div className="mt-[17px] flex flex-wrap items-center gap-x-1.5 text-[14px] leading-5">

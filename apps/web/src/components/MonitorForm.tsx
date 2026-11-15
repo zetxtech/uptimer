@@ -1129,7 +1129,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
           <div className="min-w-0 flex-1">
             <h2
               id="admin-modal-title"
-              className="text-lg font-semibold leading-5 tracking-tight text-ink"
+              className="text-base font-semibold leading-5 tracking-tight text-ink"
             >
               {monitor ? t('admin_dashboard.edit_monitor') : createLabel}
             </h2>

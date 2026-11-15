@@ -100,7 +100,7 @@ function MonitorDetail({ monitorId, onClose }: { monitorId: number; onClose: () 
               <div className="text-xs text-ink-2 dark:text-ink-3 uppercase tracking-wide mb-1">
                 {t('status_page.avg_latency')}
               </div>
-              <div className="text-base sm:text-lg font-semibold text-ink">
+              <div className="text-base sm:text-base font-semibold text-ink">
                 {data.avg_latency_ms ?? '-'}ms
               </div>
             </div>
@@ -108,7 +108,7 @@ function MonitorDetail({ monitorId, onClose }: { monitorId: number; onClose: () 
               <div className="text-xs text-ink-2 dark:text-ink-3 uppercase tracking-wide mb-1">
                 {t('status_page.p95_latency')}
               </div>
-              <div className="text-base sm:text-lg font-semibold text-ink">
+              <div className="text-base sm:text-base font-semibold text-ink">
                 {data.p95_latency_ms ?? '-'}ms
               </div>
             </div>
@@ -188,7 +188,7 @@ function IncidentDetail({
     <PublicDialog label={incident.title} onClose={onClose} panelClassName="sm:max-w-2xl p-5 sm:p-6">
       <div className="flex justify-between items-start mb-4 sm:mb-6">
         <div>
-          <h2 className="text-lg sm:text-xl font-semibold text-ink mb-2">{incident.title}</h2>
+          <h2 className="text-base sm:text-xl font-semibold text-ink mb-2">{incident.title}</h2>
           <div className="flex flex-wrap items-center gap-2">
             <Badge
               variant={
@@ -427,7 +427,7 @@ export function StatusPage() {
       <div className="min-h-screen bg-surface">
         <PublicStatusHeader siteTitle={derivedTitle} />
         <main className="ui-public-container py-12">
-          <h1 className="mb-3 text-2xl font-semibold text-ink">
+          <h1 className="mb-3 text-[20px] font-semibold text-ink">
             {t('status_page.unable_to_load_status')}
           </h1>
           <p className="text-sm text-ink-3">{t('status_page.check_connection')}</p>
