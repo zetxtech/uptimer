@@ -1958,9 +1958,10 @@ button,
   line-height: 16px;
 }
 
-.ui-monitor-meta-sep {
-  padding: 0 6px;
-  color: var(--color-text-muted);
+/* Reference second line: state word, 10 px gap (from .ui-monitor-meta), a fixed 120 px duration
+   column, then the status-page link — the fixed column is what lines the links up across rows. */
+.ui-monitor-meta-time {
+  width: 120px;
 }
 
 .ui-monitor-status-page-link {
@@ -1974,33 +1975,60 @@ button,
   color: var(--color-text-primary);
 }
 
-/* Ongoing-incident pill: status-tinted, shield icon, 30 px tall like the reference. */
+/* Ongoing-incident control, exactly as captured from the reference: a transparent 8px wrapper
+   holding a 20%-tinted red icon chip (26×26, radius 6), a muted 13/500 label and a 12px chevron. */
 .ui-monitor-incident-pill {
   display: inline-flex;
-  height: 30px;
+  height: 34px;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
-  overflow: hidden;
-  padding: 0 12px;
-  border: 1px solid color-mix(in srgb, var(--color-down) 35%, transparent);
+  padding: 4px;
+  border: 0;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--color-down) 12%, transparent);
-  color: var(--color-down);
+  background: transparent;
+  color: var(--color-text-secondary);
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
 }
 
 .ui-monitor-incident-pill:hover {
-  background: color-mix(in srgb, var(--color-down) 18%, transparent);
+  background: var(--color-bg-secondary);
 }
 
-.ui-monitor-incident-pill svg {
-  width: 14px;
-  height: 14px;
+.ui-monitor-incident-chip {
+  display: grid;
   flex: 0 0 auto;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--color-down) 20%, transparent);
   color: var(--color-down);
+}
+
+.ui-monitor-incident-chip svg {
+  width: 16px;
+  height: 16px;
+}
+
+.ui-monitor-incident-label {
+  padding: 0 6px;
+  color: var(--color-text-secondary);
+}
+
+.ui-monitor-incident-caret {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  color: var(--color-text-muted);
+}
+
+.ui-monitor-incident-caret svg {
+  width: 12px;
+  height: 12px;
 }
 
 /* Paused rows carry the reference amber indicator beside the frequency. */

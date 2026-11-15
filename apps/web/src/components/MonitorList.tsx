@@ -552,22 +552,18 @@ export function MonitorList({
                             {statusLabel(monitor.status, t)}
                           </span>
                           {statusDuration ? (
-                            <>
-                              <span className="ui-monitor-meta-sep">·</span>
-                              <span className="shrink-0">{statusDuration}</span>
-                            </>
+                            <span className="ui-monitor-meta-time shrink-0 truncate">
+                              {statusDuration}
+                            </span>
                           ) : null}
                           {monitor.show_on_status_page ? (
-                            <>
-                              <span className="ui-monitor-meta-sep">·</span>
-                              <a
-                                href="/"
-                                className="ui-monitor-status-page-link truncate"
-                                onClick={(event) => event.stopPropagation()}
-                              >
-                                {t('admin_dashboard.monitor_used_on_status_page')}
-                              </a>
-                            </>
+                            <a
+                              href="/"
+                              className="ui-monitor-status-page-link truncate"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              {t('admin_dashboard.monitor_used_on_status_page')}
+                            </a>
                           ) : null}
                         </div>
                       </div>
@@ -580,22 +576,40 @@ export function MonitorList({
                           className="ui-monitor-incident-pill"
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <svg
-                            viewBox="0 0 16 16"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth={1.4}
-                            aria-hidden
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M8 1.8 2.9 3.9v4.3c0 3 2.2 5.3 5.1 6 2.9-.7 5.1-3 5.1-6V3.9L8 1.8Z"
-                            />
-                            <path strokeLinecap="round" d="M8 6v2.4" />
-                            <path strokeLinecap="round" d="M8 10.4h.01" />
-                          </svg>
-                          {t('admin_dashboard.monitor_incident_open')}
+                          <span className="ui-monitor-incident-chip">
+                            <svg
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.4}
+                              aria-hidden
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="M8 1.8 2.9 3.9v4.3c0 3 2.2 5.3 5.1 6 2.9-.7 5.1-3 5.1-6V3.9L8 1.8Z"
+                              />
+                              <path strokeLinecap="round" d="M8 6v2.4" />
+                              <path strokeLinecap="round" d="M8 10.4h.01" />
+                            </svg>
+                          </span>
+                          <span className="ui-monitor-incident-label">
+                            {t('admin_dashboard.monitor_incident_open')}
+                          </span>
+                          <span className="ui-monitor-incident-caret" aria-hidden>
+                            <svg
+                              viewBox="0 0 16 16"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.8}
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                d="m6.5 4.5 3.5 3.5-3.5 3.5"
+                              />
+                            </svg>
+                          </span>
                         </Link>
                       ) : null}
                       {monitor.status === 'paused' ? (

@@ -191,9 +191,13 @@ assert(
   'reference item set in a 190px menu',
 );
 assert(
-  'incident pill is status-tinted',
-  /color-mix\(in srgb, var\(--color-down\) 12%/.test(cssRule('\n.ui-monitor-incident-pill')),
-  'red tinted pill',
+  'incident control matches the captured anatomy',
+  /color-mix\(in srgb, var\(--color-down\) 20%/.test(cssRule('\n.ui-monitor-incident-chip')) &&
+    /width:\s*26px/.test(cssRule('\n.ui-monitor-incident-chip')) &&
+    /border-radius:\s*6px/.test(cssRule('\n.ui-monitor-incident-chip')) &&
+    /width:\s*12px/.test(cssRule('\n.ui-monitor-incident-caret')) &&
+    /color:\s*var\(--color-text-secondary\)/.test(cssRule('\n.ui-monitor-incident-label')),
+  'red icon chip + muted label + chevron',
 );
 assert(
   'type scale limited to 11/12/13/14/16/20/28',
