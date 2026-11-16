@@ -455,9 +455,10 @@ export function AdminDashboard() {
   const { locale, setLocaleSetting, t } = useI18n();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const { search } = useLocation();
+  const { pathname, search } = useLocation();
   const ungroupedLabel = t('status_page.group_ungrouped');
   const requestedTab = new URLSearchParams(search).get('tab');
+  const monitorStatusFilter = new URLSearchParams(search).get('status[]') ?? '';
   const tab: Tab =
     requestedTab && (TAB_KEYS as string[]).includes(requestedTab)
       ? (requestedTab as Tab)
@@ -513,6 +514,7 @@ export function AdminDashboard() {
   );
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general');
   const [showMonitorFilters, setShowMonitorFilters] = useState(false);
+  const [monitorStatusDraft, setMonitorStatusDraft] = useState(monitorStatusFilter);
   const monitorFiltersRef = useRef<HTMLDivElement | null>(null);
   const [showGroupManager, setShowGroupManager] = useState(false);
   const [groupNameDraft, setGroupNameDraft] = useState('');
@@ -1454,11 +1456,26 @@ export function AdminDashboard() {
     ungroupedLabel,
   ]);
 
+  const applyMonitorStatusFilter = () => {
+    const params = new URLSearchParams(search);
+    if (monitorStatusDraft) params.set('status[]', monitorStatusDraft);
+    else params.delete('status[]');
+    const query = params.toString();
+    navigate(`${pathname}${query ? `?${query}` : ''}`, { replace: true });
+    setShowMonitorFilters(false);
+  };
+
   const filteredMonitors = useMemo(() => {
+    const byStatus = monitorStatusFilter
+      ? sortedMonitors.filter((monitor) => {
+          const status = monitor.status === 'unknown' ? 'pending' : monitor.status;
+          return status === monitorStatusFilter;
+        })
+      : sortedMonitors;
     const byGroup =
       monitorGroupFilter === ALL_GROUPS_FILTER
-        ? sortedMonitors
-        : sortedMonitors.filter((monitor) => monitorGroupLabel(monitor) === monitorGroupFilter);
+        ? byStatus
+        : byStatus.filter((monitor) => monitorGroupLabel(monitor) === monitorGroupFilter);
 
     const term = monitorSearch.trim().toLowerCase();
     if (!term) return byGroup;
@@ -1470,7 +1487,7 @@ export function AdminDashboard() {
         String(monitor.id) === term
       );
     });
-  }, [monitorGroupFilter, monitorSearch, sortedMonitors]);
+  }, [monitorGroupFilter, monitorSearch, monitorStatusFilter, sortedMonitors]);
 
   const pausedMonitorIds = useMemo(
     () =>
@@ -1530,9 +1547,6 @@ export function AdminDashboard() {
     [filteredMonitors],
   );
 
-  const allVisibleMonitorsSelected =
-    visibleMonitorIds.length > 0 && visibleMonitorIds.every((id) => selectedMonitorIdSet.has(id));
-
   const hiddenSelectedCount =
     selectedMonitorIds.length -
     visibleMonitorIds.filter((id) => selectedMonitorIdSet.has(id)).length;
@@ -1545,13 +1559,6 @@ export function AdminDashboard() {
     [channelsQuery.data?.notification_channels],
   );
   const toUiGroupLabel = (groupLabel: string) => displayGroupLabel(groupLabel, ungroupedLabel);
-  const toggleVisibleMonitors = () => {
-    if (allVisibleMonitorsSelected) {
-      setSelectedMonitorIds((previous) => previous.filter((id) => !visibleMonitorIds.includes(id)));
-      return;
-    }
-    setSelectedMonitorIds((previous) => [...new Set([...previous, ...visibleMonitorIds])]);
-  };
   const selectedMonitors = monitors.filter((monitor) => selectedMonitorIds.includes(monitor.id));
   const toggleMonitor = (id: number) => {
     setSelectedMonitorIds((previous) =>
@@ -1941,11 +1948,24 @@ export function AdminDashboard() {
                     <div className="relative" ref={monitorFiltersRef}>
                       <button
                         type="button"
-                        onClick={() => setShowMonitorFilters((previous) => !previous)}
-                        aria-label={t('admin_dashboard.group_filter')}
+                        onClick={() => {
+                          const next = !showMonitorFilters;
+                          if (next) setMonitorStatusDraft(monitorStatusFilter);
+                          setShowMonitorFilters(next);
+                        }}
+                        aria-label={
+                          monitorStatusFilter
+                            ? t('admin_dashboard.monitor_filter_applied_one')
+                            : t('admin_dashboard.monitor_filter_apply')
+                        }
                         aria-expanded={showMonitorFilters}
-                        title={t('admin_dashboard.group_filter')}
-                        className="ui-btn-secondary ui-icon-btn ui-monitor-filter-button h-9 w-9"
+                        title={
+                          monitorStatusFilter
+                            ? t('admin_dashboard.monitor_filter_applied_one')
+                            : t('admin_dashboard.monitor_filter_apply')
+                        }
+                        data-active={monitorStatusFilter.length > 0}
+                        className="ui-btn-secondary ui-icon-btn ui-monitor-filter-button h-9 min-w-9 gap-2 px-3"
                       >
                         <svg
                           className="h-4 w-4"
@@ -1971,96 +1991,64 @@ export function AdminDashboard() {
                             d="M5.66406 13H10.3307"
                           />
                         </svg>
+                        {monitorStatusFilter ? (
+                          <span className="whitespace-nowrap text-[13px]">
+                            {t('admin_dashboard.monitor_filter_applied_one')}
+                          </span>
+                        ) : null}
                       </button>
                       {showMonitorFilters ? (
                         <div
                           role="group"
-                          aria-label={t('admin_dashboard.group_filter')}
-                          className="ui-panel absolute right-0 top-11 z-30 w-64 space-y-3 p-3 shadow-lg"
+                          aria-label={t('admin_dashboard.monitor_filters_title')}
+                          className="ui-panel ui-monitor-filter-panel absolute right-0 top-11 z-30"
                         >
-                          <label className="block text-[11px] font-medium text-ink-2">
-                            {t('admin_dashboard.group_filter')}
-                            <Select
-                              value={monitorGroupFilter}
-                              onChange={setMonitorGroupFilter}
-                              aria-label={t('admin_dashboard.group_filter')}
-                              className="ui-compact ui-select mt-1"
+                          <div className="ui-monitor-filter-header">
+                            <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" aria-hidden>
+                              <path
+                                d="M2.5 4.25h15M5 9.75h10m-7.5 5.5h5"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth="1.6"
+                              />
+                            </svg>
+                            <span>{t('admin_dashboard.monitor_filters_title')}</span>
+                          </div>
+                          <div className="ui-monitor-filter-body">
+                            <label
+                              htmlFor="monitor-status-filter"
+                              className="ui-monitor-filter-label"
                             >
-                              <option value={ALL_GROUPS_FILTER}>
-                                {t('admin_dashboard.group_all')}
-                              </option>
-                              {monitorGroupLabels.map((label) => (
-                                <option key={label} value={label}>
-                                  {toUiGroupLabel(label)}
-                                </option>
-                              ))}
-                            </Select>
-                          </label>
-                          <label className="block text-[11px] font-medium text-ink-2">
-                            {t('common.sort')}
+                              {t('admin_dashboard.monitor_filter_status')}
+                            </label>
                             <Select
-                              value={monitorSortMode}
-                              onChange={(next) => setMonitorSortMode(next as MonitorSortMode)}
-                              aria-label={t('common.sort')}
-                              className="ui-compact ui-select mt-1"
+                              id="monitor-status-filter"
+                              value={monitorStatusDraft}
+                              onChange={setMonitorStatusDraft}
+                              aria-label={t('admin_dashboard.monitor_filter_status')}
+                              className="ui-select ui-monitor-filter-status-select"
                             >
-                              <option value="configured">
-                                {t('admin_dashboard.monitor_sort_mode_configured')}
+                              <option value="">
+                                {t('admin_dashboard.monitor_filter_any_status')}
                               </option>
-                              <option value="status">{t('common.state')}</option>
-                              <option value="name">{t('common.name')}</option>
-                              <option value="last_checked_at">
-                                {t('admin_dashboard.monitor_sort_mode_last_check')}
+                              <option value="up">{t('status.up')}</option>
+                              <option value="down">{t('status.down')}</option>
+                              <option value="paused">{t('status.paused')}</option>
+                              <option value="pending">
+                                {t('admin_dashboard.monitor_filter_pending')}
                               </option>
-                              <option value="created_at">
-                                {t('admin_dashboard.monitor_sort_mode_created_time')}
-                              </option>
+                              <option value="maintenance">{t('status.maintenance')}</option>
                             </Select>
-                          </label>
-                          <label className="block text-[11px] font-medium text-ink-2">
-                            {t('common.direction')}
-                            <Select
-                              value={monitorSortDirection}
-                              onChange={(next) =>
-                                setMonitorSortDirection(next as MonitorSortDirection)
-                              }
-                              aria-label={t('common.direction')}
-                              className="ui-compact ui-select mt-1"
+                          </div>
+                          <div className="ui-monitor-filter-footer">
+                            <button
+                              type="button"
+                              className="ui-monitor-filter-apply"
+                              onClick={applyMonitorStatusFilter}
                             >
-                              <option value="asc">{t('common.asc')}</option>
-                              <option value="desc">{t('common.desc')}</option>
-                            </Select>
-                          </label>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectionMode(true);
-                              setShowMonitorFilters(false);
-                            }}
-                            className="w-full border-t border-line-soft pt-3 text-left text-[12px] font-medium text-ink-2 transition-colors hover:text-ink"
-                          >
-                            {t('admin_dashboard.monitor_enter_selection')}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectionMode(true);
-                              toggleVisibleMonitors();
-                            }}
-                            className="w-full text-left text-[12px] font-medium text-ink-2 transition-colors hover:text-ink"
-                          >
-                            {t('admin_dashboard.monitor_select_all')}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setShowGroupManager(true);
-                              setShowMonitorFilters(false);
-                            }}
-                            className="w-full border-t border-line-soft pt-3 text-left text-[12px] font-medium text-ink-2 transition-colors hover:text-ink"
-                          >
-                            {t('admin_dashboard.group_manager_title')}
-                          </button>
+                              {t('admin_dashboard.monitor_filter_apply')}
+                            </button>
+                          </div>
                         </div>
                       ) : null}
                     </div>

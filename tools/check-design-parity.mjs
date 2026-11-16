@@ -226,6 +226,36 @@ assert(
   'outside pointer and Escape close the filter, portal listbox clicks stay inside',
 );
 assert(
+  'monitor filter panel matches the recorded control set and geometry',
+  /width:\s*450px/.test(cssRule('\n.ui-monitor-filter-panel')) &&
+    /height:\s*62px/.test(cssRule('\n.ui-monitor-filter-header')) &&
+    /height:\s*112px/.test(cssRule('\n.ui-monitor-filter-body')) &&
+    /height:\s*74px/.test(cssRule('\n.ui-monitor-filter-footer')) &&
+    /height:\s*44px/.test(cssRule('\n.ui-select-trigger.ui-monitor-filter-status-select')) &&
+    /height:\s*44px/.test(cssRule('\n.ui-monitor-filter-apply')),
+  '450px panel: Filters header, one 44px status select, and Filter monitors footer',
+);
+assert(
+  'monitor filter contains only status and apply controls',
+  (() => {
+    const source = read('apps/web/src/pages/AdminDashboard.tsx');
+    const start = source.indexOf('className="ui-panel ui-monitor-filter-panel');
+    const end = source.indexOf(') : null}', start);
+    const panel = source.slice(start, end);
+    return (
+      start >= 0 &&
+      end > start &&
+      panel.includes('monitor_filter_status') &&
+      panel.includes('monitor_filter_any_status') &&
+      panel.includes('monitor_filter_apply') &&
+      !panel.includes('common.sort') &&
+      !panel.includes('group_filter') &&
+      !panel.includes('monitor_select_all')
+    );
+  })(),
+  'status field only; sorting, group selection and selection-mode actions stay outside this panel',
+);
+assert(
   'status condition uses natural Chinese copy',
   read('apps/web/src/i18n/messages.ts').includes(
     "'monitor_form.kind_url_status': '网址返回非预期状态码',",
