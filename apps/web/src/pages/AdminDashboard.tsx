@@ -513,6 +513,7 @@ export function AdminDashboard() {
   );
   const [settingsSection, setSettingsSection] = useState<SettingsSection>('general');
   const [showMonitorFilters, setShowMonitorFilters] = useState(false);
+  const monitorFiltersRef = useRef<HTMLDivElement | null>(null);
   const [showGroupManager, setShowGroupManager] = useState(false);
   const [groupNameDraft, setGroupNameDraft] = useState('');
   const [showCreateMenu, setShowCreateMenu] = useState(false);
@@ -524,18 +525,24 @@ export function AdminDashboard() {
   const bulkMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!showCreateMenu && !showIncidentFilters && !showBulkMenu) return;
+    if (!showCreateMenu && !showIncidentFilters && !showBulkMenu && !showMonitorFilters) return;
     const onPointerDown = (event: MouseEvent) => {
       const target = event.target as Node;
       if (!createMenuRef.current?.contains(target)) setShowCreateMenu(false);
       if (!incidentFiltersRef.current?.contains(target)) setShowIncidentFilters(false);
       if (!bulkMenuRef.current?.contains(target)) setShowBulkMenu(false);
+      const targetElement = target instanceof Element ? target : target.parentElement;
+      const clickedSelectOption = targetElement?.closest('.ui-select-popup');
+      if (!monitorFiltersRef.current?.contains(target) && !clickedSelectOption) {
+        setShowMonitorFilters(false);
+      }
     };
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         setShowCreateMenu(false);
         setShowBulkMenu(false);
         setShowIncidentFilters(false);
+        setShowMonitorFilters(false);
       }
     };
     document.addEventListener('mousedown', onPointerDown);
@@ -544,7 +551,7 @@ export function AdminDashboard() {
       document.removeEventListener('mousedown', onPointerDown);
       document.removeEventListener('keydown', onKeyDown);
     };
-  }, [showCreateMenu, showIncidentFilters, showBulkMenu]);
+  }, [showCreateMenu, showIncidentFilters, showBulkMenu, showMonitorFilters]);
   const [draggedGroup, setDraggedGroup] = useState<string | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
   const [serverLocalePatchSupported, setServerLocalePatchSupported] = useState(true);
@@ -1931,7 +1938,7 @@ export function AdminDashboard() {
                 className="ui-monitor-page-header"
                 actions={
                   <>
-                    <div className="relative">
+                    <div className="relative" ref={monitorFiltersRef}>
                       <button
                         type="button"
                         onClick={() => setShowMonitorFilters((previous) => !previous)}

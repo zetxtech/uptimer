@@ -1310,25 +1310,6 @@ export function MonitorForm(props: CreateProps | EditProps) {
 
             {type === 'http' ? (
               <>
-                <FormField
-                  htmlFor={`${formId}-target`}
-                  label={t('monitor_form.url_to_monitor')}
-                  error={
-                    attempted && target.trim().length === 0
-                      ? t('monitor_form.issue_target_url')
-                      : undefined
-                  }
-                >
-                  <input
-                    id={`${formId}-target`}
-                    type="text"
-                    value={target}
-                    onChange={(e) => setTarget(e.target.value)}
-                    placeholder={t('monitor_form.target_url_placeholder')}
-                    className={cn(inputClass, 'font-mono')}
-                  />
-                </FormField>
-
                 {kind === 'url_status' && (
                   <FormField
                     htmlFor={`${formId}-kind-status`}
@@ -1396,6 +1377,26 @@ export function MonitorForm(props: CreateProps | EditProps) {
                     />
                   </FormField>
                 )}
+
+                <FormField
+                  htmlFor={`${formId}-target`}
+                  label={t('monitor_form.url_to_monitor')}
+                  className={kind === 'url_down' ? undefined : 'mt-[53px]'}
+                  error={
+                    attempted && target.trim().length === 0
+                      ? t('monitor_form.issue_target_url')
+                      : undefined
+                  }
+                >
+                  <input
+                    id={`${formId}-target`}
+                    type="text"
+                    value={target}
+                    onChange={(e) => setTarget(e.target.value)}
+                    placeholder={t('monitor_form.target_url_placeholder')}
+                    className={cn(inputClass, 'font-mono')}
+                  />
+                </FormField>
               </>
             ) : type === 'tcp' ? (
               <FormField

@@ -214,6 +214,37 @@ assert(
   'no second-line description pushing the tabs and list down',
 );
 assert(
+  'monitor filter closes on outside press without swallowing portal selections',
+  /targetElement\?\.closest\('\.ui-select-popup'\)/.test(
+    read('apps/web/src/pages/AdminDashboard.tsx'),
+  ) &&
+    /!monitorFiltersRef\.current\?\.contains\(target\) && !clickedSelectOption/.test(
+      read('apps/web/src/pages/AdminDashboard.tsx'),
+    ) &&
+    (read('apps/web/src/pages/AdminDashboard.tsx').match(/setShowMonitorFilters\(false\)/g) ?? [])
+      .length >= 2,
+  'outside pointer and Escape close the filter, portal listbox clicks stay inside',
+);
+assert(
+  'status condition uses natural Chinese copy',
+  read('apps/web/src/i18n/messages.ts').includes(
+    "'monitor_form.kind_url_status': '网址返回非预期状态码',",
+  ) &&
+    read('apps/web/src/i18n/messages.ts').includes(
+      "'monitor_form.kind_url_status': '網址回傳非預期狀態碼',",
+    ),
+  'zh-CN and zh-TW labels no longer end in an incomplete “不是”',
+);
+assert(
+  'HTTP status-specific field precedes the target URL',
+  read('apps/web/src/components/MonitorForm.tsx').indexOf("kind === 'url_status' && (") <
+    read('apps/web/src/components/MonitorForm.tsx').indexOf('htmlFor={\`${formId}-target\`}') &&
+    read('apps/web/src/components/MonitorForm.tsx').includes(
+      "className={kind === 'url_down' ? undefined : 'mt-[53px]'}",
+    ),
+  'conditional status field first, then target URL with the captured field pitch',
+);
+assert(
   'selection mode matches the archived notes',
   /width:\s*16px/.test(cssRule('\n.ui-selection-checkbox')) &&
     /border-radius:\s*4px/.test(cssRule('\n.ui-selection-checkbox')) &&
