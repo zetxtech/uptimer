@@ -355,6 +355,11 @@ assert(
   'removed from the detail page',
 );
 assert(
+  'monitor create sections keep the reference vertical gap',
+  /mt-10 space-y-8 min-\[900px\]:space-y-10/.test(read('apps/web/src/components/MonitorForm.tsx')),
+  '40px desktop gap between target, escalation, and other page sections',
+);
+assert(
   'range pickers follow the reference field',
   /height:\s*36px/.test(cssRule('\n.ui-date-field')) &&
     /font-size:\s*13px/.test(cssRule('\n.ui-date-field')) &&

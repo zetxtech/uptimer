@@ -1282,7 +1282,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
 
         {failure ? <FormErrorBanner title={failureTitle} description={failure} /> : null}
 
-        <div className="mt-10 space-y-8 min-[900px]:space-y-0">
+        <div className="mt-10 space-y-8 min-[900px]:space-y-10">
           <FormGroup
             label={t('monitor_form.section_target')}
             description={t('monitor_form.section_target_hint')}
