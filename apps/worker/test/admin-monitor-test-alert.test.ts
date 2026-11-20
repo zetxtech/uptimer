@@ -86,7 +86,7 @@ function createApp(channels: Array<{ id: number; name: string; enabledEvents?: s
     database
       .prepare(
         `INSERT INTO notification_channels (id, name, type, config_json, is_active)
-         VALUES (?1, ?2, 'webhook', ?3, 1)`,
+         VALUES (?, ?, 'webhook', ?, 1)`,
       )
       .run(
         channel.id,

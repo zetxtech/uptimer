@@ -228,7 +228,7 @@ describe('monitor escalation, maintenance window and metadata', () => {
     expect(deleted.status).toBe(200);
 
     const remaining = database
-      .prepare('SELECT COUNT(*) AS count FROM monitor_metadata WHERE monitor_id = ?1')
+      .prepare('SELECT COUNT(*) AS count FROM monitor_metadata WHERE monitor_id = ?')
       .get(createdBody.monitor.id) as { count: number };
     expect(remaining.count).toBe(0);
   });

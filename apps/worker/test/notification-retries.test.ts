@@ -46,10 +46,10 @@ function createEnv(
     .prepare(
       `INSERT INTO notification_deliveries
         (event_key, channel_id, status, http_status, error, event_type, payload_json, attempts, next_attempt_at, created_at)
-       VALUES (?3, 10, ?1, 502, 'HTTP 502', 'monitor.down',
-               '{"event":"monitor.down"}', 1, ?2, 1700000000)`,
+       VALUES (?, 10, ?, 502, 'HTTP 502', 'monitor.down',
+               '{"event":"monitor.down"}', 1, ?, 1700000000)`,
     )
-    .run(status, nextAttemptAt, eventKey);
+    .run(eventKey, status, nextAttemptAt);
 
   return { database, env: { DB: sqliteD1(database) } as Env };
 }
