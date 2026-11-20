@@ -7,7 +7,7 @@ import { AppError } from '../middleware/errors';
 
 export const adminExportsRoutes = new Hono<{ Bindings: Env }>();
 
-const exportRangeSchema = z.enum(['24h', '7d', '30d', '90d']);
+const exportRangeSchema = z.enum(['1h', '24h', '7d', '30d', '90d']);
 const exportChecksRangeSchema = z.enum(['24h', '7d']);
 
 function computeRange(range: UptimeRange): { start: number; end: number } {

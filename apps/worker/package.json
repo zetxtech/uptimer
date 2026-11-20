@@ -18,9 +18,11 @@
     "seed:local": "wrangler d1 execute uptimer --local --file ./scripts/seed-local.sql"
   },
   "dependencies": {
+    "@cloudflare/puppeteer": "^1.4.0",
     "@uptimer/db": "workspace:*",
     "hono": "^4.0.0",
     "p-limit": "^6.0.0",
+    "worker-mailer": "1.3.0",
     "zod": "^3.0.0"
   },
   "devDependencies": {

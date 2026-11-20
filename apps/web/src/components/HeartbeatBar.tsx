@@ -5,12 +5,14 @@ import type { CheckStatus, Heartbeat, HomepageHeartbeatStrip } from '../api/type
 import { useI18n } from '../app/I18nContext';
 import { statusLabel } from '../i18n/labels';
 import { clampLatencyToCeiling, suggestLatencyAxisCeiling } from '../utils/latencyScale';
+import { cn } from './ui';
 
 interface HeartbeatBarProps {
   heartbeats?: Heartbeat[] | undefined;
   strip?: HomepageHeartbeatStrip | undefined;
   maxBars?: number;
   visualBars?: number;
+  bare?: boolean;
   density?: 'default' | 'compact';
 }
 
@@ -125,28 +127,28 @@ function getBarHeightPct(
 function heartbeatFill(status: CheckStatus): string {
   switch (status) {
     case 'up':
-      return '#10b981';
+      return 'var(--color-up)';
     case 'down':
-      return '#ef4444';
+      return 'var(--color-down)';
     case 'maintenance':
-      return '#3b82f6';
+      return 'var(--color-maintenance)';
     case 'unknown':
     default:
-      return '#cbd5e1';
+      return 'var(--color-border)';
   }
 }
 
 function tooltipDotClass(status: CheckStatus): string {
   switch (status) {
     case 'up':
-      return 'bg-emerald-500 dark:bg-emerald-400';
+      return 'ui-tier-bg-up';
     case 'down':
-      return 'bg-red-500 dark:bg-red-400';
+      return 'ui-tier-bg-down';
     case 'maintenance':
-      return 'bg-blue-500 dark:bg-blue-400';
+      return 'bg-[color:var(--color-maintenance)]';
     case 'unknown':
     default:
-      return 'bg-slate-300 dark:bg-slate-600';
+      return 'ui-tier-bg-muted';
   }
 }
 
@@ -252,7 +254,7 @@ function Tooltip({
 
   return (
     <div
-      className="fixed z-50 px-3 py-2 text-xs bg-slate-900 dark:bg-slate-700 text-white rounded-lg shadow-lg pointer-events-none animate-fade-in"
+      className="fixed z-50 px-3 py-2 text-xs bg-surface dark:bg-surface-2 text-white rounded-lg shadow-lg pointer-events-none animate-fade-in"
       style={{
         left: position.x,
         top: position.y,
@@ -268,15 +270,15 @@ function Tooltip({
         <span className={`w-2 h-2 rounded-full ${tooltipDotClass(heartbeat.status)}`} />
         <span>{statusLabel(heartbeat.status, t)}</span>
         {heartbeat.latency_ms !== null && (
-          <span className="text-slate-400 dark:text-slate-300">• {heartbeat.latency_ms}ms</span>
+          <span className="text-ink-3 dark:text-ink-2">• {heartbeat.latency_ms}ms</span>
         )}
       </div>
       {heartbeat.sample_count > 1 && (
-        <div className="mt-1 text-slate-300">
+        <div className="mt-1 text-ink-2">
           {t('heartbeat.sample_checks', { count: heartbeat.sample_count })}
         </div>
       )}
-      <div className="absolute left-1/2 -bottom-1 -translate-x-1/2 w-2 h-2 bg-slate-900 dark:bg-slate-700 rotate-45" />
+      <div className="absolute left-1/2 -bottom-1 -translate-x-1/2 w-2 h-2 bg-surface dark:bg-surface-2 rotate-45" />
     </div>
   );
 }
@@ -286,6 +288,7 @@ export function HeartbeatBar({
   strip,
   maxBars = 60,
   visualBars,
+  bare = false,
   density = 'default',
 }: HeartbeatBarProps) {
   const { t } = useI18n();
@@ -358,7 +361,10 @@ export function HeartbeatBar({
           aria-label={t('monitor_card.last_checks', {
             count: Math.min(sourceHeartbeats.length, slotCount),
           })}
-          className="relative h-full w-full rounded-md bg-slate-200 dark:bg-slate-700"
+          className={cn(
+            'relative h-full w-full',
+            bare ? 'rounded-[2px]' : 'rounded-lg bg-surface-2',
+          )}
           style={{
             backgroundImage,
             backgroundPosition: 'center',
@@ -371,7 +377,7 @@ export function HeartbeatBar({
         {tooltip && (
           <div
             key={`heartbeat-overlay-${tooltip.index}-${tooltip.heartbeat.from_checked_at}-${tooltip.heartbeat.to_checked_at}`}
-            className="pointer-events-none absolute inset-y-0 rounded-sm ring-1 ring-white/70 shadow-[0_0_0_1px_rgba(15,23,42,0.08)]"
+            className="pointer-events-none absolute inset-y-0 rounded ring-1 ring-white/70 shadow-[0_0_0_1px_rgba(15,23,42,0.08)]"
             style={{
               left: `${(tooltip.index / slotCount) * 100}%`,
               width: `${100 / slotCount}%`,

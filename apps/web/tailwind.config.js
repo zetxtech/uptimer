@@ -12,14 +12,40 @@ export default {
           500: '#22c55e',
           600: '#16a34a',
         },
-        // Status colors - semantic
+        // Theme-driven surfaces (see styles.css :root / .dark)
+        app: 'var(--color-bg)',
+        surface: 'var(--color-card)',
+        'surface-2': 'var(--color-bg-secondary)',
+        line: 'var(--color-border)',
+        'line-soft': 'var(--color-border-light)',
+        ink: 'var(--color-text-primary)',
+        'ink-2': 'var(--color-text-secondary)',
+        'ink-3': 'var(--color-text-muted)',
+        accent: 'var(--color-accent)',
+        'accent-hover': 'var(--color-accent-hover)',
+        'accent-soft': 'var(--color-accent-soft)',
+        // Status colors - semantic (theme-driven, see styles.css :root / .dark)
         status: {
-          up: '#10b981',
-          down: '#ef4444',
-          maintenance: '#3b82f6',
-          paused: '#f59e0b',
-          unknown: '#6b7280',
+          up: 'var(--color-up)',
+          down: 'var(--color-down)',
+          maintenance: 'var(--color-maintenance)',
+          paused: 'var(--color-paused)',
+          unknown: 'var(--color-unknown)',
         },
+      },
+      // The reference status pages run on a 13px base with a 1.5 leading and a
+      // single large hero heading; the whole scale is pinned in px so that the
+      // rem-based spacing ladder stays untouched.
+      fontSize: {
+        xs: ['11px', '16px'],
+        sm: ['13px', '19.5px'],
+        base: ['13px', '19.5px'],
+        md: ['15px', '22px'],
+        lg: ['17px', '24px'],
+        xl: ['20px', '28px'],
+        '2xl': ['24px', '32px'],
+        '3xl': ['30px', '36px'],
+        '4xl': ['32px', '35px'],
       },
       fontFamily: {
         sans: [

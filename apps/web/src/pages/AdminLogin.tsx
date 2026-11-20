@@ -7,7 +7,7 @@ import { useApplyServerLocaleSetting } from '../app/useApplyServerLocaleSetting'
 import { fetchStatus } from '../api/client';
 import { useAuth } from '../app/AuthContext';
 import { ADMIN_PATH } from '../app/adminPaths';
-import { Button, Card, INPUT_CLASS } from '../components/ui';
+import { Button, INPUT_CLASS } from '../components/ui';
 
 export function AdminLogin() {
   const { t } = useI18n();
@@ -55,62 +55,60 @@ export function AdminLogin() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center p-4 sm:p-6">
-      <Card className="w-full max-w-md p-7 sm:p-8">
-        <div className="mb-7 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900">
-            <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"
+    <div className="ui-auth-page dark relative flex min-h-screen flex-col px-6 text-white">
+      <Link to="/" className="ui-auth-back-link absolute left-6 top-6 sm:left-10 sm:top-8">
+        <svg
+          className="h-3.5 w-3.5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={1.8}
+          aria-hidden
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 12H5m0 0l6 6m-6-6l6-6" />
+        </svg>
+        {t('admin_login.back_to_status')}
+      </Link>
+
+      <main className="relative mx-auto flex w-full flex-1 items-center justify-center py-24">
+        <section className="ui-auth-form w-full max-w-[23rem]">
+          <div className="mb-4 flex justify-center" aria-hidden>
+            <span className="ui-auth-mark">U</span>
+          </div>
+
+          <div className="mb-8 text-center">
+            <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] text-white">
+              {t('admin_login.title')}
+            </h1>
+            <p className="mt-2 text-[14px] leading-5 text-[color:var(--color-text-secondary)]">
+              {t('admin_login.subtitle')}
+            </p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label htmlFor="token" className="ui-auth-label">
+                {t('admin_login.token')}
+              </label>
+              <input
+                type="password"
+                id="token"
+                value={token}
+                onChange={(e) => setToken(e.target.value)}
+                className={`${INPUT_CLASS} ui-auth-input`}
+                placeholder={t('admin_login.placeholder')}
+                autoFocus
               />
-            </svg>
-          </div>
-          <h1 className="text-xl font-semibold text-slate-900 dark:text-slate-100">
-            {t('admin_login.title')}
-          </h1>
-          <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-            {t('admin_login.subtitle')}
-          </p>
-        </div>
+            </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label
-              htmlFor="token"
-              className="ui-label text-sm font-medium text-slate-700 dark:text-slate-300"
-            >
-              {t('admin_login.token')}
-            </label>
-            <input
-              type="password"
-              id="token"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              className={INPUT_CLASS}
-              placeholder={t('admin_login.placeholder')}
-              autoFocus
-            />
-          </div>
+            {error && <p className="ui-error text-sm">{error}</p>}
 
-          {error && <p className="ui-error text-sm">{error}</p>}
-
-          <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? t('admin_login.submitting') : t('admin_login.submit')}
-          </Button>
-        </form>
-
-        <div className="mt-6 text-center">
-          <Link
-            to="/"
-            className="text-sm text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
-          >
-            {t('admin_login.back_to_status')}
-          </Link>
-        </div>
-      </Card>
+            <Button type="submit" className="ui-auth-submit w-full" disabled={isSubmitting}>
+              {isSubmitting ? t('admin_login.submitting') : t('admin_login.submit')}
+            </Button>
+          </form>
+        </section>
+      </main>
     </div>
   );
 }

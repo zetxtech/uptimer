@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 
 import type { HomepageUptimeDayStrip, UptimeDayPreview, UptimeRatingLevel } from '../api/types';
 import { useI18n } from '../app/I18nContext';
+import { cn } from './ui';
 import { formatDate } from '../utils/datetime';
 import { getUptimeBgClasses, getUptimeTier } from '../utils/uptime';
 
@@ -17,6 +18,10 @@ interface UptimeBar30dProps {
   onDayClick?: (dayStartAt: number) => void;
   density?: 'default' | 'compact';
   fillMode?: 'pad' | 'stretch';
+  /** `bars` draws hairline chart bars; `block` draws the solid day blocks used by the status pages. */
+  variant?: 'bars' | 'block';
+  /** Block variant only: lets compact hosts (e.g. a monitor row) render a shorter strip. */
+  blockClassName?: string;
 }
 
 type DisplaySlot = {
@@ -63,30 +68,31 @@ function formatSec(totalSeconds: number): string {
 }
 
 function tooltipDotClass(uptimePct: number | null, level: UptimeRatingLevel): string {
-  if (uptimePct === null) return 'bg-slate-300 dark:bg-slate-600';
+  if (uptimePct === null) return 'bg-ink-3';
   return getUptimeBgClasses(getUptimeTier(uptimePct, level));
 }
 
 function uptimeFill(uptimePct: number | null, level: UptimeRatingLevel): string {
-  if (uptimePct === null) return '#cbd5e1';
+  if (uptimePct === null) return 'var(--color-border)';
 
   const tier = getUptimeTier(uptimePct, level);
   switch (tier) {
     case 'emerald':
+      return 'var(--color-up-strong)';
     case 'green':
-      return '#10b981';
+      return 'var(--color-up)';
     case 'lime':
-      return '#84cc16';
+      return 'var(--color-up)';
     case 'yellow':
     case 'amber':
+      return 'var(--color-warn)';
     case 'orange':
-      return '#f59e0b';
     case 'red':
     case 'rose':
-      return '#ef4444';
+      return 'var(--color-down)';
     case 'slate':
     default:
-      return '#cbd5e1';
+      return 'var(--color-border)';
   }
 }
 
@@ -151,7 +157,7 @@ function Tooltip({
 
   return (
     <div
-      className="fixed z-50 px-3 py-2 text-xs bg-slate-900 dark:bg-slate-700 text-white rounded-lg shadow-lg pointer-events-none animate-fade-in"
+      className="fixed z-50 px-3 py-2 text-xs bg-surface dark:bg-surface-2 text-white rounded-lg shadow-lg pointer-events-none animate-fade-in"
       style={{
         left: position.x,
         top: position.y,
@@ -166,15 +172,15 @@ function Tooltip({
           {t('uptime.uptime')}
         </span>
       </div>
-      <div className="mt-1 text-slate-300">
+      <div className="mt-1 text-ink-2">
         {t('uptime.downtime')}: {formatSec(day.downtime_sec)}
       </div>
       {day.unknown_sec > 0 && (
-        <div className="text-slate-300">
+        <div className="text-ink-2">
           {t('uptime.unknown')}: {formatSec(day.unknown_sec)}
         </div>
       )}
-      <div className="absolute left-1/2 -bottom-1 -translate-x-1/2 w-2 h-2 bg-slate-900 dark:bg-slate-700 rotate-45" />
+      <div className="absolute left-1/2 -bottom-1 -translate-x-1/2 w-2 h-2 bg-surface dark:bg-surface-2 rotate-45" />
     </div>
   );
 }
@@ -188,6 +194,8 @@ export function UptimeBar30d({
   onDayClick,
   density = 'default',
   fillMode = 'pad',
+  variant = 'bars',
+  blockClassName,
 }: UptimeBar30dProps) {
   const { locale, t } = useI18n();
   const [tooltip, setTooltip] = useState<{
@@ -249,64 +257,101 @@ export function UptimeBar30d({
 
   return (
     <>
-      <div
-        className={
-          compact ? 'relative h-5 overflow-hidden sm:h-6' : 'relative h-6 overflow-hidden sm:h-8'
-        }
-      >
+      {variant === 'block' ? (
+        <div data-bar-chart className={cn('flex w-full items-stretch', blockClassName ?? 'h-8')}>
+          {slots.map((slot, index) => {
+            const day = slot.day;
+            const blockClass = cn(
+              'mr-px h-full flex-1 first:rounded-l-[4px] last:mr-0 last:rounded-r-[4px]',
+              'rounded-[1px] transition-opacity',
+              day && day.uptime_pct !== null
+                ? getUptimeBgClasses(getUptimeTier(day.uptime_pct, ratingLevel))
+                : 'bg-surface-2',
+            );
+
+            return day ? (
+              <button
+                key={`day-${day.day_start_at}-${index}`}
+                type="button"
+                aria-label={`${t('uptime.aria_prefix')}: ${formatDay(day.day_start_at, timeZone, locale)}`}
+                className={cn(blockClass, 'hover:opacity-70 focus:outline-none')}
+                onMouseEnter={(event) => showTooltip(day, index, event.currentTarget)}
+                onFocus={(event) => showTooltip(day, index, event.currentTarget)}
+                onBlur={() => setTooltip((current) => (current?.index === index ? null : current))}
+                onMouseLeave={() =>
+                  setTooltip((current) => (current?.index === index ? null : current))
+                }
+                onClick={(event) => {
+                  if (!onDayClick) return;
+                  event.stopPropagation();
+                  onDayClick(day.day_start_at);
+                }}
+              />
+            ) : (
+              <span key={`empty-${index}`} aria-hidden="true" className={blockClass} />
+            );
+          })}
+        </div>
+      ) : (
         <div
-          data-bar-chart
-          className="relative h-full w-full rounded-md bg-slate-200 dark:bg-slate-700"
-          style={{
-            backgroundImage,
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-            backgroundSize: '100% 100%',
-          }}
-        />
-        {slotCount > 0 && (
+          className={
+            compact ? 'relative h-5 overflow-hidden sm:h-6' : 'relative h-6 overflow-hidden sm:h-8'
+          }
+        >
           <div
-            className="absolute inset-0 grid"
-            style={{ gridTemplateColumns: `repeat(${slotCount}, minmax(0, 1fr))` }}
-          >
-            {slots.map((slot, index) => {
-              const day = slot.day;
-              return day ? (
-                <button
-                  key={`day-${day.day_start_at}-${index}`}
-                  type="button"
-                  aria-label={`${t('uptime.aria_prefix')}: ${formatDay(day.day_start_at, timeZone, locale)}`}
-                  className="h-full w-full bg-transparent focus:outline-none"
-                  onMouseEnter={(event) => showTooltip(day, index, event.currentTarget)}
-                  onFocus={(event) => showTooltip(day, index, event.currentTarget)}
-                  onBlur={() =>
-                    setTooltip((current) => (current?.index === index ? null : current))
-                  }
-                  onMouseLeave={() =>
-                    setTooltip((current) => (current?.index === index ? null : current))
-                  }
-                  onClick={(event) => {
-                    if (!onDayClick) return;
-                    event.stopPropagation();
-                    onDayClick(day.day_start_at);
-                  }}
-                />
-              ) : (
-                <span key={`empty-${index}`} aria-hidden="true" />
-              );
-            })}
-          </div>
-        )}
-        {tooltip && (
-          <div
-            className="pointer-events-none absolute inset-y-0 rounded-sm ring-1 ring-white/70 shadow-[0_0_0_1px_rgba(15,23,42,0.08)]"
+            data-bar-chart
+            className="relative h-full w-full rounded-lg bg-surface-2"
             style={{
-              left: `${(tooltip.index / slotCount) * 100}%`,
-              width: `${100 / slotCount}%`,
+              backgroundImage,
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+              backgroundSize: '100% 100%',
             }}
           />
-        )}
-      </div>
+          {slotCount > 0 && (
+            <div
+              className="absolute inset-0 grid"
+              style={{ gridTemplateColumns: `repeat(${slotCount}, minmax(0, 1fr))` }}
+            >
+              {slots.map((slot, index) => {
+                const day = slot.day;
+                return day ? (
+                  <button
+                    key={`day-${day.day_start_at}-${index}`}
+                    type="button"
+                    aria-label={`${t('uptime.aria_prefix')}: ${formatDay(day.day_start_at, timeZone, locale)}`}
+                    className="h-full w-full bg-transparent focus:outline-none"
+                    onMouseEnter={(event) => showTooltip(day, index, event.currentTarget)}
+                    onFocus={(event) => showTooltip(day, index, event.currentTarget)}
+                    onBlur={() =>
+                      setTooltip((current) => (current?.index === index ? null : current))
+                    }
+                    onMouseLeave={() =>
+                      setTooltip((current) => (current?.index === index ? null : current))
+                    }
+                    onClick={(event) => {
+                      if (!onDayClick) return;
+                      event.stopPropagation();
+                      onDayClick(day.day_start_at);
+                    }}
+                  />
+                ) : (
+                  <span key={`empty-${index}`} aria-hidden="true" />
+                );
+              })}
+            </div>
+          )}
+          {tooltip && (
+            <div
+              className="pointer-events-none absolute inset-y-0 rounded ring-1 ring-white/70 shadow-[0_0_0_1px_rgba(15,23,42,0.08)]"
+              style={{
+                left: `${(tooltip.index / slotCount) * 100}%`,
+                width: `${100 / slotCount}%`,
+              }}
+            />
+          )}
+        </div>
+      )}
 
       {tooltip &&
         createPortal(

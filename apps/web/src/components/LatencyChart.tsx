@@ -1,7 +1,6 @@
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import type { LatencyPoint } from '../api/types';
 import { useI18n } from '../app/I18nContext';
-import { useTheme } from '../app/ThemeContext';
 import { suggestLatencyAxisCeiling } from '../utils/latencyScale';
 
 interface LatencyChartProps {
@@ -15,8 +14,6 @@ function formatTime(timestamp: number): string {
 
 export function LatencyChart({ points, height = 200 }: LatencyChartProps) {
   const { t } = useI18n();
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
 
   const rawData = points
     .filter((p) => p.status === 'up' && p.latency_ms !== null)
@@ -36,14 +33,17 @@ export function LatencyChart({ points, height = 200 }: LatencyChartProps) {
 
   if (rawData.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[200px] text-slate-500 dark:text-slate-400">
+      <div
+        className="flex items-center justify-center text-ink-2 dark:text-ink-3"
+        style={{ height }}
+      >
         {t('common.no_latency_data')}
       </div>
     );
   }
 
-  const axisColor = isDark ? '#64748b' : '#9ca3af';
-  const lineColor = isDark ? '#34d399' : '#22c55e';
+  const axisColor = 'var(--color-text-secondary)';
+  const lineColor = 'var(--color-up)';
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -70,10 +70,10 @@ export function LatencyChart({ points, height = 200 }: LatencyChartProps) {
             ];
           }}
           contentStyle={{
-            backgroundColor: isDark ? '#1e293b' : '#ffffff',
-            borderColor: isDark ? '#334155' : '#e2e8f0',
+            backgroundColor: 'var(--color-card)',
+            borderColor: 'var(--color-border)',
             borderRadius: '0.5rem',
-            color: isDark ? '#f1f5f9' : '#0f172a',
+            color: 'var(--color-text-primary)',
           }}
         />
         <Line

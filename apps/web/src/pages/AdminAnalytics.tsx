@@ -2,22 +2,30 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 
-import { useAuth } from '../app/AuthContext';
 import { useI18n } from '../app/I18nContext';
 import { useApplyServerLocaleSetting } from '../app/useApplyServerLocaleSetting';
 import { ADMIN_PATH } from '../app/adminPaths';
 import {
+  exportMonitorCheckResultsCsv,
+  exportMonitorOutagesCsv,
   fetchAdminAnalyticsOverview,
   fetchAdminMonitorAnalytics,
   fetchAdminMonitorOutages,
-  fetchAdminMonitors,
+  fetchAllAdminMonitors,
+  fetchAdminProbeHistory,
   fetchAdminSettings,
 } from '../api/client';
 import type { AnalyticsOverviewRange, AnalyticsRange } from '../api/types';
 import { DailyLatencyChart } from '../components/DailyLatencyChart';
 import { DailyUptimeChart } from '../components/DailyUptimeChart';
 import { LatencyChart } from '../components/LatencyChart';
-import { Button, Card, ThemeToggle, cn } from '../components/ui';
+import { MenuItem, RowMenu } from '../components/MonitorList';
+import { ProbeHistoryChart } from '../components/ProbeHistoryChart';
+import { AdminShell } from '../components/AdminShell';
+import { EmptyState, SectionHeader } from '../components/AdminSection';
+import { KpiCell } from '../components/KpiCell';
+import { Select } from '../components/Select';
+import { Button, Card, Toast, ToastStack, cn } from '../components/ui';
 import { formatDateTime } from '../utils/datetime';
 import { formatPct } from '../utils/uptime';
 
@@ -47,16 +55,18 @@ function RangeTabs<T extends string>({
   onChange: (v: T) => void;
 }) {
   return (
-    <div className="inline-flex rounded-lg border border-slate-200 bg-white p-1 dark:border-slate-700 dark:bg-slate-800/70">
+    <div className="inline-flex rounded-lg border border-line bg-surface p-1 dark:border-line dark:bg-surface/70">
       {values.map((value) => (
         <button
           key={value}
+          type="button"
+          aria-pressed={current === value}
           onClick={() => onChange(value)}
           className={cn(
-            'rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-3',
+            'rounded-lg px-2.5 py-1.5 text-sm font-medium transition-colors sm:px-3',
             current === value
-              ? 'bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900'
-              : 'text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100',
+              ? 'bg-surface text-ink dark:bg-surface-2 dark:text-ink'
+              : 'text-ink-2 hover:text-ink dark:text-ink-3 dark:hover:text-ink',
           )}
         >
           {value}
@@ -66,41 +76,13 @@ function RangeTabs<T extends string>({
   );
 }
 
-function StatTile({
-  label,
-  value,
-  tone = 'default',
-}: {
-  label: string;
-  value: string;
-  tone?: 'default' | 'danger';
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200/80 bg-white/80 p-4 dark:border-slate-700/80 dark:bg-slate-800/50">
-      <div className="text-sm font-medium uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        {label}
-      </div>
-      <div
-        className={cn(
-          'mt-2 text-2xl font-semibold tabular-nums',
-          tone === 'danger'
-            ? 'text-red-600 dark:text-red-400'
-            : 'text-slate-900 dark:text-slate-100',
-        )}
-      >
-        {value}
-      </div>
-    </div>
-  );
-}
-
 export function AdminAnalytics() {
-  const { logout } = useAuth();
   const { locale, t } = useI18n();
 
   const [overviewRange, setOverviewRange] = useState<AnalyticsOverviewRange>('24h');
   const [monitorRange, setMonitorRange] = useState<AnalyticsRange>('24h');
   const [selectedMonitorId, setSelectedMonitorId] = useState<number | null>(null);
+  const [notice, setNotice] = useState<{ tone: 'success' | 'danger'; title: string } | null>(null);
 
   const settingsQuery = useQuery({
     queryKey: ['admin-settings'],
@@ -114,7 +96,7 @@ export function AdminAnalytics() {
 
   const monitorsQuery = useQuery({
     queryKey: ['admin-monitors', 'for-analytics'],
-    queryFn: () => fetchAdminMonitors(200),
+    queryFn: () => fetchAllAdminMonitors(),
   });
 
   const monitors = useMemo(
@@ -138,6 +120,8 @@ export function AdminAnalytics() {
   }, [settings]);
 
   useEffect(() => {
+    if (!monitorsQuery.isSuccess) return;
+
     if (monitors.length === 0) {
       setSelectedMonitorId(null);
       return;
@@ -149,7 +133,7 @@ export function AdminAnalytics() {
     if (!exists) {
       setSelectedMonitorId(monitors[0]?.id ?? null);
     }
-  }, [monitors, selectedMonitorId]);
+  }, [monitors, monitorsQuery.isSuccess, selectedMonitorId]);
 
   const selectedMonitor = useMemo(
     () => monitors.find((monitor) => monitor.id === selectedMonitorId) ?? null,
@@ -159,6 +143,12 @@ export function AdminAnalytics() {
   const monitorAnalyticsQuery = useQuery({
     queryKey: ['admin-monitor-analytics', selectedMonitorId, monitorRange],
     queryFn: () => fetchAdminMonitorAnalytics(selectedMonitorId as number, monitorRange),
+    enabled: selectedMonitorId !== null,
+  });
+
+  const probeHistoryQuery = useQuery({
+    queryKey: ['admin-probe-history', selectedMonitorId, monitorRange],
+    queryFn: () => fetchAdminProbeHistory(selectedMonitorId as number, monitorRange),
     enabled: selectedMonitorId !== null,
   });
 
@@ -179,122 +169,79 @@ export function AdminAnalytics() {
 
   const outages = outagesQuery.data?.pages.flatMap((page) => page.outages) ?? [];
 
+  const runExport = async (job: () => Promise<void>) => {
+    try {
+      await job();
+      setNotice({ tone: 'success', title: t('admin_analytics.export_downloaded') });
+    } catch (error) {
+      setNotice({
+        tone: 'danger',
+        title: error instanceof Error ? error.message : t('admin_analytics.export_failed'),
+      });
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50 dark:bg-slate-900">
-      <header className="bg-white dark:bg-slate-800 shadow-sm dark:shadow-none dark:border-b dark:border-slate-700">
-        <div className="mx-auto max-w-[92rem] px-4 py-3 sm:px-6 sm:py-4 lg:px-8 flex justify-between items-center">
-          <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-100">
-            {settings?.site_title
-              ? `${settings.site_title} · ${t('admin_analytics.analytics_title')}`
-              : t('admin_analytics.analytics_title')}
-          </h1>
-
-          <div className="flex items-center gap-1">
-            <ThemeToggle />
-            <Link
-              to={ADMIN_PATH}
-              className="flex items-center justify-center h-10 text-base text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors px-3 rounded-lg"
-            >
-              <svg
-                className="w-5 h-5 sm:hidden"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"
+    <AdminShell active="analytics" layout="sidebar">
+      <main className="mx-auto w-full max-w-[1040px] space-y-10 px-5 pb-12 pt-2.5">
+        <SectionHeader
+          size="page"
+          title={t('admin_analytics.analytics_title')}
+          description={t('admin_analytics.page_desc')}
+        />
+        <Card className="overflow-hidden">
+          <div className="px-4 pt-4 pb-3">
+            <SectionHeader
+              title={t('admin_analytics.overview_title')}
+              description={t('admin_analytics.overview_desc')}
+              actions={
+                <RangeTabs
+                  values={overviewRanges}
+                  current={overviewRange}
+                  onChange={setOverviewRange}
                 />
-              </svg>
-              <span className="hidden sm:inline">{t('common.dashboard')}</span>
-            </Link>
-            <Link
-              to="/"
-              className="flex items-center justify-center h-10 text-base text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors px-3 rounded-lg"
-            >
-              <svg
-                className="w-5 h-5 sm:hidden"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <span className="hidden sm:inline">{t('common.status')}</span>
-            </Link>
-            <button
-              onClick={logout}
-              className="flex items-center justify-center h-10 text-base text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors px-3 rounded-lg"
-            >
-              <svg
-                className="w-5 h-5 sm:hidden"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"
-                />
-              </svg>
-              <span className="hidden sm:inline">{t('common.logout')}</span>
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-[92rem] space-y-6 px-4 py-6 sm:px-6 sm:py-8 lg:px-8">
-        <Card className="p-5 sm:p-6">
-          <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 sm:text-xl">
-                {t('admin_analytics.overview_title')}
-              </h2>
-              <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                {t('admin_analytics.overview_desc')}
-              </p>
-            </div>
-            <RangeTabs
-              values={overviewRanges}
-              current={overviewRange}
-              onChange={setOverviewRange}
+              }
             />
           </div>
 
+          {overviewQuery.isError && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 border-t border-line-soft px-4 py-4 text-sm text-red-600 dark:border-line dark:text-red-400"
+            >
+              <span>{t('admin_analytics.failed_overview')}</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => overviewQuery.refetch()}
+                disabled={overviewQuery.isFetching}
+              >
+                {overviewQuery.isFetching ? t('common.loading') : t('common.retry')}
+              </Button>
+            </div>
+          )}
           {overviewQuery.isLoading ? (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-2 gap-px border-t border-line bg-surface-2 lg:grid-cols-4 dark:border-line dark:bg-surface-2">
               {Array.from({ length: 4 }).map((_, idx) => (
-                <div
-                  key={idx}
-                  className="ui-skeleton h-24 rounded-xl border border-slate-200/70 dark:border-slate-700/70"
-                />
+                <div key={idx} className="ui-skeleton h-[70px] bg-surface" />
               ))}
             </div>
-          ) : overviewQuery.isError || !overviewQuery.data ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/30 dark:bg-red-500/10 dark:text-red-300">
-              {t('admin_analytics.failed_overview')}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <StatTile
+          ) : overviewQuery.data ? (
+            <div className="grid grid-cols-2 gap-px border-t border-line-soft bg-surface-2 lg:grid-cols-4 dark:border-line dark:bg-surface-2">
+              <KpiCell
                 label={t('admin_analytics.uptime')}
                 value={formatPct(overviewQuery.data.totals.uptime_pct)}
+                icon="M3 12h4l3-8 4 16 3-8h4"
               />
-              <StatTile
+              <KpiCell
                 label={t('admin_analytics.alerts')}
+                icon="M12 9v4m0 4h.01M10.3 3.9L2.4 17a2 2 0 001.7 3h15.8a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"
                 value={String(overviewQuery.data.alerts.count)}
+                tone={overviewQuery.data.alerts.count > 0 ? 'warning' : undefined}
               />
-              <StatTile
+              <KpiCell
                 label={t('admin_analytics.longest_outage')}
+                icon="M12 8v4l2.5 2M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                 value={
                   overviewQuery.data.outages.longest_sec === null
                     ? '-'
@@ -302,8 +249,9 @@ export function AdminAnalytics() {
                 }
                 tone="danger"
               />
-              <StatTile
+              <KpiCell
                 label={t('admin_analytics.mttr')}
+                icon="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
                 value={
                   overviewQuery.data.outages.mttr_sec === null
                     ? '-'
@@ -311,33 +259,31 @@ export function AdminAnalytics() {
                 }
               />
             </div>
-          )}
+          ) : null}
         </Card>
 
-        <Card className="p-5 sm:p-6">
-          <div className="mb-5 flex flex-col gap-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100 sm:text-xl">
-                  {t('admin_analytics.monitor_title')}
-                </h2>
-                <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                  {t('admin_analytics.monitor_desc')}
-                </p>
-              </div>
-              <RangeTabs values={monitorRanges} current={monitorRange} onChange={setMonitorRange} />
-            </div>
-
-            <label className="ui-label mb-0 text-sm font-medium text-slate-700 dark:text-slate-300">
-              {t('admin_analytics.monitor_label')}
-              <select
+        <Card className="overflow-hidden">
+          <div className="flex flex-col gap-3 px-4 pt-4 pb-3 lg:flex-row lg:items-start lg:justify-between">
+            <SectionHeader
+              title={t('admin_analytics.monitor_title')}
+              description={t('admin_analytics.monitor_desc')}
+              className="min-w-0 flex-1"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
                 value={selectedMonitorId ?? ''}
-                onChange={(e) => setSelectedMonitorId(Number(e.target.value))}
-                className="ui-select mt-2 max-w-sm"
+                onChange={(next) => setSelectedMonitorId(Number(next))}
+                className="ui-select ui-compact w-full min-w-0 sm:w-[16rem]"
                 disabled={monitorsQuery.isLoading || monitors.length === 0}
               >
                 {monitors.length === 0 ? (
-                  <option value="">{t('admin_analytics.no_monitors_available')}</option>
+                  <option value="">
+                    {monitorsQuery.isPending
+                      ? t('common.loading')
+                      : !monitorsQuery.data
+                        ? (monitorsQuery.error?.message ?? t('common.loading_failed'))
+                        : t('admin_analytics.no_monitors_available')}
+                  </option>
                 ) : (
                   monitors.map((monitor) => (
                     <option key={monitor.id} value={monitor.id}>
@@ -345,74 +291,158 @@ export function AdminAnalytics() {
                     </option>
                   ))
                 )}
-              </select>
-            </label>
+              </Select>
+              <RangeTabs values={monitorRanges} current={monitorRange} onChange={setMonitorRange} />
+              {selectedMonitorId === null ? null : (
+                <RowMenu label={t('admin_analytics.export')}>
+                  {(close) => (
+                    <>
+                      <MenuItem
+                        icon="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4.5 19.5h15"
+                        onClick={() => {
+                          close();
+                          void runExport(() =>
+                            exportMonitorCheckResultsCsv(selectedMonitorId, '24h'),
+                          );
+                        }}
+                      >
+                        {t('admin_analytics.export_checks_24h')}
+                      </MenuItem>
+                      <MenuItem
+                        icon="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4.5 19.5h15"
+                        onClick={() => {
+                          close();
+                          void runExport(() =>
+                            exportMonitorCheckResultsCsv(selectedMonitorId, '7d'),
+                          );
+                        }}
+                      >
+                        {t('admin_analytics.export_checks_7d')}
+                      </MenuItem>
+                      <MenuItem
+                        icon="M12 3v12m0 0 4.5-4.5M12 15l-4.5-4.5M4.5 19.5h15"
+                        onClick={() => {
+                          close();
+                          void runExport(() =>
+                            exportMonitorOutagesCsv(selectedMonitorId, monitorRange),
+                          );
+                        }}
+                      >
+                        {t('admin_analytics.export_outages', { range: monitorRange })}
+                      </MenuItem>
+                    </>
+                  )}
+                </RowMenu>
+              )}
+            </div>
           </div>
 
-          {!selectedMonitor ? (
-            <div className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-300">
-              {t('admin_analytics.create_monitor_first')}
+          {monitorsQuery.isError && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 border-t border-line-soft px-4 py-4 text-sm text-red-600 dark:text-red-400"
+            >
+              <span>{monitorsQuery.error.message || t('common.loading_failed')}</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => monitorsQuery.refetch()}
+                disabled={monitorsQuery.isFetching}
+              >
+                {monitorsQuery.isFetching ? t('common.loading') : t('common.retry')}
+              </Button>
             </div>
-          ) : monitorAnalyticsQuery.isLoading ? (
+          )}
+          {selectedMonitor && monitorAnalyticsQuery.isError && (
+            <div
+              role="alert"
+              className="flex flex-wrap items-center gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/30 dark:bg-red-500/10 dark:text-red-300"
+            >
+              <span>{t('admin_analytics.failed_monitor')}</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => monitorAnalyticsQuery.refetch()}
+                disabled={monitorAnalyticsQuery.isFetching}
+              >
+                {monitorAnalyticsQuery.isFetching ? t('common.loading') : t('common.retry')}
+              </Button>
+            </div>
+          )}
+          {monitorsQuery.isPending ? (
+            <p className="p-4 text-sm text-ink-2">{t('common.loading')}</p>
+          ) : !monitorsQuery.data ? null : monitors.length === 0 ? (
+            <div className="p-4">
+              <EmptyState
+                icon="pulse"
+                title={t('admin_analytics.no_monitors_available')}
+                description={t('admin_analytics.create_monitor_first')}
+                action={
+                  <Link to={ADMIN_PATH} className="ui-btn ui-btn-primary">
+                    {t('admin_dashboard.create_monitor')}
+                  </Link>
+                }
+              />
+            </div>
+          ) : !selectedMonitor || monitorAnalyticsQuery.isLoading ? (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                 {Array.from({ length: 5 }).map((_, idx) => (
-                  <div
-                    key={idx}
-                    className="ui-skeleton h-24 rounded-xl border border-slate-200/70 dark:border-slate-700/70"
-                  />
+                  <div key={idx} className="ui-skeleton h-24 rounded-xl border border-line" />
                 ))}
               </div>
               <div className="grid gap-4 md:grid-cols-2">
-                <div className="ui-skeleton h-64 rounded-xl border border-slate-200/70 dark:border-slate-700/70" />
-                <div className="ui-skeleton h-64 rounded-xl border border-slate-200/70 dark:border-slate-700/70" />
+                <div className="ui-skeleton h-64 rounded-xl border border-line" />
+                <div className="ui-skeleton h-64 rounded-xl border border-line" />
               </div>
             </div>
-          ) : monitorAnalyticsQuery.isError || !monitorAnalyticsQuery.data ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-400/30 dark:bg-red-500/10 dark:text-red-300">
-              {t('admin_analytics.failed_monitor')}
-            </div>
-          ) : (
+          ) : monitorAnalyticsQuery.data ? (
             <>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-                <StatTile
+              <div className="grid grid-cols-2 gap-px border-t border-line bg-surface-2 sm:grid-cols-3 lg:grid-cols-5 dark:border-line dark:bg-surface-2">
+                <KpiCell
                   label={t('admin_analytics.uptime')}
                   value={formatPct(monitorAnalyticsQuery.data.uptime_pct)}
+                  icon="M3 12h4l3-8 4 16 3-8h4"
                 />
-                <StatTile
+                <KpiCell
                   label={t('admin_analytics.unknown')}
+                  icon="M9.9 9a2.1 2.1 0 114.2 0c0 1.4-2.1 2-2.1 3.4M12 17h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
                   value={formatPct(monitorAnalyticsQuery.data.unknown_pct)}
                 />
-                <StatTile
+                <KpiCell
                   label={t('admin_analytics.downtime')}
+                  icon="M6 7l12 12M18 7L6 19"
                   value={formatSec(monitorAnalyticsQuery.data.downtime_sec)}
                   tone="danger"
                 />
-                <StatTile
+                <KpiCell
                   label={t('admin_analytics.p95')}
+                  icon="M3 12h4l3-8 4 16 3-8h4"
                   value={
                     monitorAnalyticsQuery.data.p95_latency_ms === null
                       ? '-'
                       : `${monitorAnalyticsQuery.data.p95_latency_ms}ms`
                   }
                 />
-                <StatTile
+                <KpiCell
                   label={t('admin_analytics.p50')}
+                  icon="M4 18V9m6 9V5m6 13v-6"
                   value={
                     monitorAnalyticsQuery.data.p50_latency_ms === null
                       ? '-'
                       : `${monitorAnalyticsQuery.data.p50_latency_ms}ms`
                   }
                 />
+                <div aria-hidden className="hidden bg-surface sm:block lg:hidden dark:bg-surface" />
               </div>
 
-              <div className="mt-5 grid gap-4 md:grid-cols-2">
-                <div className="rounded-xl border border-slate-200/80 bg-white/80 p-4 dark:border-slate-700/80 dark:bg-slate-800/60">
-                  <div className="mb-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+              <div className="grid divide-y divide-line-soft border-t border-line-soft md:grid-cols-2 md:divide-x md:divide-y-0 dark:divide-line-soft dark:border-line">
+                <div className="p-4">
+                  <div className="mb-2 text-sm font-medium text-ink">
                     {t('admin_analytics.daily_uptime')}
                   </div>
                   {monitorRange === '24h' ? (
-                    <div className="flex h-[220px] items-center justify-center text-sm text-slate-500 dark:text-slate-400">
+                    <div className="flex h-[220px] items-center justify-center text-sm text-ink-2 dark:text-ink-3">
                       {t('admin_analytics.daily_rollup_hint')}
                     </div>
                   ) : (
@@ -420,8 +450,8 @@ export function AdminAnalytics() {
                   )}
                 </div>
 
-                <div className="rounded-xl border border-slate-200/80 bg-white/80 p-4 dark:border-slate-700/80 dark:bg-slate-800/60">
-                  <div className="mb-2 text-sm font-medium text-slate-900 dark:text-slate-100">
+                <div className="p-4">
+                  <div className="mb-2 text-sm font-medium text-ink">
                     {t('admin_analytics.latency')}
                   </div>
                   {monitorRange === '24h' ? (
@@ -432,59 +462,111 @@ export function AdminAnalytics() {
                 </div>
               </div>
 
-              <div className="mt-5 rounded-xl border border-slate-200/80 bg-white/80 p-4 dark:border-slate-700/80 dark:bg-slate-800/60">
-                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                    {t('admin_analytics.outages')}
+              <section className="border-t border-line-soft p-4 dark:border-line">
+                <h3 className="ui-metric-label mb-3">{t('probes.history_title')}</h3>
+                {probeHistoryQuery.isError && (
+                  <div
+                    role="alert"
+                    className="mb-3 flex flex-wrap items-center gap-3 text-sm text-red-600 dark:text-red-400"
+                  >
+                    <span>{t('probes.history_error')}</span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => probeHistoryQuery.refetch()}
+                      disabled={probeHistoryQuery.isFetching}
+                    >
+                      {probeHistoryQuery.isFetching ? t('common.loading') : t('common.retry')}
+                    </Button>
                   </div>
-                  <div className="text-xs text-slate-500 dark:text-slate-400">
+                )}
+                {probeHistoryQuery.isLoading ? (
+                  <p className="text-sm text-ink-2">{t('common.loading')}</p>
+                ) : probeHistoryQuery.data ? (
+                  <ProbeHistoryChart
+                    key={`${selectedMonitor.id}:${monitorRange}`}
+                    history={probeHistoryQuery.data}
+                    timeZone={timeZone}
+                  />
+                ) : null}
+              </section>
+
+              <div className="border-t border-line-soft p-4 dark:border-line">
+                <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="ui-metric-label">{t('admin_analytics.outages')}</h3>
+                  <div className="text-xs text-ink-2 dark:text-ink-3">
                     {selectedMonitor.name} (#{selectedMonitor.id})
                   </div>
                 </div>
 
+                {outagesQuery.isError && (
+                  <div
+                    role="alert"
+                    className="mb-3 flex flex-wrap items-center gap-3 text-sm text-red-600 dark:text-red-400"
+                  >
+                    <span>
+                      {outagesQuery.error.message || t('status_page.failed_load_outages')}
+                    </span>
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() =>
+                        outagesQuery.isFetchNextPageError
+                          ? outagesQuery.fetchNextPage()
+                          : outagesQuery.refetch()
+                      }
+                      disabled={outagesQuery.isFetching}
+                    >
+                      {outagesQuery.isFetching ? t('common.loading') : t('common.retry')}
+                    </Button>
+                  </div>
+                )}
                 {outagesQuery.isLoading ? (
-                  <div className="text-sm text-slate-500 dark:text-slate-400">
+                  <div className="text-sm text-ink-2 dark:text-ink-3">
                     {t('admin_analytics.loading_outages')}
                   </div>
-                ) : outages.length === 0 ? (
-                  <div className="text-sm text-slate-500 dark:text-slate-400">
+                ) : !outagesQuery.data ? null : outages.length === 0 ? (
+                  <div className="text-sm text-ink-2 dark:text-ink-3">
                     {t('admin_analytics.no_outages')}
                   </div>
                 ) : (
                   <>
                     <div className="overflow-x-auto">
-                      <table className="w-full min-w-[540px] text-sm">
-                        <thead className="text-xs text-slate-500 dark:text-slate-400">
+                      <table className="ui-table min-w-[540px]">
+                        <thead>
                           <tr>
-                            <th className="py-2 pr-4 text-left">
+                            <th className="px-3 py-2 text-left">
                               {t('admin_analytics.outage_start')}
                             </th>
-                            <th className="py-2 pr-4 text-left">
+                            <th className="px-3 py-2 text-left">
                               {t('admin_analytics.outage_end')}
                             </th>
-                            <th className="py-2 pr-4 text-left">
+                            <th className="px-3 py-2 text-left">
                               {t('admin_analytics.initial_error')}
                             </th>
-                            <th className="py-2 pr-4 text-left">
+                            <th className="px-3 py-2 text-left">
                               {t('admin_analytics.last_error')}
                             </th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-200 dark:divide-slate-700">
+                        <tbody>
                           {outages.map((outage) => (
-                            <tr key={outage.id}>
-                              <td className="py-2 pr-4 whitespace-nowrap text-slate-900 dark:text-slate-100">
+                            <tr
+                              key={outage.id}
+                              className="hover:bg-surface-2 dark:hover:bg-surface-2"
+                            >
+                              <td className="px-3 py-2 whitespace-nowrap text-ink">
                                 {formatDateTime(outage.started_at, timeZone, locale)}
                               </td>
-                              <td className="py-2 pr-4 whitespace-nowrap text-slate-900 dark:text-slate-100">
+                              <td className="px-3 py-2 whitespace-nowrap text-ink">
                                 {outage.ended_at
                                   ? formatDateTime(outage.ended_at, timeZone, locale)
                                   : t('admin_analytics.ongoing')}
                               </td>
-                              <td className="py-2 pr-4 text-slate-600 dark:text-slate-400">
+                              <td className="px-3 py-2 text-ink-2 dark:text-ink-3">
                                 {outage.initial_error ?? '-'}
                               </td>
-                              <td className="py-2 pr-4 text-slate-600 dark:text-slate-400">
+                              <td className="px-3 py-2 text-ink-2 dark:text-ink-3">
                                 {outage.last_error ?? '-'}
                               </td>
                             </tr>
@@ -493,7 +575,7 @@ export function AdminAnalytics() {
                       </table>
                     </div>
 
-                    {outagesQuery.hasNextPage && (
+                    {outagesQuery.hasNextPage && !outagesQuery.isFetchNextPageError && (
                       <div className="mt-4">
                         <Button
                           variant="secondary"
@@ -510,9 +592,20 @@ export function AdminAnalytics() {
                 )}
               </div>
             </>
-          )}
+          ) : null}
         </Card>
       </main>
-    </div>
+
+      <ToastStack>
+        {notice ? (
+          <Toast
+            tone={notice.tone}
+            title={notice.title}
+            onClose={() => setNotice(null)}
+            closeLabel={t('common.close')}
+          />
+        ) : null}
+      </ToastStack>
+    </AdminShell>
   );
 }

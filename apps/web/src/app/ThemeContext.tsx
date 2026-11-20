@@ -43,6 +43,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setResolvedTheme(resolved);
 
     const root = document.documentElement;
+    // color-scheme drives the UA canvas and native controls, so it has to follow runtime switches.
+    root.style.colorScheme = resolved;
     if (resolved === 'dark') {
       root.classList.add('dark');
     } else {
@@ -57,6 +59,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const handleChange = (e: MediaQueryListEvent) => {
       setResolvedTheme(e.matches ? 'dark' : 'light');
       const root = document.documentElement;
+      root.style.colorScheme = e.matches ? 'dark' : 'light';
       if (e.matches) {
         root.classList.add('dark');
       } else {

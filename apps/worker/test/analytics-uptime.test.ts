@@ -12,6 +12,7 @@ import { buildCheckSeries } from './helpers/data-builders';
 
 describe('analytics/uptime', () => {
   it('maps configured ranges to seconds', () => {
+    expect(rangeToSeconds('1h')).toBe(3_600);
     expect(rangeToSeconds('24h')).toBe(86_400);
     expect(rangeToSeconds('7d')).toBe(604_800);
     expect(rangeToSeconds('30d')).toBe(2_592_000);

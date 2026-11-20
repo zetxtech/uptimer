@@ -25,9 +25,10 @@
             window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
           var isDark = theme === 'dark' || (theme === 'system' && systemDark);
 
+          // color-scheme alone gives the UA canvas the right colour before the stylesheet
+          // loads; the canvas colour itself stays owned by CSS so theme switches keep up.
           var root = document.documentElement;
           root.style.colorScheme = isDark ? 'dark' : 'light';
-          root.style.backgroundColor = isDark ? '#0f172a' : '#f8fafc';
           if (isDark) root.classList.add('dark');
           else root.classList.remove('dark');
         } catch (_err) {

@@ -1,6 +1,6 @@
 export type Interval = { start: number; end: number };
 
-export type UptimeRange = '24h' | '7d' | '30d' | '90d';
+export type UptimeRange = '1h' | '24h' | '7d' | '30d' | '90d';
 
 export function utcDayStart(timestampSec: number): number {
   return Math.floor(timestampSec / 86400) * 86400;
@@ -8,6 +8,8 @@ export function utcDayStart(timestampSec: number): number {
 
 export function rangeToSeconds(range: UptimeRange): number {
   switch (range) {
+    case '1h':
+      return 60 * 60;
     case '24h':
       return 24 * 60 * 60;
     case '7d':

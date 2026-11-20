@@ -158,6 +158,28 @@ export function defaultMessageForEvent(
       const displayUrl = asString(vars, 'monitor.display_url');
       return `Monitor UP: ${name}${displayUrl ? ` (${displayUrl})` : ''}`;
     }
+    case 'monitor.ssl_expiring': {
+      const name = asString(vars, 'monitor.name');
+      const target = asString(vars, 'monitor.target');
+      const daysLeft = asString(vars, 'expiry.days_left');
+      return `TLS certificate expiring in ${daysLeft} day(s): ${name}${target ? ` (${target})` : ''}`;
+    }
+    case 'monitor.domain_expiring': {
+      const name = asString(vars, 'monitor.name');
+      const target = asString(vars, 'monitor.target');
+      const daysLeft = asString(vars, 'expiry.days_left');
+      return `Domain registration expires in ${daysLeft} day(s): ${name}${target ? ` (${target})` : ''}`;
+    }
+    case 'probe.offline': {
+      const name = asString(vars, 'probe.name');
+      const region = asString(vars, 'probe.region');
+      return `Probe OFFLINE: ${name}${region ? ` (${region})` : ''}`;
+    }
+    case 'probe.online': {
+      const name = asString(vars, 'probe.name');
+      const region = asString(vars, 'probe.region');
+      return `Probe ONLINE: ${name}${region ? ` (${region})` : ''}`;
+    }
     case 'incident.created': {
       const title = asString(vars, 'incident.title');
       const impact = asString(vars, 'incident.impact');
@@ -182,6 +204,11 @@ export function defaultMessageForEvent(
     }
     case 'test.ping': {
       return 'Uptimer test notification';
+    }
+    case 'group.batch':
+    case 'group.digest': {
+      const summary = asString(vars, 'summary');
+      return summary || 'Uptimer group notification';
     }
     default: {
       const ev = asString(vars, 'event');

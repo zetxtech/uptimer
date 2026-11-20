@@ -1,5 +1,9 @@
 # Notification System
 
+## SMTP Dependency
+
+SMTP delivery uses `worker-mailer`: Workers TCP sockets do not provide an SMTP client, and the Resend HTTP API cannot deliver through a user-specified SMTP server. The dependency is used only by the Worker's SMTP path and adds no service; it requires `nodejs_compat`, so Worker startup and CPU budgets must be revalidated before deployment. To avoid STARTTLS downgrade exposing credentials, only implicit-TLS SMTP (typically port 465) is supported; plaintext and STARTTLS are not. Workers prohibit outbound port 25. SMTP passwords must be referenced through Worker Secrets, never stored in D1.
+
 English | [中文](notifications.zh-CN.md)
 
 Uptimer's notification system sends webhook alerts when monitor states change or incidents are created/updated. This document covers event types, channel configuration, payload construction, template variables, webhook signing, and troubleshooting.
@@ -29,6 +33,8 @@ The notification system:
 | Event                 | Description                                    |
 | --------------------- | ---------------------------------------------- |
 | `monitor.down`        | Monitor transitioned to DOWN state             |
+| `probe.offline`       | Probe heartbeat exceeded its offline threshold |
+| `probe.online`        | Offline probe sent a fresh heartbeat           |
 | `monitor.up`          | Monitor transitioned to UP state               |
 | `incident.created`    | New incident created                           |
 | `incident.updated`    | Incident received an update                    |
@@ -56,8 +62,48 @@ Each event has a unique `event_key` used for deduplication:
 | PATCH  | `/api/v1/admin/notification-channels/:id`      | Update a channel         |
 | DELETE | `/api/v1/admin/notification-channels/:id`      | Delete a channel         |
 | POST   | `/api/v1/admin/notification-channels/:id/test` | Send a test notification |
+| GET    | `/api/v1/admin/notification-groups`            | List notification groups |
+| POST   | `/api/v1/admin/notification-groups`            | Create a group           |
+| PATCH  | `/api/v1/admin/notification-groups/:id`        | Update a group           |
+| DELETE | `/api/v1/admin/notification-groups/:id`        | Delete a group           |
 
 The test endpoint generates a `test.ping` event with sample data and returns the delivery record for debugging.
+
+## Built-in Providers
+
+Every channel is a `type = 'webhook'` row whose `config_json.preset` selects the transport.
+
+| Preset     | Required secret                  | Notes                                                                                  |
+| ---------- | -------------------------------- | -------------------------------------------------------------------------------------- |
+| `custom`   | —                                | Generic HTTP webhook (default preset)                                                  |
+| `telegram` | Bot token (stored or secret ref) | Telegram Bot API                                                                       |
+| `bark`     | `device_key_secret_ref`          | Bark push; the device key is sent in the JSON body, never in the URL                   |
+| `resend`   | `api_key_secret_ref`             | Resend HTTP API; uses a stable `Idempotency-Key` per channel + event key               |
+| `smtp`     | `password_secret_ref`            | Direct SMTP with **implicit TLS only**; port 25 is rejected and STARTTLS is never used |
+
+Secret references are Worker Secret binding names (for example `UPTIMER_SMTP_PASSWORD`); values are read at delivery time and never stored in D1. When a binding is missing, the delivery fails with `Notification secret not configured: <binding name>`.
+
+Bark server URLs and SMTP hosts are validated with the same SSRF rules as monitors, so loopback, link-local and private ranges are rejected at save time.
+
+## Notification Groups
+
+A notification group is the routing layer above channels: one monitor can belong to several groups, and a group can use several channels.
+
+| Field               | Description                                                                                                    |
+| ------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `monitor_ids`       | Monitors whose events this group receives                                                                      |
+| `channel_ids`       | Channels the group delivers through                                                                            |
+| `immediate_enabled` | Send monitor events as soon as they happen (used when `debounce_seconds = 0`)                                  |
+| `debounce_seconds`  | `0` disables accumulation. Any value above `0` accumulates events and restarts the cooldown on every new event |
+| `digest_interval`   | `none`, `daily` or `weekly` summary of currently failing monitors                                              |
+
+Behaviour:
+
+- **Immediate**: one message per event, with the group prefix in the event key so the same event can still reach ungrouped channels.
+- **Accumulation**: events are queued in `notification_group_pending_events`; the cooldown is reset by every new event, and when it expires all queued events are merged into one message and archived in `notification_group_batches`.
+- **Digest**: at each due time the group sends one message listing monitors that are currently `down`. When nothing is failing, no message is sent and only the schedule advances.
+
+Delivery still goes through the same delivery log, so `(event_key, channel_id)` keeps every message idempotent. Groups run on the minute cron with their own lease and never block or delay monitor checks.
 
 ## Channel Configuration
 

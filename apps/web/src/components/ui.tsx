@@ -1,4 +1,10 @@
-import type { ButtonHTMLAttributes, KeyboardEvent, ReactNode } from 'react';
+import {
+  useEffect,
+  useRef,
+  type ButtonHTMLAttributes,
+  type KeyboardEvent,
+  type ReactNode,
+} from 'react';
 
 import { useI18n } from '../app/I18nContext';
 import { useTheme } from '../app/ThemeContext';
@@ -7,45 +13,31 @@ export function cn(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
 }
 
-export const PANEL_BASE_CLASS =
-  'ui-panel rounded-xl border border-slate-200/80 dark:border-slate-700/80';
+export const PANEL_BASE_CLASS = 'ui-panel rounded-xl border border-line';
 
-export const PANEL_INTERACTIVE_CLASS =
-  'ui-panel-hover hover:border-slate-300/80 dark:hover:border-slate-600';
+export const PANEL_INTERACTIVE_CLASS = 'ui-panel-hover hover:border-line';
 
 export const TABLE_ACTION_BUTTON_CLASS =
-  'inline-flex items-center justify-center rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors focus-visible:outline-none';
+  'inline-flex items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-[13px] font-medium transition-colors focus-visible:outline-none';
 
 export const MODAL_OVERLAY_CLASS = 'ui-modal-overlay animate-fade-in';
 
 export const MODAL_PANEL_CLASS = 'ui-modal-panel animate-slide-up';
 
-export const INPUT_CLASS = cn(
-  'ui-input',
-  'text-base',
-  'bg-white/90 dark:bg-slate-700/80',
-  'border-slate-200 dark:border-slate-600',
-  'placeholder:text-slate-400 dark:placeholder:text-slate-500',
-);
+export const INPUT_CLASS = cn('ui-input', 'text-base', 'border-line', 'placeholder:text-ink-3');
 
-export const SELECT_CLASS = cn(
-  'ui-select',
-  'text-base',
-  'bg-white/90 dark:bg-slate-700/80',
-  'border-slate-200 dark:border-slate-600',
-);
+export const SELECT_CLASS = cn('ui-select', 'text-base', 'border-line');
 
 export const TEXTAREA_CLASS = cn(
   'ui-textarea',
   'text-base',
-  'bg-white/90 dark:bg-slate-700/80',
-  'border-slate-200 dark:border-slate-600',
-  'placeholder:text-slate-400 dark:placeholder:text-slate-500',
+  'border-line',
+  'placeholder:text-ink-3',
 );
 
-export const FIELD_LABEL_CLASS = 'ui-label text-sm font-medium text-slate-700 dark:text-slate-300';
+export const FIELD_LABEL_CLASS = 'ui-label';
 
-export const FIELD_HELP_CLASS = 'ui-help text-xs text-slate-500 dark:text-slate-400';
+export const FIELD_HELP_CLASS = 'ui-help';
 
 interface BadgeProps {
   variant: 'up' | 'down' | 'maintenance' | 'paused' | 'unknown' | 'info';
@@ -53,31 +45,70 @@ interface BadgeProps {
   size?: 'sm' | 'md';
 }
 
-const badgeStyles = {
-  up: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-400/30',
-  down: 'bg-red-50 text-red-700 ring-red-600/20 dark:bg-red-500/10 dark:text-red-300 dark:ring-red-400/30',
-  maintenance:
-    'bg-blue-50 text-blue-700 ring-blue-600/20 dark:bg-blue-500/10 dark:text-blue-300 dark:ring-blue-400/30',
-  paused:
-    'bg-amber-50 text-amber-700 ring-amber-600/20 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-400/30',
-  unknown:
-    'bg-slate-100 text-slate-600 ring-slate-500/20 dark:bg-slate-500/10 dark:text-slate-300 dark:ring-slate-400/30',
-  info: 'bg-slate-100 text-slate-700 ring-slate-500/15 dark:bg-slate-500/10 dark:text-slate-300 dark:ring-slate-400/25',
+const badgeDot: Record<BadgeProps['variant'], string> = {
+  up: 'bg-status-up',
+  down: 'bg-status-down',
+  maintenance: 'bg-status-maintenance',
+  paused: 'bg-status-paused',
+  unknown: 'bg-status-unknown',
+  info: 'bg-status-unknown',
 };
 
+/** Neutral pill carrying a colored status dot, in the style of the reference status pages. */
 export function Badge({ variant, children, size = 'sm' }: BadgeProps) {
-  const sizeClass = size === 'sm' ? 'px-2.5 py-0.5 text-xs' : 'px-3 py-1 text-sm';
+  const sizeClass = size === 'sm' ? 'gap-1.5 px-2 py-0.5 text-xs' : 'gap-2 px-2.5 py-1 text-sm';
+  const dotSize = size === 'sm' ? 'h-1.5 w-1.5' : 'h-2 w-2';
+
   return (
     <span
       className={cn(
-        'inline-flex items-center rounded-full font-medium ring-1 ring-inset',
-        'tracking-wide',
-        badgeStyles[variant],
+        'inline-flex shrink-0 items-center whitespace-nowrap rounded-full font-medium',
+        'bg-surface-2 text-ink',
         sizeClass,
       )}
     >
+      <span className={cn('rounded-full', dotSize, badgeDot[variant])} />
       {children}
     </span>
+  );
+}
+
+interface StatusGlyphProps {
+  status: 'up' | 'down' | 'maintenance' | 'paused' | 'unknown';
+  className?: string;
+}
+
+const glyphPaths: Record<StatusGlyphProps['status'], string> = {
+  up: 'M9 12.5l2 2 4-4.5M12 21a9 9 0 100-18 9 9 0 000 18z',
+  down: 'M15 9l-6 6m0-6l6 6M12 21a9 9 0 100-18 9 9 0 000 18z',
+  maintenance: 'M12 8v4.5m0 3h.01M12 21a9 9 0 100-18 9 9 0 000 18z',
+  paused: 'M10 9v6m4-6v6M12 21a9 9 0 100-18 9 9 0 000 18z',
+  unknown: 'M12 16v.01M12 13a2.5 2.5 0 10-2.5-2.5M12 21a9 9 0 100-18 9 9 0 000 18z',
+};
+
+const glyphColors: Record<StatusGlyphProps['status'], string> = {
+  up: 'text-status-up',
+  down: 'text-status-down',
+  maintenance: 'text-status-maintenance',
+  paused: 'text-status-paused',
+  unknown: 'text-status-unknown',
+};
+
+/** Status icon sized for a list row's leading slot. */
+export function StatusGlyph({ status, className = 'h-[18px] w-[18px]' }: StatusGlyphProps) {
+  return (
+    <svg
+      className={cn('shrink-0', className, glyphColors[status])}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.8}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d={glyphPaths[status]} />
+    </svg>
   );
 }
 
@@ -88,11 +119,11 @@ interface StatusDotProps {
 }
 
 const dotColors = {
-  up: 'bg-emerald-500 dark:bg-emerald-400',
-  down: 'bg-red-500 dark:bg-red-400',
-  maintenance: 'bg-blue-500 dark:bg-blue-400',
-  paused: 'bg-amber-500 dark:bg-amber-400',
-  unknown: 'bg-slate-400 dark:bg-slate-500',
+  up: 'bg-status-up',
+  down: 'bg-status-down',
+  maintenance: 'bg-status-maintenance',
+  paused: 'bg-status-paused',
+  unknown: 'bg-status-unknown',
 };
 
 export function StatusDot({ status, pulse = false, size = 'md' }: StatusDotProps) {
@@ -165,21 +196,56 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 }
 
 const buttonVariants = {
-  primary:
-    'bg-slate-900 text-white hover:bg-slate-800 active:bg-slate-900 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white shadow-sm',
-  secondary:
-    'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:border-slate-600 dark:hover:bg-slate-700 shadow-sm',
-  ghost:
-    'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800',
+  primary: 'ui-btn-primary shadow-[0_1px_2px_rgba(25,28,36,0.22)]',
+  secondary: 'ui-btn-secondary',
+  ghost: 'text-ink-2 hover:bg-surface-2 hover:text-ink',
   danger:
-    'bg-red-600 text-white hover:bg-red-700 active:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 shadow-sm',
+    'bg-red-600 text-white hover:bg-red-700 active:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600 shadow-[0_1px_2px_rgba(25,28,36,0.28)]',
 };
 
+// Reference buttons are 14 px / 500 regardless of height.
 const buttonSizes = {
-  sm: 'h-9 px-3.5 text-sm',
-  md: 'h-10 px-4 text-base',
-  lg: 'h-11 px-5 text-base',
+  sm: 'h-8 px-3 text-[13px]',
+  md: 'h-9 px-3.5 text-[14px]',
+  lg: 'h-10 px-3.5 text-[14px]',
 };
+
+/** Shimmer block for loading placeholders. */
+export function Skeleton({ className }: { className?: string }) {
+  return <div aria-hidden className={cn('ui-skeleton rounded', className)} />;
+}
+
+/**
+ * Loading placeholder shaped like the list it stands in for: rows reuse the page's own row grid, so
+ * the layout is already in place when data arrives instead of the area sitting empty.
+ */
+export function SkeletonRows({
+  rows = 4,
+  rowClassName,
+  cells,
+  header,
+  className,
+}: {
+  rows?: number;
+  rowClassName: string;
+  /** One entry per grid column, sized like the real column's content. */
+  cells: string[];
+  header?: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div role="status" aria-busy className={className}>
+      {header}
+      {Array.from({ length: rows }, (_, row) => (
+        <div key={row} className={rowClassName}>
+          {cells.map((cell, column) => (
+            <Skeleton key={column} className={cn('h-4', cell)} />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export function Button({
   children,
@@ -208,6 +274,124 @@ export function Button({
     </button>
   );
 }
+
+export type ToastTone = 'success' | 'danger' | 'info';
+
+const toastTones: Record<ToastTone, { badge: string; icon: ReactNode }> = {
+  success: {
+    badge: 'ui-tier-pill-up',
+    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />,
+  },
+  danger: {
+    badge: 'ui-tier-pill-down',
+    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v5m0 3.5h.01" />,
+  },
+  info: {
+    badge: 'bg-surface-2 text-ink-2 dark:bg-surface-2 dark:text-ink',
+    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v5m0 3.5h.01" />,
+  },
+};
+
+interface ToastProps {
+  tone?: ToastTone;
+  title: ReactNode;
+  children?: ReactNode;
+  onClose: () => void;
+  /** Auto-dismiss delay in milliseconds; omit to keep the toast until it is closed. */
+  autoHideMs?: number;
+  closeLabel?: string;
+}
+
+/** Transient feedback pinned to the viewport corner so it never shifts the page layout. */
+export function Toast({
+  tone = 'info',
+  title,
+  children,
+  onClose,
+  autoHideMs,
+  closeLabel,
+}: ToastProps) {
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    if (autoHideMs === undefined) return;
+    const timer = window.setTimeout(() => onCloseRef.current(), autoHideMs);
+    return () => window.clearTimeout(timer);
+  }, [autoHideMs]);
+
+  return (
+    <div
+      role={tone === 'danger' ? 'alert' : 'status'}
+      className={cn(
+        'animate-slide-up pointer-events-auto flex w-[min(23rem,calc(100vw-2rem))] items-start gap-3 rounded-xl',
+        'border border-line bg-surface p-3.5 shadow-[0_16px_40px_-16px_rgba(25,28,36,0.28)]',
+        'dark:border-line dark:bg-surface',
+      )}
+    >
+      <span
+        className={cn(
+          'mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full',
+          toastTones[tone].badge,
+        )}
+      >
+        <svg
+          className="h-3.5 w-3.5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2.4}
+          aria-hidden
+        >
+          {toastTones[tone].icon}
+        </svg>
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] font-medium leading-5 text-ink">{title}</div>
+        {children}
+      </div>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label={closeLabel}
+        className="-mr-1 -mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink dark:hover:bg-surface-2 dark:hover:text-ink"
+      >
+        <svg
+          className="h-3.5 w-3.5"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          aria-hidden
+        >
+          <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
+        </svg>
+      </button>
+    </div>
+  );
+}
+
+export function ToastStack({ children }: { children: ReactNode }) {
+  return (
+    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-end gap-2 p-4 sm:bottom-4 sm:left-auto sm:right-4 sm:p-0">
+      {children}
+    </div>
+  );
+}
+
+export const PlusIcon = ({ className = 'h-4 w-4' }: { className?: string }) => (
+  <svg
+    className={className}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={2.1}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden
+  >
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+);
 
 const SunIcon = () => (
   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -257,8 +441,8 @@ export function ThemeToggle() {
       onClick={cycleTheme}
       className={cn(
         'flex h-10 w-10 items-center justify-center rounded-lg',
-        'text-slate-500 hover:bg-slate-100 hover:text-slate-900',
-        'dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+        'text-ink-2 hover:bg-surface-2 hover:text-ink',
+        'dark:text-ink-3 dark:hover:bg-surface dark:hover:text-ink',
         'transition-colors',
       )}
       title={title}

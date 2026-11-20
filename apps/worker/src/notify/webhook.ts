@@ -9,6 +9,7 @@ import type {
 import { claimNotificationDelivery, finalizeNotificationDelivery } from './dedupe';
 import { decryptTelegramBotToken } from './telegram-token';
 import { defaultMessageForEvent, renderJsonTemplate, renderStringTemplate } from './template';
+import { dispatchProvider } from './providers';
 
 export type WebhookChannel = {
   id: number;
@@ -72,6 +73,10 @@ function isTelegramChannelConfig(config: WebhookChannelConfig): config is Telegr
 function shouldSendEvent(config: WebhookChannelConfig, eventType: string): boolean {
   // Always allow test sends so users can validate channel config.
   if (eventType === 'test.ping') return true;
+
+  // Group batches/digests are opt-in through notification group membership, not the
+  // channel-level event whitelist (which describes raw monitor/incident events).
+  if (eventType === 'group.batch' || eventType === 'group.digest') return true;
 
   const enabled = config.enabled_events;
   if (!enabled || enabled.length === 0) return true;
@@ -448,13 +453,27 @@ export async function dispatchWebhookToChannel(args: {
   eventType: string;
   eventKey: string;
   payload: unknown;
+  retryFailed?: boolean;
+  /** Manual retry of a failed delivery: skip the retry throttle. */
+  forceRetry?: boolean;
 }): Promise<'sent' | 'skipped'> {
   if (!shouldSendEvent(args.channel.config, args.eventType)) {
     return 'skipped';
   }
 
   const now = Math.floor(Date.now() / 1000);
-  const claimed = await claimNotificationDelivery(args.db, args.eventKey, args.channel.id, now);
+  const claimed = await claimNotificationDelivery(
+    args.db,
+    args.eventKey,
+    args.channel.id,
+    now,
+    args.retryFailed,
+    {
+      eventType: args.eventType,
+      payload: args.payload,
+      ...(args.forceRetry ? { force: true } : {}),
+    },
+  );
   if (!claimed) {
     return 'skipped';
   }
@@ -463,28 +482,46 @@ export async function dispatchWebhookToChannel(args: {
 
   let outcome: WebhookDispatchResult;
   try {
-    outcome = isTelegramChannelConfig(config)
-      ? await dispatchTelegramPresetRequest({
-          env: args.env,
-          channel: { ...args.channel, config },
-          eventType: args.eventType,
-          eventKey: args.eventKey,
-          payload: args.payload,
-          now,
-        })
-      : await dispatchCustomWebhookRequest({
-          env: args.env,
-          channel: { ...args.channel, config },
-          eventType: args.eventType,
-          eventKey: args.eventKey,
-          payload: args.payload,
-          now,
-        });
+    if (isTelegramChannelConfig(config)) {
+      outcome = await dispatchTelegramPresetRequest({
+        env: args.env,
+        channel: { ...args.channel, config },
+        eventType: args.eventType,
+        eventKey: args.eventKey,
+        payload: args.payload,
+        now,
+      });
+    } else if (config.preset === 'custom') {
+      outcome = await dispatchCustomWebhookRequest({
+        env: args.env,
+        channel: { ...args.channel, config },
+        eventType: args.eventType,
+        eventKey: args.eventKey,
+        payload: args.payload,
+        now,
+      });
+    } else {
+      const { message } = buildTemplateContext({
+        channel: args.channel,
+        eventType: args.eventType,
+        eventKey: args.eventKey,
+        payload: args.payload,
+        now,
+      });
+      outcome = await dispatchProvider({
+        env: args.env,
+        config,
+        channelId: args.channel.id,
+        eventType: args.eventType,
+        eventKey: args.eventKey,
+        message,
+      });
+    }
   } catch (err) {
     outcome = { status: 'failed', httpStatus: null, error: toErrorMessage(err) };
   }
 
-  await finalizeNotificationDelivery(args.db, args.eventKey, args.channel.id, outcome);
+  await finalizeNotificationDelivery(args.db, args.eventKey, args.channel.id, outcome, now);
   return 'sent';
 }
 
@@ -518,6 +555,8 @@ export async function dispatchWebhookToChannels(args: {
   eventType: string;
   eventKey: string;
   payload: unknown;
+  retryFailed?: boolean;
+  throwOnError?: boolean;
 }): Promise<void> {
   const channels = args.channels.filter((c) => shouldSendEvent(c.config, args.eventType));
   if (channels.length === 0) return;
@@ -533,6 +572,7 @@ export async function dispatchWebhookToChannels(args: {
           eventType: args.eventType,
           eventKey: args.eventKey,
           payload: args.payload,
+          ...(args.retryFailed ? { retryFailed: true } : {}),
         }).catch((err) => Promise.reject({ channel, err })),
       ),
     ),
@@ -541,6 +581,9 @@ export async function dispatchWebhookToChannels(args: {
   const rejected = settled.filter((r) => r.status === 'rejected');
   if (rejected.length > 0) {
     console.error(`notify: ${rejected.length}/${settled.length} webhooks failed`, rejected[0]);
+    if (args.throwOnError) {
+      throw new Error(`Failed to dispatch ${rejected.length} notification channels`);
+    }
   }
 }
 

@@ -197,7 +197,7 @@ ReactDOM.createRoot(rootEl).render(
             <PreloadCleanup />
             <RouterProvider
               router={router}
-              fallbackElement={<div className="min-h-screen bg-slate-50 dark:bg-slate-900" />}
+              fallbackElement={<div className="min-h-screen bg-surface-2 dark:bg-surface" />}
             />
           </AuthProvider>
         </QueryClientProvider>

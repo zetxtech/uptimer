@@ -1,5 +1,9 @@
 # 通知系统
 
+## SMTP 依赖说明
+
+SMTP 渠道使用 `worker-mailer`，因为 Cloudflare Workers 的原生 TCP Socket 不提供 SMTP 客户端，而 Resend 的 HTTP API 无法连接用户指定的 SMTP 服务。该依赖仅用于 Worker 的 SMTP 发送路径，不引入新服务；它需要启用 `nodejs_compat`，部署前应重新验证 Worker 启动及 CPU 预算。为防止 STARTTLS 降级泄露凭据，目前仅支持隐式 TLS 的 SMTP 服务（通常为 465 端口），不支持明文或 STARTTLS；Workers 本身禁止连接 25 端口。SMTP 密码必须通过 Worker Secret 引用配置，不写入 D1。
+
 [English](notifications.md) | 中文
 
 Uptimer 的通知系统在监控状态变化或事件创建/更新时发送 Webhook 通知。本文档涵盖事件类型、渠道配置、Payload 构建、模板变量、Webhook 签名与故障排除。
@@ -29,6 +33,8 @@ Uptimer 的通知系统在监控状态变化或事件创建/更新时发送 Webh
 | 事件                  | 说明                             |
 | --------------------- | -------------------------------- |
 | `monitor.down`        | 监控项转为 DOWN 状态             |
+| `probe.offline`       | 探针心跳超过离线阈值             |
+| `probe.online`        | 离线探针恢复心跳                 |
 | `monitor.up`          | 监控项转为 UP 状态               |
 | `incident.created`    | 新事件创建                       |
 | `incident.updated`    | 事件收到更新                     |
@@ -49,15 +55,55 @@ Uptimer 的通知系统在监控状态变化或事件创建/更新时发送 Webh
 
 ## 管理端 API
 
-| 方法   | 端点                                           | 说明         |
+| Method | Endpoint                                       | 说明         |
 | ------ | ---------------------------------------------- | ------------ |
-| GET    | `/api/v1/admin/notification-channels`          | 列出所有渠道 |
-| POST   | `/api/v1/admin/notification-channels`          | 创建渠道     |
-| PATCH  | `/api/v1/admin/notification-channels/:id`      | 更新渠道     |
-| DELETE | `/api/v1/admin/notification-channels/:id`      | 删除渠道     |
+| GET    | `/api/v1/admin/notification-channels`          | 列出通知渠道 |
+| POST   | `/api/v1/admin/notification-channels`          | 新建通知渠道 |
+| PATCH  | `/api/v1/admin/notification-channels/:id`      | 更新通知渠道 |
+| DELETE | `/api/v1/admin/notification-channels/:id`      | 删除通知渠道 |
 | POST   | `/api/v1/admin/notification-channels/:id/test` | 发送测试通知 |
+| GET    | `/api/v1/admin/notification-groups`            | 列出通知组   |
+| POST   | `/api/v1/admin/notification-groups`            | 新建通知组   |
+| PATCH  | `/api/v1/admin/notification-groups/:id`        | 更新通知组   |
+| DELETE | `/api/v1/admin/notification-groups/:id`        | 删除通知组   |
 
-测试端点会生成一个 `test.ping` 事件（带示例数据）并返回投递记录，用于调试。
+测试接口会生成一个 `test.ping` 事件（带示例数据），并返回投递记录便于排查。
+
+## 内置渠道类型
+
+所有渠道都是 `type = 'webhook'` 的记录，由 `config_json.preset` 决定实际传输方式。
+
+| preset     | 必需密钥                            | 说明                                                         |
+| ---------- | ----------------------------------- | ------------------------------------------------------------ |
+| `custom`   | —                                   | 通用 HTTP webhook（默认）                                    |
+| `telegram` | Bot Token（加密存储或 Secret 引用） | Telegram Bot API                                             |
+| `bark`     | `device_key_secret_ref`             | Bark 推送；设备密钥放在 JSON 请求体中，不出现在 URL          |
+| `resend`   | `api_key_secret_ref`                | Resend HTTP API；按渠道与事件键生成稳定的 `Idempotency-Key`  |
+| `smtp`     | `password_secret_ref`               | 直连 SMTP，**仅支持隐式 TLS**；拒绝 25 端口，不使用 STARTTLS |
+
+Secret 引用填写的是 Worker Secret 绑定名（例如 `UPTIMER_SMTP_PASSWORD`），发送时才读取，绝不写入 D1。绑定缺失时投递失败并提示 `Notification secret not configured: <绑定名>`。
+
+Bark 自建服务器地址与 SMTP 主机沿用与监控项相同的 SSRF 校验，保存时会拒绝回环、链路本地与私有网段。
+
+## 通知组
+
+通知组是渠道之上的路由层：一个监控项可隶属多个通知组，一个通知组可使用多个渠道。
+
+| 字段                | 说明                                                               |
+| ------------------- | ------------------------------------------------------------------ |
+| `monitor_ids`       | 该组接收哪些监控项的事件                                           |
+| `channel_ids`       | 该组通过哪些渠道发送                                               |
+| `immediate_enabled` | 事件发生时立即发送（在 `debounce_seconds = 0` 时生效）             |
+| `debounce_seconds`  | 填 `0` 关闭积累；大于 `0` 时积累事件，并且每来一个新事件就重置冷却 |
+| `digest_interval`   | `none`、`daily` 或 `weekly`，定期汇总当前故障中的监控项            |
+
+行为说明：
+
+- **立即发送**：每个事件发送一条消息；事件键带组前缀，因此同一事件仍可并发投递给未分组的渠道。
+- **积累发送**：事件先写入 `notification_group_pending_events`，每来一个新事件都会重置冷却；冷却结束后把队列中的事件合并成一条消息发送，并把内容归档到 `notification_group_batches`。
+- **定期汇总**：每次到期时，如果组内仍有处于 `down` 的监控项，就发送一条汇总；全部正常时不发送消息，只推进下次时间。
+
+发送仍走同一套投递日志，`(event_key, channel_id)` 保证幂等。通知组在分钟级 cron 中以独立租约运行，不会阻塞或延迟监控检查。
 
 ## 渠道配置
 

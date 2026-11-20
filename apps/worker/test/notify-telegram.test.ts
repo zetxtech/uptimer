@@ -61,7 +61,14 @@ describe('notify/webhook Telegram preset', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(finalizeArgs).toEqual(['success', 200, null, 'test:telegram:6:100', 6]);
+    expect(finalizeArgs).toEqual([
+      'success',
+      200,
+      null,
+      'test:telegram:6:100',
+      6,
+      expect.any(Number),
+    ]);
   });
 
   it('sends Telegram sendMessage through a Worker secret token reference', async () => {
@@ -111,7 +118,14 @@ describe('notify/webhook Telegram preset', () => {
     });
     expect(String(requestBody?.text)).toContain('Monitor DOWN: API');
     expect(String(requestBody?.text)).toContain('Timeout after 10000ms');
-    expect(finalizeArgs).toEqual(['success', 200, null, 'monitor:1:down:100', 7]);
+    expect(finalizeArgs).toEqual([
+      'success',
+      200,
+      null,
+      'monitor:1:down:100',
+      7,
+      expect.any(Number),
+    ]);
   });
 
   it('marks Telegram ok=false responses as failed deliveries', async () => {
@@ -153,6 +167,7 @@ describe('notify/webhook Telegram preset', () => {
       'Telegram 400: Bad Request: chat not found',
       'test:telegram:8:100',
       8,
+      expect.any(Number),
     ]);
   });
 
@@ -187,6 +202,7 @@ describe('notify/webhook Telegram preset', () => {
       'Telegram bot token not configured: UPTIMER_TELEGRAM_BOT_TOKEN',
       'test:telegram:9:100',
       9,
+      expect.any(Number),
     ]);
   });
 });

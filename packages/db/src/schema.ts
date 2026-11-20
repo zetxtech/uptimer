@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  blob,
   index,
   integer,
   primaryKey,
@@ -8,9 +9,12 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/sqlite-core';
 
-export type MonitorType = 'http' | 'tcp';
+export type MonitorType = 'http' | 'tcp' | 'heartbeat';
 export type MonitorStatus = 'up' | 'down' | 'maintenance' | 'paused' | 'unknown';
 export type CheckStatus = 'up' | 'down' | 'maintenance' | 'unknown';
+export type ProbeKind = 'edgeone' | 'durable_object' | 'worker' | 'server';
+export type ProbeScope = 'domestic' | 'overseas';
+export type MonitorProbeMode = 'worker' | 'multi_region';
 export type HttpResponseMatchMode = 'contains' | 'regex';
 export type IncidentStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved';
 export type IncidentImpact = 'none' | 'minor' | 'major' | 'critical';
@@ -47,6 +51,37 @@ export const monitors = sqliteTable(
     sortOrder: integer('sort_order').notNull().default(0),
     showOnStatusPage: integer('show_on_status_page', { mode: 'boolean' }).notNull().default(true),
     isActive: integer('is_active', { mode: 'boolean' }).notNull().default(true),
+    probeMode: text('probe_mode').$type<MonitorProbeMode>().notNull().default('worker'),
+    // NULL notifies every enabled channel; otherwise the JSON array is the exact channel set.
+    notificationChannelIdsJson: text('notification_channel_ids_json'),
+    // Recurring daily maintenance window JSON; NULL disables suppression for this monitor.
+    maintenanceWindowJson: text('maintenance_window_json'),
+    // Opt-in daily certificate / domain registration expiry checks.
+    sslExpiryEnabled: integer('ssl_expiry_enabled', { mode: 'boolean' }).notNull().default(false),
+    domainExpiryEnabled: integer('domain_expiry_enabled', { mode: 'boolean' })
+      .notNull()
+      .default(false),
+    // Days-before-expiry that alerts fire on; NULL follows the shared ladder.
+    sslExpiryAlertDays: integer('ssl_expiry_alert_days'),
+    domainExpiryAlertDays: integer('domain_expiry_alert_days'),
+    // Last results of the expiry job (unix seconds / issuer CN).
+    sslExpiresAt: integer('ssl_expires_at'),
+    sslIssuer: text('ssl_issuer'),
+    domainExpiresAt: integer('domain_expires_at'),
+    expiryCheckedAt: integer('expiry_checked_at'),
+    // Carry Set-Cookie values across redirect hops instead of dropping them.
+    keepCookies: integer('keep_cookies', { mode: 'boolean' }).notNull().default(false),
+    // Heartbeat monitors authenticate their ping with this token; NULL for probed monitors.
+    heartbeatToken: text('heartbeat_token'),
+    lastHeartbeatAt: integer('last_heartbeat_at'),
+    // Extra silence allowed beyond interval_sec before a heartbeat monitor turns down.
+    // NULL keeps the default policy (two missed intervals, at least five minutes).
+    heartbeatGraceSec: integer('heartbeat_grace_sec'),
+    // NULL falls back to the site-wide state machine defaults from settings.
+    failuresToDownFromUp: integer('failures_to_down_from_up'),
+    successesToUpFromDown: integer('successes_to_up_from_down'),
+    confirmationPeriodSec: integer('confirmation_period_sec'),
+    recoveryPeriodSec: integer('recovery_period_sec'),
     createdAt: integer('created_at')
       .notNull()
       .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
@@ -73,7 +108,27 @@ export const monitorState = sqliteTable('monitor_state', {
   lastError: text('last_error'),
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
   consecutiveSuccesses: integer('consecutive_successes').notNull().default(0),
+  failureStartedAt: integer('failure_started_at'),
+  recoveryStartedAt: integer('recovery_started_at'),
 });
+
+export const monitorMetadata = sqliteTable(
+  'monitor_metadata',
+  {
+    monitorId: integer('monitor_id').notNull(),
+    key: text('key').notNull(),
+    value: text('value').notNull(),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.monitorId, t.key] }),
+  }),
+);
 
 export const checkResults = sqliteTable(
   'check_results',
@@ -86,7 +141,14 @@ export const checkResults = sqliteTable(
     httpStatus: integer('http_status'),
     error: text('error'),
     location: text('location'),
+    effectiveUrl: text('effective_url'),
+    redirectCount: integer('redirect_count'),
+    responseHeaders: text('response_headers'),
+    timings: text('timings'),
+    resolvedIps: text('resolved_ips'),
     attempt: integer('attempt').notNull().default(1),
+    probeId: text('probe_id'),
+    batchId: text('batch_id'),
   },
   (t) => ({
     monitorTimeIdx: index('idx_check_results_monitor_time').on(t.monitorId, t.checkedAt),
@@ -102,23 +164,70 @@ export const outages = sqliteTable(
     endedAt: integer('ended_at'),
     initialError: text('initial_error'),
     lastError: text('last_error'),
+    aiSummary: text('ai_summary'),
+    title: text('title'),
   },
   (t) => ({
     monitorStartIdx: index('idx_outages_monitor_start').on(t.monitorId, t.startedAt),
   }),
 );
 
-export const incidents = sqliteTable('incidents', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  title: text('title').notNull(),
-  status: text('status').$type<IncidentStatus>().notNull(),
-  impact: text('impact').$type<IncidentImpact>().notNull().default('minor'),
-  message: text('message'),
-  startedAt: integer('started_at')
-    .notNull()
-    .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
-  resolvedAt: integer('resolved_at'),
+export const outageScreenshots = sqliteTable('outage_screenshots', {
+  outageId: integer('outage_id').primaryKey(),
+  contentType: text('content_type').notNull(),
+  width: integer('width'),
+  height: integer('height'),
+  bytes: blob('bytes', { mode: 'buffer' }),
+  capturedAt: integer('captured_at').notNull(),
 });
+
+export const outageMetadata = sqliteTable(
+  'outage_metadata',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    outageId: integer('outage_id').notNull(),
+    key: text('key').notNull(),
+    value: text('value').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => ({
+    outageIdx: index('idx_outage_metadata_outage').on(t.outageId, t.id),
+  }),
+);
+
+export const outageUpdates = sqliteTable(
+  'outage_updates',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    outageId: integer('outage_id').notNull(),
+    body: text('body').notNull(),
+    createdAt: integer('created_at').notNull(),
+  },
+  (t) => ({
+    outageTimeIdx: index('idx_outage_updates_outage_time').on(t.outageId, t.createdAt),
+  }),
+);
+
+export const incidents = sqliteTable(
+  'incidents',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    title: text('title').notNull(),
+    status: text('status').$type<IncidentStatus>().notNull(),
+    impact: text('impact').$type<IncidentImpact>().notNull().default('minor'),
+    message: text('message'),
+    startedAt: integer('started_at')
+      .notNull()
+      .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
+    resolvedAt: integer('resolved_at'),
+    acknowledgedAt: integer('acknowledged_at'),
+    similarGroupId: integer('similar_group_id'),
+    outageId: integer('outage_id'),
+  },
+  (t) => ({
+    similarGroupIdx: index('idx_incidents_similar_group_id').on(t.similarGroupId),
+  }),
+);
 
 export const incidentUpdates = sqliteTable(
   'incident_updates',
@@ -199,6 +308,10 @@ export const notificationDeliveries = sqliteTable(
     status: text('status').$type<NotificationDeliveryStatus>().notNull(),
     httpStatus: integer('http_status'),
     error: text('error'),
+    eventType: text('event_type'),
+    payloadJson: text('payload_json'),
+    attempts: integer('attempts').notNull().default(0),
+    nextAttemptAt: integer('next_attempt_at'),
     createdAt: integer('created_at')
       .notNull()
       .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
@@ -233,6 +346,69 @@ export const locks = sqliteTable('locks', {
   name: text('name').primaryKey(),
   expiresAt: integer('expires_at').notNull(),
 });
+
+export const probes = sqliteTable(
+  'probes',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    kind: text('kind').$type<ProbeKind>().notNull(),
+    scope: text('scope').$type<ProbeScope>().notNull(),
+    region: text('region').notNull(),
+    tokenSha256: text('token_sha256').notNull(),
+    isEnabled: integer('is_enabled', { mode: 'boolean' }).notNull().default(true),
+    isRequired: integer('is_required', { mode: 'boolean' }).notNull().default(true),
+    configVersion: integer('config_version').notNull().default(1),
+    lastSeenAt: integer('last_seen_at'),
+    lastResultAt: integer('last_result_at'),
+    offlineAfterSec: integer('offline_after_sec').notNull().default(900),
+    healthStartedAt: integer('health_started_at'),
+    createdAt: integer('created_at')
+      .notNull()
+      .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
+    updatedAt: integer('updated_at')
+      .notNull()
+      .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
+  },
+  (t) => ({
+    tokenIdx: uniqueIndex('uq_probes_token_sha256').on(t.tokenSha256),
+  }),
+);
+
+export const probeBatches = sqliteTable(
+  'probe_batches',
+  {
+    probeId: text('probe_id').notNull(),
+    batchId: text('batch_id').notNull(),
+    receivedAt: integer('received_at').notNull(),
+    resultCount: integer('result_count').notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.probeId, t.batchId] }),
+    receivedIdx: index('idx_probe_batches_received').on(t.receivedAt),
+  }),
+);
+
+export const monitorProbeState = sqliteTable(
+  'monitor_probe_state',
+  {
+    monitorId: integer('monitor_id').notNull(),
+    probeId: text('probe_id').notNull(),
+    status: text('status').$type<MonitorStatus>().notNull(),
+    lastCheckedAt: integer('last_checked_at'),
+    lastChangedAt: integer('last_changed_at'),
+    lastLatencyMs: integer('last_latency_ms'),
+    lastError: text('last_error'),
+    consecutiveFailures: integer('consecutive_failures').notNull().default(0),
+    consecutiveSuccesses: integer('consecutive_successes').notNull().default(0),
+    failureStartedAt: integer('failure_started_at'),
+    recoveryStartedAt: integer('recovery_started_at'),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.monitorId, t.probeId] }),
+    probeIdx: index('idx_monitor_probe_state_probe').on(t.probeId, t.lastCheckedAt),
+  }),
+);
 
 export const monitorDailyRollups = sqliteTable(
   'monitor_daily_rollups',

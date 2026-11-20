@@ -36,3 +36,11 @@ pnpm-debug.log*
 
 # Reference project (do not track in this repo)
 [U]ptimeFlare/
+
+# Local codegraph index (codegraph init)
+.codegraph/
+
+# Local tool state and scratch directories
+.cortexkit/
+.planning/
+.pnpm-store-tmp/

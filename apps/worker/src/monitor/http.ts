@@ -16,6 +16,7 @@ export type HttpCheckConfig = {
   headers: Record<string, string> | null;
   body: string | null;
   followRedirects: boolean;
+  keepCookies?: boolean;
   expectedStatus: StatusCodeRule[] | null;
   forbiddenStatus: StatusCodeRule[] | null;
   responseKeyword: string | null;
@@ -27,6 +28,7 @@ export type HttpCheckConfig = {
 const USER_AGENT = 'Uptimer/0.1';
 const RETRY_DELAYS_MS = [300, 800] as const;
 const MAX_ASSERTION_BODY_BYTES = 1024 * 1024; // 1 MiB
+const MAX_REDIRECT_HOPS = 10;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -71,6 +73,52 @@ async function fetchWithTimeout(
     return await fetch(url, { ...init, signal: controller.signal });
   } finally {
     clearTimeout(t);
+  }
+}
+
+const MAX_HEADER_ENTRIES = 40;
+const MAX_HEADER_VALUE_CHARS = 900;
+const DNS_JSON_TYPE_A = 1;
+const DNS_JSON_TYPE_AAAA = 28;
+
+function captureResponseHeaders(res: Response): Record<string, string> | null {
+  const captured: Record<string, string> = {};
+  let count = 0;
+  res.headers.forEach((value, name) => {
+    if (count >= MAX_HEADER_ENTRIES) return;
+    captured[name] =
+      value.length > MAX_HEADER_VALUE_CHARS ? value.slice(0, MAX_HEADER_VALUE_CHARS) : value;
+    count += 1;
+  });
+  return count > 0 ? captured : null;
+}
+
+/** Resolves A/AAAA records over DNS-over-HTTPS; the Workers runtime exposes no peer address. */
+async function resolveIpsOverDoh(hostname: string): Promise<string[] | null> {
+  const lookups: Array<Promise<Response>> = [DNS_JSON_TYPE_A, DNS_JSON_TYPE_AAAA].map((type) =>
+    fetch(
+      `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(hostname)}&type=${type}`,
+      {
+        headers: { accept: 'application/dns-json' },
+        cache: 'no-store',
+      },
+    ),
+  );
+  try {
+    const responses = await Promise.all(lookups);
+    const answers: Array<{ type?: number; data?: string }> = [];
+    for (const response of responses) {
+      if (!response.ok) continue;
+      const body = (await response.json()) as { Answer?: Array<{ type?: number; data?: string }> };
+      if (Array.isArray(body.Answer)) answers.push(...body.Answer);
+    }
+    const ips = answers
+      .filter((answer) => answer.type === DNS_JSON_TYPE_A || answer.type === DNS_JSON_TYPE_AAAA)
+      .map((answer) => answer.data)
+      .filter((data): data is string => typeof data === 'string' && data.length > 0);
+    return ips.length > 0 ? Array.from(new Set(ips)) : null;
+  } catch {
+    return null;
   }
 }
 
@@ -119,6 +167,182 @@ async function readTextUpTo(
   return { text, truncated };
 }
 
+async function resolveHostIps(
+  url: string,
+): Promise<{ ips: string[] | null; dnsMs: number | null }> {
+  try {
+    const { hostname } = new URL(url);
+    if (!hostname || /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':')) {
+      return { ips: null, dnsMs: null };
+    }
+    const started = performance.now();
+    const ips = await resolveIpsOverDoh(hostname);
+    return { ips, dnsMs: Math.round(performance.now() - started) };
+  } catch {
+    return { ips: null, dnsMs: null };
+  }
+}
+
+async function resolveHostIpsWithTiming(
+  url: string,
+  timings: Record<string, number>,
+): Promise<{ resolvedIps: string[] | null; timings: Record<string, number> }> {
+  const { ips, dnsMs } = await resolveHostIps(url);
+  return {
+    resolvedIps: ips,
+    timings: dnsMs === null ? timings : { ...timings, dnsMs },
+  };
+}
+
+type PerformedRequest = { res: Response; effectiveUrl: string; redirectCount: number };
+
+/** Set-Cookie values of a response; falls back to a best-effort split when getSetCookie is absent. */
+function readSetCookieHeaders(res: Response): string[] {
+  const headers = res.headers as Headers & { getSetCookie?: () => string[] };
+  if (typeof headers.getSetCookie === 'function') {
+    return headers.getSetCookie();
+  }
+  const single = res.headers.get('set-cookie');
+  if (!single) return [];
+  // Expires attributes contain commas, so only split where the next chunk starts a new pair.
+  return single.split(/,(?=\s*[^;,=\s]+=)/);
+}
+
+type ParsedCookie = { name: string; value: string; removed: boolean };
+
+function parseSetCookie(raw: string): ParsedCookie | null {
+  const [pair, ...attributes] = raw.split(';');
+  if (!pair) return null;
+  const separator = pair.indexOf('=');
+  if (separator <= 0) return null;
+
+  const name = pair.slice(0, separator).trim();
+  const value = pair.slice(separator + 1).trim();
+  if (name.length === 0) return null;
+
+  let removed = false;
+  for (const attribute of attributes) {
+    const [key, ...rest] = attribute.split('=');
+    const normalized = key?.trim().toLowerCase();
+    const attributeValue = rest.join('=').trim();
+    if (normalized === 'max-age' && attributeValue !== '') {
+      const seconds = Number(attributeValue);
+      if (Number.isFinite(seconds) && seconds <= 0) removed = true;
+    }
+    if (normalized === 'expires' && attributeValue !== '') {
+      const at = Date.parse(attributeValue);
+      if (Number.isFinite(at) && at <= Date.now()) removed = true;
+    }
+  }
+
+  return { name, value, removed };
+}
+
+function toHttpInit(
+  config: HttpCheckConfig,
+  method: HttpCheckConfig['method'],
+  body: string | null,
+  cookieHeader: string | null,
+  includeOriginalHeaders: boolean,
+): RequestInit {
+  const headers = new Headers(includeOriginalHeaders ? (config.headers ?? undefined) : undefined);
+  if (!headers.has('user-agent')) headers.set('User-Agent', USER_AGENT);
+  if (cookieHeader) headers.set('Cookie', cookieHeader);
+
+  const init: RequestInit = {
+    method,
+    headers,
+    redirect: 'manual',
+    cache: 'no-store',
+    cf: { cacheTtlByStatus: { '100-599': -1 } },
+  };
+  if (body !== null) init.body = body;
+  return init;
+}
+
+/** Resolve every redirect explicitly so each destination and its credentials are independently checked. */
+async function performRequest(config: HttpCheckConfig): Promise<PerformedRequest> {
+  const jar = new Map<string, { value: string; host: string }>();
+  let currentUrl = config.url;
+  let method = config.method;
+  let body = config.body;
+  let hops = 0;
+  let includeOriginalHeaders = true;
+  const started = performance.now();
+
+  for (;;) {
+    const host = new URL(currentUrl).hostname;
+    const cookieHeader =
+      config.keepCookies && jar.size > 0
+        ? [...jar.entries()]
+            .filter(([, cookie]) => cookie.host === host)
+            .map(([name, cookie]) => `${name}=${cookie.value}`)
+            .join('; ')
+        : null;
+
+    const remainingMs = Math.ceil(config.timeoutMs - (performance.now() - started));
+    if (remainingMs <= 0) {
+      throw new DOMException('Request timed out', 'AbortError');
+    }
+    const init = toHttpInit(config, method, body, cookieHeader || null, includeOriginalHeaders);
+    const res = await fetchWithTimeout(currentUrl, remainingMs, init);
+
+    if (config.keepCookies) {
+      for (const raw of readSetCookieHeaders(res)) {
+        const cookie = parseSetCookie(raw);
+        if (!cookie) continue;
+        if (cookie.removed) jar.delete(cookie.name);
+        else jar.set(cookie.name, { value: cookie.value, host });
+      }
+    }
+
+    const location = res.headers.get('location');
+    if (!config.followRedirects || res.status < 300 || res.status >= 400 || !location) {
+      return { res, effectiveUrl: currentUrl, redirectCount: hops };
+    }
+
+    let nextUrl: URL;
+    try {
+      nextUrl = new URL(location, currentUrl);
+    } catch {
+      void res.body?.cancel().catch(() => undefined);
+      throw new Error('Invalid redirect location');
+    }
+    const targetError = validateHttpTarget(nextUrl.toString());
+    if (targetError) {
+      void res.body?.cancel().catch(() => undefined);
+      throw new Error(`Redirect target is not allowed: ${targetError}`);
+    }
+
+    hops += 1;
+    if (hops > MAX_REDIRECT_HOPS) {
+      void res.body?.cancel().catch(() => undefined);
+      throw new Error(`Too many redirects (> ${MAX_REDIRECT_HOPS})`);
+    }
+
+    if (
+      res.status === 303 ||
+      ((res.status === 301 || res.status === 302) && method !== 'GET' && method !== 'HEAD')
+    ) {
+      method = 'GET';
+      body = null;
+    }
+
+    if (new URL(currentUrl).origin !== nextUrl.origin) {
+      // A redirect must not forward credentials, custom headers or an unsafe request body
+      // to another origin, including when it redirects back to the original origin.
+      if (method !== 'GET' && method !== 'HEAD') {
+        void res.body?.cancel().catch(() => undefined);
+        throw new Error('Cross-origin redirect with a request body or unsafe method is not allowed');
+      }
+      includeOriginalHeaders = false;
+    }
+
+    void res.body?.cancel().catch(() => undefined);
+    currentUrl = nextUrl.toString();
+  }
+}
+
 async function attemptHttpCheck(
   config: HttpCheckConfig,
   assertions: PreparedHttpResponseAssertion[],
@@ -126,29 +350,13 @@ async function attemptHttpCheck(
   const started = performance.now();
 
   try {
-    const headers = new Headers(config.headers ?? undefined);
-    if (!headers.has('user-agent')) {
-      headers.set('User-Agent', USER_AGENT);
-    }
+    const performed = await performRequest(config);
+    const res = performed.res;
 
-    const init: RequestInit = {
-      method: config.method,
-      headers,
-      redirect: config.followRedirects ? 'follow' : 'manual',
-      cache: 'no-store',
-      cf: {
-        cacheTtlByStatus: { '100-599': -1 },
-      },
-    };
-
-    if (config.body !== null) {
-      init.body = config.body;
-    }
-
-    const res = await fetchWithTimeout(config.url, config.timeoutMs, init);
-
-    const latencyMs = Math.round(performance.now() - started);
+    const ttfbMs = Math.round(performance.now() - started);
+    const latencyMs = ttfbMs;
     const httpStatus = res.status;
+    const responseHeaders = captureResponseHeaders(res);
 
     const statusEval = evaluateHttpStatusCode(httpStatus, {
       expected: config.expectedStatus,
@@ -164,12 +372,30 @@ async function attemptHttpCheck(
           statusEval.reason === 'forbidden'
             ? `Forbidden HTTP status: ${httpStatus}`
             : `Unexpected HTTP status: ${httpStatus}`,
+        detail: {
+          effectiveUrl: performed.effectiveUrl,
+          redirectCount: performed.redirectCount,
+          responseHeaders,
+          ...(await resolveHostIpsWithTiming(config.url, { ttfbMs, totalMs: ttfbMs })),
+        },
       };
     }
 
     if (assertions.length === 0) {
       res.body?.cancel();
-      return { status: 'up', latencyMs, httpStatus, error: null };
+      return {
+        status: 'up',
+        latencyMs,
+        httpStatus,
+        error: null,
+        detail: {
+          effectiveUrl: performed.effectiveUrl,
+          redirectCount: performed.redirectCount,
+          responseHeaders,
+          timings: { ttfbMs, totalMs: ttfbMs },
+          resolvedIps: null,
+        },
+      };
     }
 
     if (!res.body) {
@@ -182,6 +408,7 @@ async function attemptHttpCheck(
     }
 
     const { text, truncated } = await readTextUpTo(res.body, MAX_ASSERTION_BODY_BYTES);
+    const readMs = Math.round(performance.now() - started) - ttfbMs;
     const assertionResult = evaluateHttpResponseAssertions({
       assertions,
       text,
@@ -194,6 +421,14 @@ async function attemptHttpCheck(
       latencyMs,
       httpStatus,
       error: assertionResult.error,
+      detail: {
+        effectiveUrl: performed.effectiveUrl,
+        redirectCount: performed.redirectCount,
+        responseHeaders,
+        timings: { ttfbMs, readMs, totalMs: ttfbMs + readMs },
+        resolvedIps:
+          assertionResult.status === 'down' ? (await resolveHostIps(config.url)).ips : null,
+      },
     };
   } catch (err) {
     const latencyMs = Math.round(performance.now() - started);

@@ -25,7 +25,8 @@ import { AppError } from '../middleware/errors';
 export const adminAnalyticsRoutes = new Hono<{ Bindings: Env }>();
 
 const overviewRangeSchema = z.enum(['24h', '7d']);
-const monitorRangeSchema = z.enum(['24h', '7d', '30d', '90d']);
+const monitorRangeSchema = z.enum(['1h', '24h', '7d', '30d', '90d']);
+const probeHistoryRangeSchema = z.enum(['1h', '24h', '7d', '30d', '90d']);
 
 const HISTOGRAM_SIZE = LATENCY_BUCKETS_MS.length + 1;
 const histogramSchema = z.array(z.number().int().nonnegative()).length(HISTOGRAM_SIZE);
@@ -79,7 +80,7 @@ function computeRange(range: UptimeRange): { start: number; end: number } {
   const now = Math.floor(Date.now() / 1000);
   const end = Math.floor(now / 60) * 60;
 
-  if (range === '24h') {
+  if (range === '1h' || range === '24h') {
     return { start: end - rangeToSeconds(range), end };
   }
 
@@ -381,12 +382,114 @@ async function computePartialDayRow(
   };
 }
 
+adminAnalyticsRoutes.get('/monitors/:id/probe-history', async (c) => {
+  const parsedId = z.coerce.number().int().positive().safeParse(c.req.param('id'));
+  const parsedRange = probeHistoryRangeSchema.default('24h').safeParse(c.req.query('range'));
+  if (!parsedId.success || !parsedRange.success) {
+    return c.json(
+      { error: { code: 'INVALID_ARGUMENT', message: 'Invalid monitor or range' } },
+      400,
+    );
+  }
+  const monitorId = parsedId.data;
+  const range = parsedRange.data;
+  const monitor = await c.env.DB.prepare('SELECT id FROM monitors WHERE id = ?1')
+    .bind(monitorId)
+    .first<{ id: number }>();
+  if (!monitor) {
+    return c.json({ error: { code: 'NOT_FOUND', message: 'Monitor not found' } }, 404);
+  }
+
+  const rangeSeconds = { '1h': 3600, '24h': 86400, '7d': 604800, '30d': 2592000, '90d': 7776000 }[
+    range
+  ];
+  const bucketSeconds = { '1h': 60, '24h': 300, '7d': 3600, '30d': 14400, '90d': 43200 }[range];
+  const end = Math.floor(Date.now() / 1000);
+  const start = end - rangeSeconds;
+  const { results } = await c.env.DB.prepare(
+    `
+      SELECT r.probe_id, COALESCE(p.name, r.probe_id) AS probe_name,
+        p.scope, p.region, CAST(r.checked_at / ?2 AS INTEGER) * ?2 AS bucket_at,
+        ROUND(AVG(CASE WHEN r.status = 'up' THEN r.latency_ms END)) AS avg_latency_ms,
+        SUM(CASE WHEN r.status = 'up' THEN 1 ELSE 0 END) AS checks_up,
+        SUM(CASE WHEN r.status = 'down' THEN 1 ELSE 0 END) AS checks_down,
+        SUM(CASE WHEN r.status NOT IN ('up', 'down') THEN 1 ELSE 0 END) AS checks_unknown
+      FROM probe_check_results r LEFT JOIN probes p ON p.id = r.probe_id
+      WHERE r.monitor_id = ?1 AND r.checked_at >= ?3 AND r.checked_at <= ?4
+      GROUP BY r.probe_id, bucket_at
+      ORDER BY r.probe_id, bucket_at
+      LIMIT 5001
+    `,
+  )
+    .bind(monitorId, bucketSeconds, start, end)
+    .all<{
+      probe_id: string;
+      probe_name: string;
+      scope: string | null;
+      region: string | null;
+      bucket_at: number;
+      avg_latency_ms: number | null;
+      checks_up: number;
+      checks_down: number;
+      checks_unknown: number;
+    }>();
+
+  const rows = results ?? [];
+  const series = new Map<
+    string,
+    {
+      probe_id: string;
+      name: string;
+      scope: string | null;
+      region: string | null;
+      points: Array<{
+        checked_at: number;
+        avg_latency_ms: number | null;
+        checks_up: number;
+        checks_down: number;
+        checks_unknown: number;
+      }>;
+    }
+  >();
+  for (const row of rows.slice(0, 5000)) {
+    let probe = series.get(row.probe_id);
+    if (!probe) {
+      probe = {
+        probe_id: row.probe_id,
+        name: row.probe_name,
+        scope: row.scope,
+        region: row.region,
+        points: [],
+      };
+      series.set(row.probe_id, probe);
+    }
+    probe.points.push({
+      checked_at: row.bucket_at,
+      avg_latency_ms: row.avg_latency_ms,
+      checks_up: row.checks_up,
+      checks_down: row.checks_down,
+      checks_unknown: row.checks_unknown,
+    });
+  }
+
+  return c.json({
+    monitor_id: monitorId,
+    range,
+    start,
+    end,
+    bucket_seconds: bucketSeconds,
+    truncated: rows.length > 5000,
+    probes: [...series.values()],
+  });
+});
+
 adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
   const id = z.coerce.number().int().positive().parse(c.req.param('id'));
   const range = monitorRangeSchema
     .optional()
     .default('24h')
     .parse(c.req.query('range')) as UptimeRange;
+  const region = z.string().trim().min(1).max(64).optional().parse(c.req.query('region'));
 
   const monitor = await c.env.DB.prepare(
     `
@@ -404,6 +507,48 @@ adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
 
   const { start: rangeStartBase, end: rangeEnd } = computeRange(range);
   const rangeStart = Math.max(rangeStartBase, monitor.created_at);
+
+  // Probe regions that reported on this monitor inside the window: the chart's region filter.
+  const { results: regionRows } = await c.env.DB.prepare(
+    `
+      SELECT DISTINCT p.region AS region
+      FROM probe_check_results r
+      JOIN probes p ON p.id = r.probe_id
+      WHERE r.monitor_id = ?1
+        AND r.checked_at >= ?2
+        AND p.region <> ''
+      ORDER BY p.region
+    `,
+  )
+    .bind(id, rangeStartBase)
+    .all<{ region: string }>();
+  const regions = (regionRows ?? []).map((r) => r.region);
+
+  const regionPoints = async (
+    windowStart: number,
+  ): Promise<Array<{ checked_at: number; status: string; latency_ms: number | null }>> => {
+    if (!region) return [];
+    const { results } = await c.env.DB.prepare(
+      `
+        SELECT r.checked_at, r.status, r.latency_ms
+        FROM probe_check_results r
+        JOIN probes p ON p.id = r.probe_id
+        WHERE r.monitor_id = ?1
+          AND p.region = ?2
+          AND r.checked_at >= ?3
+          AND r.checked_at < ?4
+        ORDER BY r.checked_at
+        LIMIT 600
+      `,
+    )
+      .bind(id, region, windowStart, rangeEnd)
+      .all<{ checked_at: number; status: string; latency_ms: number | null }>();
+    return (results ?? []).map((r) => ({
+      checked_at: r.checked_at,
+      status: toCheckStatus(r.status),
+      latency_ms: r.latency_ms,
+    }));
+  };
 
   if (rangeEnd <= rangeStart) {
     return c.json({
@@ -423,10 +568,11 @@ adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
       checks: { total: 0, up: 0, down: 0, unknown: 0, maintenance: 0 },
       points: [],
       daily: [],
+      regions,
     });
   }
 
-  if (range === '24h') {
+  if (range === '1h' || range === '24h') {
     const total_sec = Math.max(0, rangeEnd - rangeStart);
 
     const { results: outageRows } = await c.env.DB.prepare(
@@ -505,9 +651,44 @@ adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
 
     const checks_total = checks_up + checks_down + checks_unknown + checks_maintenance;
 
+    if (region) {
+      const scoped = await regionPoints(rangeStart);
+      const scopedLatencies = scoped
+        .filter((p) => p.status === 'up' && typeof p.latency_ms === 'number')
+        .map((p) => p.latency_ms as number);
+
+      return c.json({
+        monitor: { id: monitor.id, name: monitor.name, type: monitor.type },
+        range,
+        region,
+        regions,
+        range_start_at: rangeStart,
+        range_end_at: rangeEnd,
+        total_sec,
+        downtime_sec,
+        unknown_sec,
+        uptime_sec,
+        uptime_pct,
+        unknown_pct,
+        avg_latency_ms: avg(scopedLatencies),
+        p50_latency_ms: percentileFromValues(scopedLatencies, 0.5),
+        p95_latency_ms: percentileFromValues(scopedLatencies, 0.95),
+        checks: {
+          total: checks_total,
+          up: checks_up,
+          down: checks_down,
+          unknown: checks_unknown,
+          maintenance: checks_maintenance,
+        },
+        points: scoped,
+        daily: [],
+      });
+    }
+
     return c.json({
       monitor: { id: monitor.id, name: monitor.name, type: monitor.type },
       range,
+      regions,
       range_start_at: rangeStart,
       range_end_at: rangeEnd,
       total_sec,
@@ -749,8 +930,9 @@ adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
       unknown: checks_unknown,
       maintenance: checks_maintenance,
     },
-    points: [],
+    points: region ? await regionPoints(rangeStart) : [],
     daily,
+    regions,
   });
 });
 

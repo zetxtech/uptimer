@@ -34,6 +34,21 @@ function decodeApiPathname(pathname: string): string {
   return decoded;
 }
 
+const PROBE_API_PREFIX = '/api/v1/probe';
+
+// Probe routes are registered relative to the API prefix (like the admin router), so the
+// dispatcher has to strip `/api/v1/probe` before handing the request to that router.
+function rewriteProbeRequest(req: Request): Request {
+  const url = new URL(req.url);
+  const { pathname } = url;
+  if (pathname === PROBE_API_PREFIX) {
+    url.pathname = '/';
+  } else if (pathname.startsWith(`${PROBE_API_PREFIX}/`)) {
+    url.pathname = pathname.slice(PROBE_API_PREFIX.length);
+  }
+  return new Request(url.toString(), req);
+}
+
 function stripAsciiControlChars(value: string): string {
   let next = '';
   for (let index = 0; index < value.length; index += 1) {
@@ -748,6 +763,11 @@ export async function handleFetch(
   }
 
   try {
+    if (hotPathname.startsWith('/api/v1/probe/')) {
+      const { probeRoutes } = await import('./routes/probes');
+      return probeRoutes.fetch(rewriteProbeRequest(normalizedRequest), env, ctx);
+    }
+
     if (hotPathname === '/api/v1/public/homepage-artifact') {
       const routeRes = await handlePublicHomepageArtifact(normalizedRequest, env);
       const res = bypassPublicSharedCache

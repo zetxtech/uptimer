@@ -62,54 +62,42 @@ export function getUptimeTier(uptimePct: number, level: UptimeRatingLevel): Upti
   return 'rose';
 }
 
-// ──────── Tailwind class mappings ────────
+// ──────── Token class mappings ────────
 
-export function getUptimeBgClasses(tier: UptimeColorTier): string {
+/**
+ * Uptime tiers collapse onto the reference ramp: two greens, one amber and one
+ * red, plus a neutral for unknown days. See docs/reference/better-stack/design-tokens.md.
+ */
+function tierKey(tier: UptimeColorTier): 'up-strong' | 'up' | 'warn' | 'down' | 'muted' {
   switch (tier) {
     case 'emerald':
-      return 'bg-emerald-500 dark:bg-emerald-400';
+      return 'up-strong';
     case 'green':
-      return 'bg-green-500 dark:bg-green-400';
     case 'lime':
-      return 'bg-lime-500 dark:bg-lime-400';
+      return 'up';
     case 'yellow':
-      return 'bg-yellow-500 dark:bg-yellow-400';
     case 'amber':
-      return 'bg-amber-500 dark:bg-amber-400';
+      return 'warn';
     case 'orange':
-      return 'bg-orange-500 dark:bg-orange-400';
     case 'red':
-      return 'bg-red-500 dark:bg-red-400';
     case 'rose':
-      return 'bg-rose-600 dark:bg-rose-400';
+      return 'down';
     case 'slate':
     default:
-      return 'bg-slate-300 dark:bg-slate-600';
+      return 'muted';
   }
 }
 
+export function getUptimeBgClasses(tier: UptimeColorTier): string {
+  return `ui-tier-bg-${tierKey(tier)}`;
+}
+
+export function getUptimeTextClasses(tier: UptimeColorTier): string {
+  return `ui-tier-fg-${tierKey(tier)}`;
+}
+
 export function getUptimePillClasses(tier: UptimeColorTier): string {
-  switch (tier) {
-    case 'emerald':
-      return 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-200 dark:border-emerald-800/60';
-    case 'green':
-      return 'bg-green-50 text-green-800 border-green-200 dark:bg-green-950/40 dark:text-green-200 dark:border-green-800/60';
-    case 'lime':
-      return 'bg-lime-50 text-lime-800 border-lime-200 dark:bg-lime-950/40 dark:text-lime-200 dark:border-lime-800/60';
-    case 'yellow':
-      return 'bg-yellow-50 text-yellow-900 border-yellow-200 dark:bg-yellow-950/40 dark:text-yellow-200 dark:border-yellow-800/60';
-    case 'amber':
-      return 'bg-amber-50 text-amber-900 border-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:border-amber-800/60';
-    case 'orange':
-      return 'bg-orange-50 text-orange-900 border-orange-200 dark:bg-orange-950/40 dark:text-orange-200 dark:border-orange-800/60';
-    case 'red':
-      return 'bg-red-50 text-red-800 border-red-200 dark:bg-red-950/40 dark:text-red-200 dark:border-red-800/60';
-    case 'rose':
-      return 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-950/40 dark:text-rose-200 dark:border-rose-800/60';
-    case 'slate':
-    default:
-      return 'bg-slate-100/80 text-slate-700 border-slate-200 dark:bg-slate-700/50 dark:text-slate-200 dark:border-slate-600/60';
-  }
+  return `ui-tier-pill-${tierKey(tier)}`;
 }
 
 // ──────── Formatting ────────

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import { updateAttachmentsSchema } from './attachments';
+
 export const incidentStatusSchema = z.enum([
   'investigating',
   'identified',
@@ -23,6 +25,7 @@ export type CreateIncidentInput = z.infer<typeof createIncidentInputSchema>;
 export const createIncidentUpdateInputSchema = z.object({
   message: z.string().min(1),
   status: incidentStatusSchema.exclude(['resolved']).optional(),
+  attachments: updateAttachmentsSchema.default([]),
 });
 
 export type CreateIncidentUpdateInput = z.infer<typeof createIncidentUpdateInputSchema>;
@@ -32,3 +35,11 @@ export const resolveIncidentInputSchema = z.object({
 });
 
 export type ResolveIncidentInput = z.infer<typeof resolveIncidentInputSchema>;
+
+export const incidentSelectionInputSchema = z.object({
+  incident_ids: z.array(z.number().int().positive()).min(1).max(100),
+});
+
+export const groupSimilarIncidentsInputSchema = z.object({
+  incident_ids: z.array(z.number().int().positive()).min(2).max(100),
+});

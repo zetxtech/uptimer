@@ -1092,6 +1092,7 @@ publicUiRoutes.get('/monitors/:id/day-context', async (c) => {
             FROM incidents i
             JOIN incident_monitors im ON im.incident_id = i.id
             WHERE im.monitor_id = ?1
+              AND i.outage_id IS NULL
               AND i.started_at < ?3
               AND (i.resolved_at IS NULL OR i.resolved_at > ?2)
             ORDER BY i.started_at ASC, i.id ASC

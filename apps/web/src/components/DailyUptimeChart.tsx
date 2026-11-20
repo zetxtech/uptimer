@@ -2,7 +2,6 @@ import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 
 import type { MonitorAnalyticsDayPoint } from '../api/types';
 import { useI18n } from '../app/I18nContext';
-import { useTheme } from '../app/ThemeContext';
 
 interface DailyUptimeChartProps {
   points: MonitorAnalyticsDayPoint[];
@@ -15,8 +14,6 @@ function formatDay(ts: number): string {
 
 export function DailyUptimeChart({ points, height = 220 }: DailyUptimeChartProps) {
   const { t } = useI18n();
-  const { resolvedTheme } = useTheme();
-  const isDark = resolvedTheme === 'dark';
 
   const data = points.map((p) => ({
     day: p.day_start_at,
@@ -26,15 +23,15 @@ export function DailyUptimeChart({ points, height = 220 }: DailyUptimeChartProps
 
   if (data.length === 0) {
     return (
-      <div className="flex items-center justify-center h-[220px] text-slate-500 dark:text-slate-400">
+      <div className="flex items-center justify-center h-[220px] text-ink-2 dark:text-ink-3">
         {t('common.no_data')}
       </div>
     );
   }
 
-  const axisColor = isDark ? '#64748b' : '#9ca3af';
-  const uptimeColor = isDark ? '#34d399' : '#22c55e';
-  const unknownColor = isDark ? '#64748b' : '#9ca3af';
+  const axisColor = 'var(--color-text-secondary)';
+  const uptimeColor = 'var(--color-up)';
+  const unknownColor = 'var(--color-text-muted)';
 
   return (
     <ResponsiveContainer width="100%" height={height}>
@@ -58,10 +55,10 @@ export function DailyUptimeChart({ points, height = 220 }: DailyUptimeChartProps
             name === 'uptime_pct' ? t('uptime.uptime') : t('uptime.unknown'),
           ]}
           contentStyle={{
-            backgroundColor: isDark ? '#1e293b' : '#ffffff',
-            borderColor: isDark ? '#334155' : '#e2e8f0',
+            backgroundColor: 'var(--color-card)',
+            borderColor: 'var(--color-border)',
             borderRadius: '0.5rem',
-            color: isDark ? '#f1f5f9' : '#0f172a',
+            color: 'var(--color-text-primary)',
           }}
         />
         <Line
@@ -75,7 +72,8 @@ export function DailyUptimeChart({ points, height = 220 }: DailyUptimeChartProps
           type="monotone"
           dataKey="unknown_pct"
           stroke={unknownColor}
-          strokeWidth={1}
+          strokeWidth={1.5}
+          strokeDasharray="4 4"
           dot={false}
         />
       </LineChart>
