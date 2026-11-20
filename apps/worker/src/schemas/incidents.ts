@@ -35,3 +35,11 @@ export const resolveIncidentInputSchema = z.object({
 });
 
 export type ResolveIncidentInput = z.infer<typeof resolveIncidentInputSchema>;
+
+export const incidentSelectionInputSchema = z.object({
+  incident_ids: z.array(z.number().int().positive()).min(1).max(100),
+});
+
+export const groupSimilarIncidentsInputSchema = z.object({
+  incident_ids: z.array(z.number().int().positive()).min(2).max(100),
+});

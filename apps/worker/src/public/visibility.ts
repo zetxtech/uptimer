@@ -55,12 +55,13 @@ export function incidentStatusPageVisibilityPredicate(
   includeHiddenMonitors: boolean,
   alias = 'incidents',
 ): string {
-  return statusPageScopedItemVisibilityPredicate(
+  // Automatic monitor outages are already represented in the public outage history.
+  return `(${alias}.outage_id IS NULL AND ${statusPageScopedItemVisibilityPredicate(
     includeHiddenMonitors,
     alias,
     'incident_monitors',
     'incident_id',
-  );
+  )})`;
 }
 
 export function maintenanceWindowStatusPageVisibilityPredicate(

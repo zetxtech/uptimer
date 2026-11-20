@@ -73,6 +73,7 @@ export function cachePublic(opts: {
   cacheName: string;
   maxAgeSeconds: number;
   skipPathnames?: readonly string[];
+  skipPathPrefixes?: readonly string[];
   normalizeCacheKeyUrl?: (url: URL) => void;
 }): MiddlewareHandler {
   return async (c, next) => {
@@ -90,13 +91,13 @@ export function cachePublic(opts: {
       return;
     }
 
-    const skipPathnames = opts.skipPathnames ?? [];
-    if (skipPathnames.length > 0) {
-      const pathname = new URL(c.req.url).pathname;
-      if (skipPathnames.includes(pathname)) {
-        await next();
-        return;
-      }
+    const pathname = new URL(c.req.url).pathname;
+    if (
+      opts.skipPathnames?.includes(pathname) ||
+      opts.skipPathPrefixes?.some((prefix) => pathname.startsWith(prefix))
+    ) {
+      await next();
+      return;
     }
 
     const cache = await openNamedCache(opts.cacheName);

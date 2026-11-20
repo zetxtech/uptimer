@@ -132,6 +132,7 @@ publicRoutes.use(
     // endpoints already have their own caching layers (Pages HTML cache in
     // pages mode + public snapshot freshness), so skipping the shared edge
     // cache reduces median CPU without changing the user-visible payload.
+    skipPathPrefixes: ['/api/v1/heartbeat/', '/heartbeat/'],
     skipPathnames: [
       '/homepage',
       '/homepage-artifact',
@@ -1348,6 +1349,7 @@ publicRoutes.get('/monitors/:id/day-context', async (c) => {
       FROM incidents i
       JOIN incident_monitors im ON im.incident_id = i.id
       WHERE im.monitor_id = ?1
+        AND i.outage_id IS NULL
         AND i.started_at < ?3
         AND (i.resolved_at IS NULL OR i.resolved_at > ?2)
       ORDER BY i.started_at ASC, i.id ASC
@@ -1930,7 +1932,7 @@ const heartbeatPingHandler = async (c: Context<{ Bindings: Env }>) => {
 
   const db = getDb(c.env);
   const monitor = await db
-    .select({ id: monitors.id })
+    .select({ id: monitors.id, name: monitors.name, notificationChannelIdsJson: monitors.notificationChannelIdsJson })
     .from(monitors)
     .where(
       and(
@@ -1947,7 +1949,56 @@ const heartbeatPingHandler = async (c: Context<{ Bindings: Env }>) => {
 
   const now = Math.floor(Date.now() / 1000);
   const ping = await recordHeartbeatPing(c.env, monitor.id, now);
-  return c.json({ ok: true, monitor_id: monitor.id, received_at: ping.receivedAt }, 202);
+  if (!ping.ignored && (ping.recovered || ping.previousStatus === null || ping.previousStatus === 'unknown')) {
+    c.executionCtx.waitUntil(
+      (async () => {
+        if (ping.recovered) {
+          const { createNotifyContext, listMaintenanceSuppressedMonitorIds, queueMonitorNotification } =
+            await import('../scheduler/notifications');
+          const [notify, suppressed] = await Promise.all([
+            createNotifyContext(c.env, c.executionCtx),
+            listMaintenanceSuppressedMonitorIds(c.env.DB, now, [monitor.id]),
+          ]);
+          queueMonitorNotification(c.env, notify, {
+            row: {
+              id: monitor.id,
+              name: monitor.name,
+              type: 'heartbeat',
+              target: '',
+              display_url: null,
+              notification_channel_ids_json: monitor.notificationChannelIdsJson,
+            },
+            checkedAt: now,
+            prevStatus: 'down',
+            outcome: { status: 'up', latencyMs: null, httpStatus: null, error: null, attempts: 1 },
+            next: {
+              status: 'up',
+              lastChangedAt: now,
+              consecutiveFailures: 0,
+              consecutiveSuccesses: 1,
+              changed: true,
+            },
+            maintenanceSuppressed: suppressed.has(monitor.id),
+          });
+        }
+
+        const { bumpHomepageMonitorGuardVersions } =
+          await import('../public/homepage-guard-state');
+        await bumpHomepageMonitorGuardVersions(c.env.DB);
+        const { refreshPublicHomepageSnapshotIfNeeded } = await import('../snapshots');
+        const { computePublicHomepagePayload } = await import('../public/homepage');
+        await refreshPublicHomepageSnapshotIfNeeded({
+          db: c.env.DB,
+          now,
+          force: true,
+          seedDataSnapshot: true,
+          compute: () => computePublicHomepagePayload(c.env.DB, Math.floor(Date.now() / 1000)),
+        });
+      })().catch((error) => console.warn('heartbeat recovery side effects failed', error)),
+    );
+  }
+  c.header('Cache-Control', 'no-store');
+  return c.json({ ok: true, monitor_id: monitor.id, received_at: ping.receivedAt, ignored: ping.ignored }, 202);
 };
 
 // Jobs may use either verb, and pasting the URL into a browser (GET) should work too.

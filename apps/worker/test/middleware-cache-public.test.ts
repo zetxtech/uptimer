@@ -145,6 +145,25 @@ describe('middleware/cache-public', () => {
     expect(store.get(url)).toBeUndefined();
   });
 
+  it('does not consult the edge cache for state-changing heartbeat GET pings', async () => {
+    const store = new Map<string, Response>();
+    const open = installCacheMock(store);
+    const middleware = cachePublic({
+      cacheName: 'uptimer-public',
+      maxAgeSeconds: 30,
+      skipPathPrefixes: ['/api/v1/heartbeat/'],
+    });
+    const { c } = makeContext({
+      method: 'GET',
+      url: 'https://status.example.com/api/v1/heartbeat/secret',
+      response: new Response('seed', { status: 202 }),
+    });
+    const next = vi.fn(async () => undefined);
+    await middleware(c as never, next);
+    expect(next).toHaveBeenCalledTimes(1);
+    expect(open).not.toHaveBeenCalled();
+  });
+
   it('bypasses cache middleware for non-GET requests', async () => {
     const store = new Map<string, Response>();
     const open = installCacheMock(store);

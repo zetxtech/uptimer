@@ -43,9 +43,20 @@ Re-measured with the list populated (22 pages of incidents, 1056 px column at a 
 - Header row: `h1` "Incidents" 28/600, breadcrumb chip `/` 22 × 22 radius 4 fill `rgb(47, 54, 71)`, primary **Report a new incident** 172 × 36 radius 8 fill `rgb(91, 99, 211)` 14/500.
 - Search input: 265 × 36, radius 8, fill `rgb(34, 40, 56)`, 13 px, placeholder **Search**, right-aligned before the primary button.
 - Column header band 37 px tall, labels 13/400 muted: Incident (left), Team (~52 % offset), Length, Acknowledged; the right columns carry 26 × 26 sort buttons.
-- Data rows: 82 px tall (two-line rows), full width; single-line rows are shorter (57 px). The row link wraps the whole row; there is no border or card fill, only a hover tint.
+- In the 2026-11-13 raw DOM capture, the individual rows were 82 px tall (two-line rows) and sat on the canvas without per-row cards. That capture does not cover the later framed list/selection state documented below; do not infer that the current list container is borderless from this row-level observation.
 - Row content: monitor name 13/600 white, 17 px line box, 2 px gap to the second line; second line "Status 525 / Started 23 hours ago" at 13/400 muted. Grouped rows prefix "2 similar incidents". Right columns: team avatar + name, length, acknowledged dash.
 - Pagination: 26 × 26 buttons radius 6; current page filled `rgb(47, 54, 71)` with white text, others transparent and muted, with an ellipsis before the last pages.
+
+## Framed list and selection screenshots (user-provided, 2026-11-17)
+
+The four newer screenshots show the current Incidents list and interaction states. They supersede the earlier raw capture wherever the page container or selection controls differ. The 2026-11-12/13 JSON capture contains the default list only; it did not include the expanded header menus or selected-row toolbar.
+
+- The table is contained by one rounded, thin-border card. Rows remain simple separated rows inside it; the card frame is not a per-row card treatment.
+- A checkbox is visible at the left of the header and each incident row. The header overflow menu contains **Select all on page**.
+- The header sort menu offers **Name**, **Started at**, **Length**, **Ascending** and **Descending**.
+- A grouped row is labeled with its similar-incident count, cause and start time, plus separate **Ongoing** and **Resolved** count pills. Its row menu contains **Copy links**, **Ungroup** and **Remove**.
+- With two incidents selected, the floating bottom action bar shows **2 selected**, **Acknowledge**, **Resolve**, **Group as similar**, an overflow menu and a close control.
+- Treat selection checkboxes, grouped-row affordances and the floating action bar as distinct captured states. The bare individual-row measurement above remains valid only for the row surface in the older capture; it was not evidence that the full list has no card frame.
 
 ## Report form (archived DOM, `…/report/<token>`)
 

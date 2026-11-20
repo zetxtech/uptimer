@@ -2,7 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { ADMIN_EVENTS_PATH, ADMIN_PATH, adminIncidentDetailPath } from '../app/adminPaths';
+import {
+  ADMIN_EVENTS_PATH,
+  ADMIN_PATH,
+  adminIncidentDetailPath,
+  adminMonitorDetailPath,
+} from '../app/adminPaths';
 import { useApplyServerLocaleSetting } from '../app/useApplyServerLocaleSetting';
 import { useI18n } from '../app/I18nContext';
 import {
@@ -19,19 +24,25 @@ import {
   sendMonitorTestAlert,
   updateMonitor,
 } from '../api/client';
-import type { AnalyticsRange, Outage, PatchMonitorInput } from '../api/types';
-import { AdminShell } from '../components/AdminShell';
+import type { Outage, PatchMonitorInput } from '../api/types';
+import { AdminBreadcrumbs, AdminShell } from '../components/AdminShell';
 import { DailyLatencyChart } from '../components/DailyLatencyChart';
 import { DateField } from '../components/DateField';
 import { LatencyChart } from '../components/LatencyChart';
 import { MonitorForm } from '../components/MonitorForm';
-import { Select } from '../components/Select';
-import { Button, Toast, ToastStack, cn } from '../components/ui';
+import { Button, Toast, ToastStack, cn, SELECT_CLASS } from '../components/ui';
 import { incidentStatusLabel, statusLabel } from '../i18n/labels';
 import { formatProseDuration, formatPct4, formatRelativeTime } from '../utils/datetime';
 import { heartbeatPingUrl } from '../utils/heartbeat';
+import { locationFlag } from '../utils/probeLocation';
 
-const CHART_RANGES: AnalyticsRange[] = ['24h', '7d', '30d', '90d'];
+const CHART_RANGES = ['1h', '24h', '7d', '30d'] as const;
+const CHART_RANGE_LABELS = {
+  '1h': 'monitor_detail.chart_range_hour',
+  '24h': 'monitor_detail.chart_range_day',
+  '7d': 'monitor_detail.chart_range_week',
+  '30d': 'monitor_detail.chart_range_month',
+} as const;
 
 type WindowRow = {
   key: string;
@@ -172,7 +183,7 @@ export function AdminMonitorDetail() {
   const queryClient = useQueryClient();
   const { locale, t } = useI18n();
 
-  const [chartRange, setChartRange] = useState<AnalyticsRange>('24h');
+  const [chartRange, setChartRange] = useState<(typeof CHART_RANGES)[number]>('24h');
   /** Empty string means every region; the reference filters the chart by region. */
   const [chartRegion, setChartRegion] = useState('');
   const [editing, setEditing] = useState(false);
@@ -401,9 +412,12 @@ export function AdminMonitorDetail() {
     ]),
   ].filter(Boolean);
 
-  const statusWord = statusLabel(monitor.status, t);
+  const statusWord = monitor.type === 'heartbeat' && monitor.last_heartbeat_at === null && monitor.status !== 'paused'
+    ? t('heartbeats.pending')
+    : statusLabel(monitor.status, t);
   const analytics = analyticsQuery.data;
   const chartRegions = analytics?.regions ?? [];
+  const chartRegionFlag = locationFlag(chartRegion);
   const rowLoading = windowsQuery.isLoading || outagesQuery.isLoading;
   const rowError = windowsQuery.isError || outagesQuery.isError;
 
@@ -444,7 +458,23 @@ export function AdminMonitorDetail() {
       : formatProseDuration(seconds, locale, true);
 
   return (
-    <AdminShell active="dashboard" layout="sidebar">
+    <AdminShell
+      active="dashboard"
+      layout="sidebar"
+      workspaceHeader={
+        <AdminBreadcrumbs
+          items={[
+            { label: t('admin_dashboard.tab.monitors'), to: ADMIN_PATH },
+            ...(editing
+              ? [
+                  { label: monitor.name, to: adminMonitorDetailPath(monitor.id) },
+                  { label: t('monitor_detail.configure') },
+                ]
+              : [{ label: monitor.name }]),
+          ]}
+        />
+      }
+    >
       {/* Reference detail page: the h1 sits 80px below the 52px top bar. */}
       <main className="mx-auto w-full max-w-[1160px] px-5 pb-12 pt-20">
         <div className="min-w-0">
@@ -582,19 +612,30 @@ export function AdminMonitorDetail() {
             {chartRegions.length > 0 ? (
               <label className="flex items-center gap-2 text-[13px] text-ink-2">
                 <span className="sr-only">{t('monitor_detail.chart_region')}</span>
-                <Select
-                  className="ui-select ui-compact"
-                  value={chartRegion}
-                  aria-label={t('monitor_detail.chart_region')}
-                  onChange={setChartRegion}
-                >
-                  <option value="">{t('monitor_detail.chart_region_all')}</option>
-                  {chartRegions.map((region) => (
-                    <option key={region} value={region}>
-                      {region}
-                    </option>
-                  ))}
-                </Select>
+                <span className="ui-chart-region-control">
+                  {chartRegionFlag ? (
+                    <span className="ui-chart-region-flag" aria-hidden>
+                      {chartRegionFlag}
+                    </span>
+                  ) : null}
+                  <select
+                    className={cn(
+                      SELECT_CLASS,
+                      'ui-native-select ui-chart-region-select ui-compact',
+                      chartRegionFlag ? 'pl-[30px]' : 'pl-3',
+                    )}
+                    value={chartRegion}
+                    aria-label={t('monitor_detail.chart_region')}
+                    onChange={(event) => setChartRegion(event.target.value)}
+                  >
+                    <option value="">{t('monitor_detail.chart_region_all')}</option>
+                    {chartRegions.map((region) => (
+                      <option key={region} value={region}>
+                        {region}
+                      </option>
+                    ))}
+                  </select>
+                </span>
               </label>
             ) : (
               <span />
@@ -609,7 +650,7 @@ export function AdminMonitorDetail() {
                   onClick={() => setChartRange(range)}
                   className="ui-range-segment"
                 >
-                  {range}
+                  {t(CHART_RANGE_LABELS[range])}
                 </button>
               ))}
             </div>
@@ -633,7 +674,7 @@ export function AdminMonitorDetail() {
                   {t('common.retry')}
                 </Button>
               </div>
-            ) : !analytics ? null : chartRange === '24h' ? (
+            ) : !analytics ? null : chartRange === '1h' || chartRange === '24h' ? (
               <LatencyChart points={analytics.points} height={466} />
             ) : (
               <DailyLatencyChart points={analytics.daily} height={466} />
@@ -823,6 +864,7 @@ export function AdminMonitorDetail() {
           <div className="mx-auto w-full max-w-[52rem]">
             <MonitorForm
               variant="page"
+              showBreadcrumb={false}
               monitor={monitor}
               onSubmit={(data) => updateMut.mutate(data)}
               onCancel={() => setEditing(false)}

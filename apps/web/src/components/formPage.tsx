@@ -253,6 +253,7 @@ export function CheckboxRow({
 export function FormCollapse({
   id,
   title,
+  compact = false,
   open,
   onToggle,
   error,
@@ -260,19 +261,23 @@ export function FormCollapse({
 }: {
   id: string;
   title: string;
+  compact?: boolean;
   open: boolean;
   onToggle: () => void;
   error?: string | undefined;
   children: ReactNode;
 }) {
   return (
-    <div className="mt-16 border-b border-line-soft pb-2">
+    <div className={cn(!compact && 'mt-16 border-b border-line-soft pb-2')}>
       <button
         type="button"
         aria-expanded={open}
         aria-controls={id}
         onClick={onToggle}
-        className="flex w-full items-center text-left focus-visible:outline-none"
+        className={cn(
+          'flex w-full items-center text-left focus-visible:outline-none',
+          compact && 'ui-form-collapse-row',
+        )}
       >
         <svg
           className={cn('ui-chevron h-3.5 w-3.5 shrink-0 text-ink-3')}
@@ -292,7 +297,7 @@ export function FormCollapse({
       </button>
       <div id={id} className="ui-expand" data-open={open}>
         <div>
-          <div className="mt-10 space-y-8 pb-2">{children}</div>
+          <div className={cn('mt-10 space-y-8 pb-2', compact && 'mt-5 space-y-0')}>{children}</div>
         </div>
       </div>
     </div>

@@ -38,6 +38,13 @@ function createApp() {
     VALUES (1, 1, 1700000100, NULL, 'Status 525', 'Status 525'),
            (2, 2, 1700000200, 1700000300, 'connection refused', 'timeout');
   `);
+  // The fixture tests manual incident pagination while automatic outage-to-incident
+  // integration is covered independently by outage-incident-bridge.test.ts.
+  database.exec(`
+    DELETE FROM incident_monitors WHERE incident_id IN
+      (SELECT id FROM incidents WHERE outage_id IS NOT NULL);
+    DELETE FROM incidents WHERE outage_id IS NOT NULL;
+  `);
 
   const env = { DB: sqliteD1(database), ADMIN_TOKEN: 'test-admin' } as unknown as Env;
   const app = new Hono<{ Bindings: Env }>();
@@ -96,9 +103,11 @@ describe('admin list pagination and search', () => {
       const firstBody = (await first.json()) as {
         incidents: Array<{ id: number }>;
         next_offset: number | null;
+        total_count: number;
       };
       expect(firstBody.incidents.map((incident) => incident.id)).toEqual([2, 1]);
       expect(firstBody.next_offset).toBe(2);
+      expect(firstBody.total_count).toBe(3);
 
       const second = await request('/incidents?limit=2&offset=2');
       const secondBody = (await second.json()) as {
@@ -120,6 +129,36 @@ describe('admin list pagination and search', () => {
     }
   });
 
+  it('keeps complete similar incident groups on one page', async () => {
+    const { database, request } = createApp();
+    try {
+      database.exec(`
+        INSERT INTO incidents (id, title, status, impact, started_at, similar_group_id)
+        VALUES (4, 'Same outage later', 'investigating', 'major', 1700009999, 1);
+        UPDATE incidents SET similar_group_id = 1 WHERE id = 1;
+      `);
+      const first = await request('/incidents?group_similar=1&limit=1');
+      const firstBody = (await first.json()) as {
+        incidents: Array<{ id: number; similar_group_id: number | null }>;
+        next_offset: number | null;
+        total_count: number;
+      };
+      expect(firstBody.incidents.map((incident) => incident.id)).toEqual([4, 1]);
+      expect(firstBody.total_count).toBe(3);
+      expect(firstBody.next_offset).toBe(1);
+
+      const second = await request('/incidents?group_similar=1&limit=1&offset=1');
+      const secondBody = (await second.json()) as {
+        incidents: Array<{ id: number }>;
+        total_count: number;
+      };
+      expect(secondBody.incidents.map((incident) => incident.id)).toEqual([2]);
+      expect(secondBody.total_count).toBe(3);
+    } finally {
+      database.close();
+    }
+  });
+
   it('filters events by monitor, target and error text', async () => {
     const { database, request } = createApp();
     try {
@@ -133,6 +172,131 @@ describe('admin list pagination and search', () => {
 
       const none = await request('/events?q=does-not-exist');
       expect(((await none.json()) as { events: unknown[] }).events).toEqual([]);
+    } finally {
+      database.close();
+    }
+  });
+});
+
+describe('admin incident selection actions', () => {
+  it('acknowledges unresolved incidents idempotently without changing lifecycle status', async () => {
+    const { database, request } = createApp();
+    try {
+      const res = await request('/incidents/acknowledge', 'POST', { incident_ids: [1, 2] });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { acknowledged_at: number; incident_ids: number[] };
+      expect(body.incident_ids).toEqual([1, 2]);
+
+      const firstAck = database
+        .prepare('SELECT acknowledged_at FROM incidents WHERE id = 1')
+        .get() as { acknowledged_at: number | null };
+      expect(firstAck.acknowledged_at).toBe(body.acknowledged_at);
+
+      await request('/incidents/acknowledge', 'POST', { incident_ids: [1, 2] });
+      const afterRepeat = database
+        .prepare('SELECT acknowledged_at FROM incidents WHERE id = 1')
+        .get() as { acknowledged_at: number | null };
+      expect(afterRepeat.acknowledged_at).toBe(body.acknowledged_at);
+
+      const acknowledgedList = await request('/incidents?limit=10');
+      const listBody = (await acknowledgedList.json()) as {
+        incidents: Array<{ id: number; status: string; acknowledged_at: number | null }>;
+      };
+      expect(listBody.incidents.find((incident) => incident.id === 1)).toMatchObject({
+        status: 'investigating',
+        acknowledged_at: body.acknowledged_at,
+      });
+      expect(listBody.incidents.find((incident) => incident.id === 3)?.acknowledged_at).toBeNull();
+    } finally {
+      database.close();
+    }
+  });
+
+  it('groups incidents as similar, merges prior groups, and ungroups the whole set', async () => {
+    const { database, request } = createApp();
+    try {
+      const first = await request('/incidents/group-similar', 'POST', { incident_ids: [1, 2] });
+      expect(first.status).toBe(200);
+      const firstBody = (await first.json()) as {
+        similar_group_id: number;
+        incident_ids: number[];
+      };
+      expect(firstBody).toEqual({ similar_group_id: 1, incident_ids: [1, 2] });
+
+      const merge = await request('/incidents/group-similar', 'POST', { incident_ids: [2, 3] });
+      expect(merge.status).toBe(200);
+      const mergeBody = (await merge.json()) as {
+        similar_group_id: number;
+        incident_ids: number[];
+      };
+      expect(mergeBody).toEqual({ similar_group_id: 1, incident_ids: [1, 2, 3] });
+
+      const groupList = await request('/incidents?similar_group_id=1&limit=10');
+      const groupListBody = (await groupList.json()) as { incidents: Array<{ id: number }> };
+      expect(groupListBody.incidents.map((incident) => incident.id).sort()).toEqual([1, 2, 3]);
+
+      const detail = await request('/incidents/3');
+      const detailBody = (await detail.json()) as {
+        incident: { similar_group_id: number | null };
+      };
+      expect(detailBody.incident.similar_group_id).toBe(1);
+
+      const ungrouped = await request('/incidents/2/ungroup', 'POST');
+      expect(ungrouped.status).toBe(200);
+      expect(((await ungrouped.json()) as { incident_ids: number[] }).incident_ids).toEqual([
+        1, 2, 3,
+      ]);
+      const list = await request('/incidents?limit=10');
+      const listBody = (await list.json()) as {
+        incidents: Array<{ similar_group_id: number | null }>;
+      };
+      expect(listBody.incidents.every((incident) => incident.similar_group_id === null)).toBe(true);
+    } finally {
+      database.close();
+    }
+  });
+
+  it('removes every incident in a similar group', async () => {
+    const { database, request } = createApp();
+    try {
+      await request('/incidents/group-similar', 'POST', { incident_ids: [1, 2] });
+      const removed = await request('/incidents/similar-groups/1', 'DELETE');
+      expect(removed.status).toBe(200);
+      expect(((await removed.json()) as { incident_ids: number[] }).incident_ids).toEqual([1, 2]);
+      expect(
+        database.prepare('SELECT COUNT(*) AS count FROM incidents').get() as { count: number },
+      ).toMatchObject({ count: 1 });
+    } finally {
+      database.close();
+    }
+  });
+
+  it('clears a stale group marker when only one incident remains', async () => {
+    const { database, request } = createApp();
+    try {
+      await request('/incidents/group-similar', 'POST', { incident_ids: [1, 2] });
+      const removed = await request('/incidents/1', 'DELETE');
+      expect(removed.status).toBe(200);
+
+      const detail = await request('/incidents/2');
+      const detailBody = (await detail.json()) as {
+        incident: { similar_group_id: number | null };
+      };
+      expect(detailBody.incident.similar_group_id).toBeNull();
+    } finally {
+      database.close();
+    }
+  });
+
+  it('rejects an acknowledge request containing a missing incident without partial writes', async () => {
+    const { database, request } = createApp();
+    try {
+      const res = await request('/incidents/acknowledge', 'POST', { incident_ids: [1, 999] });
+      expect(res.status).toBe(404);
+      const row = database.prepare('SELECT acknowledged_at FROM incidents WHERE id = 1').get() as {
+        acknowledged_at: number | null;
+      };
+      expect(row.acknowledged_at).toBeNull();
     } finally {
       database.close();
     }

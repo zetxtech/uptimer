@@ -25,8 +25,8 @@ import { AppError } from '../middleware/errors';
 export const adminAnalyticsRoutes = new Hono<{ Bindings: Env }>();
 
 const overviewRangeSchema = z.enum(['24h', '7d']);
-const monitorRangeSchema = z.enum(['24h', '7d', '30d', '90d']);
-const probeHistoryRangeSchema = z.enum(['24h', '7d', '30d', '90d']);
+const monitorRangeSchema = z.enum(['1h', '24h', '7d', '30d', '90d']);
+const probeHistoryRangeSchema = z.enum(['1h', '24h', '7d', '30d', '90d']);
 
 const HISTOGRAM_SIZE = LATENCY_BUCKETS_MS.length + 1;
 const histogramSchema = z.array(z.number().int().nonnegative()).length(HISTOGRAM_SIZE);
@@ -80,7 +80,7 @@ function computeRange(range: UptimeRange): { start: number; end: number } {
   const now = Math.floor(Date.now() / 1000);
   const end = Math.floor(now / 60) * 60;
 
-  if (range === '24h') {
+  if (range === '1h' || range === '24h') {
     return { start: end - rangeToSeconds(range), end };
   }
 
@@ -400,8 +400,10 @@ adminAnalyticsRoutes.get('/monitors/:id/probe-history', async (c) => {
     return c.json({ error: { code: 'NOT_FOUND', message: 'Monitor not found' } }, 404);
   }
 
-  const rangeSeconds = { '24h': 86400, '7d': 604800, '30d': 2592000, '90d': 7776000 }[range];
-  const bucketSeconds = { '24h': 300, '7d': 3600, '30d': 14400, '90d': 43200 }[range];
+  const rangeSeconds = { '1h': 3600, '24h': 86400, '7d': 604800, '30d': 2592000, '90d': 7776000 }[
+    range
+  ];
+  const bucketSeconds = { '1h': 60, '24h': 300, '7d': 3600, '30d': 14400, '90d': 43200 }[range];
   const end = Math.floor(Date.now() / 1000);
   const start = end - rangeSeconds;
   const { results } = await c.env.DB.prepare(
@@ -570,7 +572,7 @@ adminAnalyticsRoutes.get('/monitors/:id', async (c) => {
     });
   }
 
-  if (range === '24h') {
+  if (range === '1h' || range === '24h') {
     const total_sec = Math.max(0, rangeEnd - rangeStart);
 
     const { results: outageRows } = await c.env.DB.prepare(

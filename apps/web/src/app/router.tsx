@@ -8,6 +8,7 @@ import {
   ADMIN_EVENT_DETAIL_ROUTE,
   ADMIN_LOGIN_PATH,
   ADMIN_INCIDENT_DETAIL_ROUTE,
+  ADMIN_SIMILAR_INCIDENTS_ROUTE,
   ADMIN_MONITOR_DETAIL_ROUTE,
   ADMIN_PATH,
   ADMIN_HEARTBEATS_PATH,
@@ -71,6 +72,11 @@ const AdminIncidentDetail = lazy(async () => {
   return { default: mod.AdminIncidentDetail };
 });
 
+const AdminSimilarIncidents = lazy(async () => {
+  const mod = await import('../pages/AdminSimilarIncidents');
+  return { default: mod.AdminSimilarIncidents };
+});
+
 const AdminLogin = lazy(async () => {
   const mod = await import('../pages/AdminLogin');
   return { default: mod.AdminLogin };
@@ -124,6 +130,16 @@ export const router = createBrowserRouter([
       <ProtectedRoute>
         <Suspense fallback={<PageFallback />}>
           <AdminIncidentDetail />
+        </Suspense>
+      </ProtectedRoute>
+    ),
+  },
+  {
+    path: ADMIN_SIMILAR_INCIDENTS_ROUTE,
+    element: (
+      <ProtectedRoute>
+        <Suspense fallback={<PageFallback />}>
+          <AdminSimilarIncidents />
         </Suspense>
       </ProtectedRoute>
     ),

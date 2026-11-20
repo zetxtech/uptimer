@@ -32,6 +32,7 @@ export type AggregateReason =
   | 'no_probes'
   | 'any_up'
   | 'all_down'
+  | 'quorum_down'
   | 'all_unknown'
   | 'stale_keep_previous'
   | 'stale_unknown';
@@ -63,10 +64,10 @@ function emptyDecision(
  *
  * Policy:
  * - Operator states (paused / maintenance) are never overridden by probes.
- * - Any fresh `up` keeps the monitor up: a single region reaching the target proves the
- *   service is reachable from at least one network.
- * - `down` requires every required probe to have a fresh `down` result. One region failing
- *   while another is healthy is a regional incident, not a global outage.
+ * - Required locations drive the global result; optional probes only contribute diagnostics.
+ * - Three failed required locations confirm an outage when three or more are configured.
+ *   With one or two required locations, every required location must fail.
+ * - A fresh successful required location keeps the service up until that threshold is met.
  * - When required probes are missing or stale, keep an established up/down state instead of
  *   flapping to `unknown`; probe health is reported separately.
  */
@@ -101,23 +102,27 @@ export function computeAggregateStatus(input: {
     requiredFreshCount: freshRequired.length,
   };
 
-  if (fresh.some((state) => state.status === 'up')) {
+  const quorum = required.length > 0 ? required : input.probeStates;
+  const freshQuorum = required.length > 0 ? freshRequired : fresh;
+  // Three independent locations confirm an outage when at least three are configured;
+  // smaller installations require every configured location to fail.
+  const failuresNeeded = Math.min(3, quorum.length);
+  const downCount = freshQuorum.filter((state) => state.status === 'down').length;
+
+  if (downCount >= failuresNeeded) {
+    return emptyDecision(
+      'down',
+      downCount === quorum.length ? 'all_down' : 'quorum_down',
+      counts,
+    );
+  }
+  if (freshQuorum.some((state) => state.status === 'up')) {
     return emptyDecision('up', 'any_up', counts);
   }
 
-  const quorum = required.length > 0 ? required : input.probeStates;
-  const freshQuorum = required.length > 0 ? freshRequired : fresh;
-
   if (freshQuorum.length === quorum.length) {
-    if (freshQuorum.every((state) => state.status === 'down')) {
-      return emptyDecision('down', 'all_down', counts);
-    }
-
-    // No probe saw success, but not every required probe confirmed failure either.
-    if (previous === 'down') {
-      return emptyDecision('down', 'all_unknown', counts);
-    }
-    return emptyDecision('unknown', 'all_unknown', counts);
+    // No location confirmed success and the threshold for failure was not reached.
+    return emptyDecision(previous === 'down' ? 'down' : 'unknown', 'all_unknown', counts);
   }
 
   if (previous === 'up' || previous === 'down') {

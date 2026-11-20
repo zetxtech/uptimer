@@ -75,6 +75,43 @@ describe('probe history API', () => {
     }
   });
 
+  it('supports the one-hour region history range', async () => {
+    const now = 1_800_000_000;
+    vi.spyOn(Date, 'now').mockReturnValue(now * 1000);
+    let queryArgs: unknown[] = [];
+    const env = {
+      DB: createFakeD1Database([
+        { match: 'select id from monitors', first: () => ({ id: 1 }) },
+        {
+          match: 'from probe_check_results',
+          all: (args) => {
+            queryArgs = args;
+            return [];
+          },
+        },
+      ]),
+    } as Env;
+
+    try {
+      const response = await adminAnalyticsRoutes.request(
+        '/monitors/1/probe-history?range=1h',
+        {},
+        env,
+      );
+      expect(response.status).toBe(200);
+      expect(queryArgs).toEqual([1, 60, now - 3600, now]);
+      expect(await response.json()).toMatchObject({
+        range: '1h',
+        start: now - 3600,
+        end: now,
+        bucket_seconds: 60,
+        probes: [],
+      });
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it('rejects an invalid range and a missing monitor', async () => {
     const env = {
       DB: createFakeD1Database([{ match: 'select id from monitors', first: () => null }]),

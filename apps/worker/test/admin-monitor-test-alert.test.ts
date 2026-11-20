@@ -51,7 +51,10 @@ function createApp(channels: Array<{ id: number; name: string; enabledEvents?: s
       failures_to_down_from_up INTEGER,
       successes_to_up_from_down INTEGER,
       heartbeat_token TEXT,
-      heartbeat_grace_sec INTEGER
+      heartbeat_grace_sec INTEGER,
+      last_heartbeat_at INTEGER,
+      confirmation_period_sec INTEGER,
+      recovery_period_sec INTEGER
     );
     CREATE TABLE notification_channels (
       id INTEGER PRIMARY KEY,

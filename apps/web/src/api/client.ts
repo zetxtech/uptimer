@@ -45,6 +45,8 @@ import type {
   ReorderMonitorGroupsInput,
   ReorderMonitorGroupsResult,
   ResolveIncidentInput,
+  IncidentSelectionInput,
+  SimilarIncidentGroupResult,
   StatusResponse,
   MonitorAnalyticsResponse,
   MonitorOutagesResponse,
@@ -800,6 +802,8 @@ export async function fetchAdminIncidents(
   if (opts.offset !== undefined && opts.offset > 0) qs.set('offset', String(opts.offset));
   if (opts.q) qs.set('q', opts.q);
   if (opts.status) qs.set('status', opts.status);
+  if (opts.similarGroupId !== undefined) qs.set('similar_group_id', String(opts.similarGroupId));
+  if (opts.groupSimilar) qs.set('group_similar', '1');
   if (opts.sort) qs.set('sort', opts.sort);
   if (opts.dir) qs.set('dir', opts.dir);
   const effectiveMonitorId = opts.monitorId ?? monitorId;
@@ -866,6 +870,46 @@ export async function resolveIncident(
     body: JSON.stringify(input),
   });
   return handleResponse<{ incident: Incident; update?: IncidentUpdate }>(res);
+}
+
+export async function acknowledgeIncidents(
+  input: IncidentSelectionInput,
+): Promise<{ acknowledged_at: number; incident_ids: number[] }> {
+  const res = await fetch(`${API_BASE}/admin/incidents/acknowledge`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(input),
+  });
+  return handleResponse<{ acknowledged_at: number; incident_ids: number[] }>(res);
+}
+
+export async function groupSimilarIncidents(
+  input: IncidentSelectionInput,
+): Promise<SimilarIncidentGroupResult> {
+  const res = await fetch(`${API_BASE}/admin/incidents/group-similar`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+    body: JSON.stringify(input),
+  });
+  return handleResponse<SimilarIncidentGroupResult>(res);
+}
+
+export async function ungroupSimilarIncidents(id: number): Promise<{ incident_ids: number[] }> {
+  const res = await fetch(`${API_BASE}/admin/incidents/${id}/ungroup`, {
+    method: 'POST',
+    headers: getAuthHeaders(),
+  });
+  return handleResponse<{ incident_ids: number[] }>(res);
+}
+
+export async function deleteSimilarIncidentGroup(
+  id: number,
+): Promise<{ deleted: boolean; incident_ids: number[] }> {
+  const res = await fetch(`${API_BASE}/admin/incidents/similar-groups/${id}`, {
+    method: 'DELETE',
+    headers: getAuthHeaders(),
+  });
+  return handleResponse<{ deleted: boolean; incident_ids: number[] }>(res);
 }
 
 export async function deleteIncident(id: number): Promise<{ deleted: boolean }> {

@@ -44,7 +44,7 @@ describe('monitor/http', () => {
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       expect(init?.cache).toBe('no-store');
-      expect(init?.redirect).toBe('follow');
+      expect(init?.redirect).toBe('manual');
       expect(headers.get('user-agent')).toBe('Uptimer/0.1');
       expect((init?.cf as { cacheTtlByStatus?: unknown })?.cacheTtlByStatus).toEqual({
         '100-599': -1,

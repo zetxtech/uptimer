@@ -30,11 +30,8 @@ import { eventCauseLabel } from '../utils/eventCause';
 import { locationFlag } from '../utils/probeLocation';
 import { formatDateTimeHeading, formatProseDuration, formatRelativeTime } from '../utils/datetime';
 
-type TimelineTone = 'start' | 'down' | 'up' | 'idle';
-
 interface TimelineEntry {
   key: string;
-  tone: TimelineTone;
   updateId?: number;
   text: string;
   at: number;
@@ -42,17 +39,8 @@ interface TimelineEntry {
   attachments?: EventUpdate['attachments'];
 }
 
-const TONE_COLOR: Record<TimelineTone, string> = {
-  start: 'var(--color-blue)',
-  down: 'var(--color-down)',
-  up: 'var(--color-up)',
-  idle: 'var(--color-text-muted)',
-};
-
 /**
- * Timeline marker taken from the reference page: a status-coloured disc with a
- * ring at its edge and a white bolt. The ring is white on light surfaces and
- * matches the bordered input colour on dark ones.
+ * The reference uses a single brand-coloured marker for system and user entries.
  */
 const POINT_RING =
   'M11.2586 19.3078C15.8059 19.3078 19.5172 15.6708 19.5172 11.1539C19.5172 6.63698 15.8059 3 11.2586 3C6.71125 3 3 6.63698 3 11.1539C3 15.6708 6.71125 19.3078 11.2586 19.3078Z';
@@ -61,10 +49,15 @@ const POINT_BOLT_HEAD =
 const POINT_BOLT_TAIL =
   'M13.8053 10.6553H11.155C10.7725 10.6553 10.4624 10.9654 10.4624 11.3479V14.6097C10.4624 15.2618 11.2813 15.5526 11.6925 15.0465L14.3428 11.7846C14.7106 11.332 14.3885 10.6553 13.8053 10.6553Z';
 
-function TimelinePoint({ tone }: { tone: TimelineTone }) {
+function TimelinePoint() {
   return (
-    <svg className="mt-[2px] h-5 w-5 shrink-0" viewBox="2 2 18.6 18.2" fill="none" aria-hidden>
-      <ellipse cx="11.2586" cy="11.1539" rx="7.25859" ry="7.1539" fill={TONE_COLOR[tone]} />
+    <svg
+      className="ui-event-timeline-point mt-[2px] h-5 w-5 shrink-0"
+      viewBox="2 2 18.6 18.2"
+      fill="none"
+      aria-hidden
+    >
+      <ellipse cx="11.2586" cy="11.1539" rx="7.25859" ry="7.1539" fill="var(--color-accent)" />
       <path
         d={POINT_RING}
         strokeWidth="2"
@@ -159,7 +152,6 @@ function EventDetail({ eventId }: { eventId: number }) {
 
     entries.push({
       key: 'started',
-      tone: 'start',
       text: t('events.timeline_event_started'),
       at: event.started_at,
     });
@@ -168,7 +160,6 @@ function EventDetail({ eventId }: { eventId: number }) {
       entries.push({
         key: `update-${update.id}`,
         updateId: update.id,
-        tone: 'start',
         text: `${t('events.update_posted_by')}: ${update.body}`,
         at: update.created_at,
         attachments: update.attachments,
@@ -183,7 +174,6 @@ function EventDetail({ eventId }: { eventId: number }) {
       signature = next;
       entries.push({
         key: `check-${check.checked_at}`,
-        tone: 'down',
         text: t('events.timeline_down', { error: next || unknown }),
         at: check.checked_at,
         location: check.location,
@@ -194,7 +184,6 @@ function EventDetail({ eventId }: { eventId: number }) {
       if (last) {
         entries.push({
           key: 'failures',
-          tone: 'idle',
           text: t('events.timeline_failures', { count: failures.length }),
           at: last.checked_at,
         });
@@ -204,7 +193,6 @@ function EventDetail({ eventId }: { eventId: number }) {
     if (event.ended_at !== null) {
       entries.push({
         key: 'resolved',
-        tone: 'up',
         text: t('events.timeline_recovered'),
         at: event.ended_at,
       });
@@ -212,7 +200,6 @@ function EventDetail({ eventId }: { eventId: number }) {
       const last = checks[checks.length - 1];
       entries.push({
         key: 'ongoing',
-        tone: 'idle',
         text: t('events.timeline_ongoing'),
         at: last?.checked_at ?? event.started_at,
       });
@@ -1117,19 +1104,19 @@ function EventDetail({ eventId }: { eventId: number }) {
           </div>
 
           {timeline.map((entry, index) => (
-            <div key={entry.key}>
+            <div key={entry.key} className="mt-1 ml-2 break-words">
               <div className="flex justify-between">
                 <div className="flex grow items-stretch">
-                  <div className="mt-[3.5px] flex w-10 shrink-0 flex-col items-center self-stretch">
-                    <TimelinePoint tone={entry.tone} />
+                  <div className="mt-[3.5px] flex w-6 shrink-0 flex-col items-center self-stretch">
+                    <TimelinePoint />
                     {index < timeline.length - 1 ? (
                       <div
                         aria-hidden
-                        className="mt-[6px] mb-[6px] min-h-[20px] w-[3px] grow rounded-full bg-line"
+                        className="mt-[6px] -mb-[1.5px] min-h-[20px] w-[3px] grow rounded-full bg-line"
                       />
                     ) : null}
                   </div>
-                  <div className="mr-3 mb-5 ml-3 grow text-[14px] leading-6 break-words text-ink first-line:leading-8">
+                  <div className="mr-3 mb-5 ml-2 grow text-[14px] leading-6 break-words text-ink first-line:leading-8">
                     {entry.text}
                     {entry.attachments?.length ? (
                       <ul className="mt-1 space-y-1">

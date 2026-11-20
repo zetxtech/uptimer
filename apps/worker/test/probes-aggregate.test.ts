@@ -69,6 +69,36 @@ describe('computeAggregateStatus', () => {
     expect(decision.reason).toBe('all_down');
   });
 
+  it('confirms an outage from three failed required locations out of four', () => {
+    const decision = computeAggregateStatus({
+      previousStatus: 'up',
+      probeStates: [
+        state('a', 'down', NOW),
+        state('b', 'down', NOW),
+        state('c', 'down', NOW),
+        state('d', 'up', NOW),
+      ],
+      now: NOW,
+      freshnessSec: 300,
+    });
+    expect(decision.status).toBe('down');
+    expect(decision.reason).toBe('quorum_down');
+  });
+
+  it('ignores optional probe success when every required location fails', () => {
+    const decision = computeAggregateStatus({
+      previousStatus: 'up',
+      probeStates: [
+        state('a', 'down', NOW),
+        state('b', 'down', NOW),
+        state('optional', 'up', NOW, false),
+      ],
+      now: NOW,
+      freshnessSec: 300,
+    });
+    expect(decision.status).toBe('down');
+  });
+
   it('does not treat a single regional failure as a global outage', () => {
     const decision = computeAggregateStatus({
       previousStatus: 'up',

@@ -15,6 +15,66 @@ function snapshot(partial: Partial<MonitorStateSnapshot>): MonitorStateSnapshot 
 }
 
 describe('computeNextState', () => {
+  it('confirms downtime only after the configured continuous failure duration', () => {
+    const failure = { status: 'down' as const, latencyMs: null, error: 'timeout', httpStatus: null, attempts: 1 };
+    const cfg = { confirmationPeriodSec: 120 };
+    const first = computeNextState(snapshot({ status: 'up' }), failure, CHECKED_AT, cfg);
+    expect(first.next.status).toBe('up');
+    expect(first.next.failureStartedAt).toBe(CHECKED_AT);
+    const second = computeNextState(
+      { ...snapshot({ status: 'up' }), ...first.next },
+      failure,
+      CHECKED_AT + 60,
+      cfg,
+    );
+    expect(second.next.status).toBe('up');
+    const third = computeNextState(
+      { ...snapshot({ status: 'up' }), ...second.next },
+      failure,
+      CHECKED_AT + 120,
+      cfg,
+    );
+    expect(third.next.status).toBe('down');
+    expect(third.outageAction).toBe('open');
+  });
+
+  it('resolves downtime only after the configured continuous recovery duration', () => {
+    const success = { status: 'up' as const, latencyMs: 15, error: null, httpStatus: 200, attempts: 1 };
+    const cfg = { recoveryPeriodSec: 90 };
+    const first = computeNextState(snapshot({ status: 'down' }), success, CHECKED_AT, cfg);
+    expect(first.next.status).toBe('down');
+    const second = computeNextState(
+      { ...snapshot({ status: 'down' }), ...first.next },
+      success,
+      CHECKED_AT + 100,
+      cfg,
+    );
+    expect(second.next.status).toBe('up');
+    expect(second.outageAction).toBe('close');
+  });
+
+  it('resets the timer when the opposite outcome interrupts a pending period', () => {
+    const down = { status: 'down' as const, latencyMs: null, error: 'timeout', httpStatus: null, attempts: 1 };
+    const up = { status: 'up' as const, latencyMs: 15, error: null, httpStatus: 200, attempts: 1 };
+    const cfg = { confirmationPeriodSec: 100 };
+    const first = computeNextState(snapshot({ status: 'up' }), down, CHECKED_AT, cfg);
+    const recovered = computeNextState(
+      { ...snapshot({ status: 'up' }), ...first.next },
+      up,
+      CHECKED_AT + 60,
+      cfg,
+    );
+    expect(recovered.next.failureStartedAt).toBeNull();
+    const again = computeNextState(
+      { ...snapshot({ status: 'up' }), ...recovered.next },
+      down,
+      CHECKED_AT + 120,
+      cfg,
+    );
+    expect(again.next.status).toBe('up');
+    expect(again.next.failureStartedAt).toBe(CHECKED_AT + 120);
+  });
+
   it('promotes unknown to up on first successful check', () => {
     const { next, outageAction } = computeNextState(
       null,
@@ -22,7 +82,7 @@ describe('computeNextState', () => {
       CHECKED_AT,
     );
 
-    expect(next).toEqual({
+    expect(next).toMatchObject({
       status: 'up',
       lastChangedAt: CHECKED_AT,
       consecutiveFailures: 0,
@@ -189,7 +249,7 @@ describe('resolveStateMachineConfig', () => {
         { failuresToDownFromUp: 2, successesToUpFromDown: 2 },
         { failuresToDownFromUp: 5, successesToUpFromDown: null },
       ),
-    ).toEqual({ failuresToDownFromUp: 5, successesToUpFromDown: 2 });
+    ).toMatchObject({ failuresToDownFromUp: 5, successesToUpFromDown: 2 });
   });
 
   it('falls back to the defaults when there is no override', () => {
@@ -198,7 +258,7 @@ describe('resolveStateMachineConfig', () => {
         { failuresToDownFromUp: 3, successesToUpFromDown: 4 },
         { failuresToDownFromUp: undefined, successesToUpFromDown: null },
       ),
-    ).toEqual({ failuresToDownFromUp: 3, successesToUpFromDown: 4 });
+    ).toMatchObject({ failuresToDownFromUp: 3, successesToUpFromDown: 4 });
   });
 
   it('normalizes invalid overrides back to the defaults', () => {
@@ -207,9 +267,9 @@ describe('resolveStateMachineConfig', () => {
         { failuresToDownFromUp: 3, successesToUpFromDown: 3 },
         { failuresToDownFromUp: 0, successesToUpFromDown: Number.NaN },
       ),
-    ).toEqual({ failuresToDownFromUp: 3, successesToUpFromDown: 3 });
+    ).toMatchObject({ failuresToDownFromUp: 3, successesToUpFromDown: 3 });
 
-    expect(resolveStateMachineConfig(undefined, { failuresToDownFromUp: 4 })).toEqual({
+    expect(resolveStateMachineConfig(undefined, { failuresToDownFromUp: 4 })).toMatchObject({
       failuresToDownFromUp: 4,
       successesToUpFromDown: 2,
     });

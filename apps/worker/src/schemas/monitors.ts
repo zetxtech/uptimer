@@ -19,6 +19,7 @@ const monitorSortOrderSchema = z.number().int().min(-100_000).max(100_000);
 const httpResponseMatchModeSchema = z.enum(HTTP_RESPONSE_MATCH_MODES);
 // Per-monitor overrides for the state machine thresholds; null clears the override.
 const stateThresholdSchema = z.number().int().min(1).max(10);
+const statePeriodSchema = z.number().int().min(0).max(86_400).nullable().optional();
 // Extra silence allowed on top of interval_sec for heartbeat monitors; null = default policy.
 const heartbeatGraceSchema = z.number().int().min(0).max(86_400).nullable().optional();
 // Explicit channel selection; null = every enabled channel, empty list is rejected so a monitor
@@ -101,6 +102,8 @@ export const createMonitorInputSchema = z
 
     failures_to_down_from_up: stateThresholdSchema.nullable().optional(),
     successes_to_up_from_down: stateThresholdSchema.nullable().optional(),
+    confirmation_period_sec: statePeriodSchema,
+    recovery_period_sec: statePeriodSchema,
     heartbeat_grace_sec: heartbeatGraceSchema,
 
     notification_channel_ids: notificationChannelIdsSchema,
@@ -234,6 +237,8 @@ export const patchMonitorInputSchema = z
 
     failures_to_down_from_up: stateThresholdSchema.nullable().optional(),
     successes_to_up_from_down: stateThresholdSchema.nullable().optional(),
+    confirmation_period_sec: statePeriodSchema,
+    recovery_period_sec: statePeriodSchema,
     heartbeat_grace_sec: heartbeatGraceSchema,
 
     notification_channel_ids: notificationChannelIdsSchema,

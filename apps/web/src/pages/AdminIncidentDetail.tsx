@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { ADMIN_PATH, adminMonitorDetailPath } from '../app/adminPaths';
+import { ADMIN_PATH, adminEventDetailPath, adminMonitorDetailPath } from '../app/adminPaths';
 import { useApplyServerLocaleSetting } from '../app/useApplyServerLocaleSetting';
 import { useI18n } from '../app/I18nContext';
 import {
@@ -289,6 +289,14 @@ function IncidentDetail({ incidentId }: { incidentId: number }) {
             </svg>
             {t('admin_dashboard.tab.incidents')}
           </Link>
+          {incident.outage_id != null ? (
+            <Link
+              to={adminEventDetailPath(incident.outage_id)}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 transition-colors hover:bg-surface-2 hover:text-ink"
+            >
+              {t('events.col_event')} #{incident.outage_id}
+            </Link>
+          ) : null}
           {incident.monitor_ids.map((monitorId) => (
             <Link
               key={monitorId}

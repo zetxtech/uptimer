@@ -136,6 +136,57 @@ const monitorForm = read('apps/web/src/components/MonitorForm.tsx');
 contains('heartbeat number field width', monitorForm, 'w-16 shrink-0');
 contains('heartbeat unit select width', monitorForm, 'min-w-[120px]');
 assert(
+  'create monitor exposes separate Advanced settings and Metadata rows',
+  monitorForm.includes('id={`${formId}-advanced`}') &&
+    monitorForm.includes('id={`${formId}-metadata`}'),
+  'two independent collapsed sections',
+);
+assert(
+  'monitor form disclosure row height',
+  /height:\s*31px/.test(cssRule('.ui-form-collapse-row')),
+  '31px disclosure row',
+);
+assert(
+  'monitor notification choices use bordered option rows',
+  monitorForm.includes('ui-monitor-escalation-option') &&
+    /min-height:\s*58px/.test(cssRule('.ui-monitor-escalation-option')),
+  '58px radio option row',
+);
+assert(
+  'monitor configuration selects keep native popups',
+  monitorForm.includes('ui-native-select') &&
+    /appearance:\s*auto/.test(cssRule('.ui-native-select')),
+  'native browser select appearance',
+);
+const checkKindOrder = [
+  '<option value="url_down">',
+  '<option value="url_lacks_keyword">',
+  '<option value="url_has_keyword">',
+  '<option value="url_status">',
+  '<option value="host_ping">',
+].map((option) => monitorForm.indexOf(option));
+assert(
+  'monitor check type options follow the captured order',
+  checkKindOrder.every(
+    (index, position) => index >= 0 && (position === 0 || index > checkKindOrder[position - 1]),
+  ),
+  'URL down, keyword absent, keyword present, status, host ping',
+);
+assert(
+  'monitor breadcrumbs use the workspace top bar',
+  read('apps/web/src/components/AdminShell.tsx').includes('workspaceHeader') &&
+    read('apps/web/src/pages/AdminDashboard.tsx').includes('showBreadcrumb={false}') &&
+    read('apps/web/src/pages/AdminMonitorDetail.tsx').includes('showBreadcrumb={false}'),
+  'create and configure pages share the top-bar breadcrumb slot',
+);
+assert(
+  'monitor breadcrumb aligns to the captured workspace origin',
+  read('apps/web/src/components/AdminShell.tsx').includes('pl-12 pr-6') &&
+    read('apps/web/src/components/AdminShell.tsx').includes('items-center gap-2') &&
+    read('apps/web/src/components/AdminShell.tsx').includes('items-center gap-3'),
+  '48px sidebar offset and recorded breadcrumb spacing',
+);
+assert(
   'no off-scale Tailwind type sizes',
   !/text-(2xl|3xl|4xl|5xl|lg)\b/.test(
     [
@@ -349,6 +400,24 @@ assert(
   'region selector in the chart toolbar, hidden when no region has data',
 );
 assert(
+  'monitor detail chart ranges follow the reference',
+  /CHART_RANGES = \['1h', '24h', '7d', '30d'\]/.test(
+    read('apps/web/src/pages/AdminMonitorDetail.tsx'),
+  ) &&
+    read('apps/web/src/pages/AdminMonitorDetail.tsx').includes('monitor_detail.chart_range_hour'),
+  'hour, day, week, month periods',
+);
+assert(
+  'monitor detail region selector uses native popup with flag slot',
+  read('apps/web/src/pages/AdminMonitorDetail.tsx').includes('ui-chart-region-flag') &&
+    read('apps/web/src/pages/AdminMonitorDetail.tsx').includes(
+      'ui-native-select ui-chart-region-select',
+    ) &&
+    /width:\s*20px/.test(cssRule('.ui-chart-region-flag')) &&
+    /height:\s*14px/.test(cssRule('.ui-chart-region-flag')),
+  '20×14 flag overlay in the region selector',
+);
+assert(
   'monitor detail has no probe-mode or delete controls',
   !/monitor_detail\.probe_mode/.test(read('apps/web/src/pages/AdminMonitorDetail.tsx')) &&
     !/monitor_detail\.delete_confirm/.test(read('apps/web/src/pages/AdminMonitorDetail.tsx')),
@@ -358,6 +427,13 @@ assert(
   'monitor create sections keep the reference vertical gap',
   /mt-10 space-y-8 min-\[900px\]:space-y-10/.test(read('apps/web/src/components/MonitorForm.tsx')),
   '40px desktop gap between target, escalation, and other page sections',
+);
+assert(
+  'heartbeat create starts with a visible service name',
+  monitorForm.indexOf("label={t('monitor_form.heartbeat_name')}") <
+    monitorForm.indexOf("label={t('monitor_form.heartbeat_every')}") &&
+    monitorForm.includes("props.initialType === 'heartbeat' ? 86_400 : 60"),
+  'name is above a one-day default heartbeat schedule',
 );
 assert(
   'range pickers follow the reference field',
@@ -381,6 +457,17 @@ assert(
   /height=\{466\}/.test(read('apps/web/src/pages/AdminMonitorDetail.tsx')) &&
     /h-\[466px\] w-full/.test(read('apps/web/src/pages/AdminMonitorDetail.tsx')),
   'reference 466px chart body',
+);
+assert(
+  'event timeline uses the captured text and marker geometry',
+  read('apps/web/src/pages/AdminEventDetail.tsx').includes('mt-1 ml-2 break-words') &&
+    read('apps/web/src/pages/AdminEventDetail.tsx').includes('flex w-6 shrink-0 flex-col') &&
+    read('apps/web/src/pages/AdminEventDetail.tsx').includes('-mb-[1.5px] min-h-[20px] w-[3px]') &&
+    read('apps/web/src/pages/AdminEventDetail.tsx').includes('mr-3 mb-5 ml-2 grow text-[14px]') &&
+    read('apps/web/src/pages/AdminEventDetail.tsx').includes('leading-8 text-ink-2 sm:block') &&
+    read('apps/web/src/pages/AdminEventDetail.tsx').includes('ui-event-timeline-point') &&
+    /box-shadow:\s*0 1px 2px rgb\(0 0 0 \/ 5%\)/.test(cssRule('.ui-event-timeline-point')),
+  '14px body and timestamps, 24px marker column, 3px connector, subtle marker edge',
 );
 assert(
   'uptime table header row (41 px)',
@@ -435,8 +522,22 @@ assert(
 );
 assert(
   'incident header band height',
-  /height:\s*37px/.test(cssRule('.ui-incident-table-head')),
-  'height: 37px',
+  /height:\s*42px/.test(cssRule('.ui-incident-table-head')),
+  'height: 42px',
+);
+assert(
+  'incident list is a framed selection card',
+  /border:\s*1px solid var\(--color-border\)/.test(cssRule('.ui-incident-list')) &&
+    /border-radius:\s*12px/.test(cssRule('.ui-incident-list')) &&
+    /background:\s*var\(--color-card\)/.test(cssRule('.ui-incident-list')),
+  '1px border, 12px radius and card surface',
+);
+assert(
+  'incident selection and similar-group actions are present',
+  /incident_select_all_on_page/.test(read('apps/web/src/components/AdminIncidentList.tsx')) &&
+    /ui-incident-bulk-bar/.test(read('apps/web/src/components/AdminIncidentList.tsx')) &&
+    /incident_group_similar/.test(read('apps/web/src/components/AdminIncidentList.tsx')),
+  'header select-all menu, floating selection bar and group-similar action',
 );
 assert(
   'resource list header height',
@@ -450,6 +551,17 @@ assert(
   'padding: 14px 20px',
 );
 assert('bare monitor list', /\.ui-monitor-list,/.test(styles), '.ui-monitor-list,');
+assert(
+  'monitor sort menu follows observed options',
+  !/\['configured',/.test(read('apps/web/src/components/MonitorSortControl.tsx')),
+  'no extra configured-order radio option',
+);
+assert(
+  'monitor group controls and drag grip reveal on hover',
+  styles.includes('.ui-group-head:hover .ui-group-head-actions') &&
+    styles.includes('.ui-group-head:hover .ui-monitor-grip'),
+  'both controls are hover-revealed',
+);
 contains('events list is bare', adminEvents, 'ui-event-list');
 
 const failed = checks.filter((item) => !item.ok);

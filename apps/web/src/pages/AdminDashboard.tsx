@@ -10,7 +10,12 @@ import {
 
 import { useI18n } from '../app/I18nContext';
 import { useApplyServerLocaleSetting } from '../app/useApplyServerLocaleSetting';
-import { adminIncidentDetailPath, adminMonitorDetailPath } from '../app/adminPaths';
+import {
+  ADMIN_PATH,
+  adminIncidentDetailPath,
+  adminMonitorDetailPath,
+  adminSimilarIncidentsPath,
+} from '../app/adminPaths';
 import {
   ApiError,
   fetchAdminMonitors,
@@ -39,6 +44,10 @@ import {
   updateNotificationGroup,
   deleteNotificationGroup,
   fetchAdminIncidents,
+  acknowledgeIncidents,
+  groupSimilarIncidents,
+  ungroupSimilarIncidents,
+  deleteSimilarIncidentGroup,
   createIncident,
   addIncidentUpdate,
   resolveIncident,
@@ -64,7 +73,7 @@ import type {
   StatusResponse,
   UptimeRatingLevel,
 } from '../api/types';
-import { AdminPageHeader, AdminShell, AdminTabs } from '../components/AdminShell';
+import { AdminBreadcrumbs, AdminPageHeader, AdminShell, AdminTabs } from '../components/AdminShell';
 import { BulkConfigureDialog, type BulkConfigProperty } from '../components/BulkConfigureDialog';
 import {
   AdminSearchField,
@@ -73,11 +82,16 @@ import {
   NotificationGroupList,
 } from '../components/AdminResourceLists';
 import { IncidentForm } from '../components/IncidentForm';
+import { AdminIncidentList } from '../components/AdminIncidentList';
+import {
+  type IncidentSortDirection,
+  type IncidentSortMode,
+} from '../components/IncidentSortControl';
 import { IncidentUpdateForm } from '../components/IncidentUpdateForm';
 import { MaintenanceWindowForm } from '../components/MaintenanceWindowForm';
 import { MonitorForm } from '../components/MonitorForm';
 import { EmptyState, SettingsGroup, SettingsRow } from '../components/AdminSection';
-import { DEFAULT_GROUP_LABEL, MenuItem, MonitorList, RowMenu } from '../components/MonitorList';
+import { DEFAULT_GROUP_LABEL, MonitorList } from '../components/MonitorList';
 import { NotificationChannelForm } from '../components/NotificationChannelForm';
 import { NotificationDeliveryList } from '../components/NotificationDeliveryList';
 import { NotificationGroupForm } from '../components/NotificationGroupForm';
@@ -97,9 +111,9 @@ import {
   ToastStack,
   cn,
 } from '../components/ui';
-import { incidentImpactLabel, incidentStatusLabel, statusLabel } from '../i18n/labels';
+import { incidentStatusLabel, statusLabel } from '../i18n/labels';
 import { localeLabels, messages, type MessageKey } from '../i18n/messages';
-import { formatDateTime, formatDuration, formatRelativeTime } from '../utils/datetime';
+import { formatDateTime } from '../utils/datetime';
 import { useDebouncedValue } from '../utils/useDebouncedValue';
 import { runBulkMonitorOperation } from '../utils/bulkMonitorOperations';
 
@@ -410,47 +424,6 @@ function compareMonitors(
   return (a.id - b.id) * dir;
 }
 
-/** Reference column headers carry a 26 × 26 sort button. */
-const INCIDENT_SORT_ASC_ICON = 'M3 4.5h11.25M3 9h7.5M3 13.5h5.25m8.25-9v12m0 0-3-3m3 3 3-3';
-const INCIDENT_SORT_DESC_ICON = 'M3 4.5h11.25M3 9h7.5M3 13.5h5.25m8.25 9v-12m0 0-3 3m3-3 3 3';
-
-function IncidentSortButton({
-  label,
-  active,
-  dir,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  dir: 'asc' | 'desc';
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      aria-pressed={active}
-      onClick={onClick}
-      className="ui-icon-btn ui-incident-sort-button"
-    >
-      <svg
-        className="h-3.5 w-3.5"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={1.7}
-        aria-hidden
-      >
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          d={active && dir === 'asc' ? INCIDENT_SORT_ASC_ICON : INCIDENT_SORT_DESC_ICON}
-        />
-      </svg>
-    </button>
-  );
-}
-
 export function AdminDashboard() {
   const { locale, setLocaleSetting, t } = useI18n();
   const queryClient = useQueryClient();
@@ -504,6 +477,7 @@ export function AdminDashboard() {
   const [monitorSearch, setMonitorSearch] = useState('');
   const [incidentSearch, setIncidentSearch] = useState('');
   const [incidentStatusFilter, setIncidentStatusFilter] = useState('');
+  const [incidentPage, setIncidentPage] = useState(0);
   const incidentSearchTerm = useDebouncedValue(incidentSearch.trim(), 350);
   const [showIncidentFilters, setShowIncidentFilters] = useState(false);
   const incidentFiltersRef = useRef<HTMLDivElement | null>(null);
@@ -522,8 +496,8 @@ export function AdminDashboard() {
   const createMenuRef = useRef<HTMLDivElement | null>(null);
   const [showBulkMenu, setShowBulkMenu] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
-  const [incidentSort, setIncidentSort] = useState<'default' | 'title' | 'length'>('default');
-  const [incidentSortDir, setIncidentSortDir] = useState<'asc' | 'desc'>('desc');
+  const [incidentSort, setIncidentSort] = useState<IncidentSortMode>('default');
+  const [incidentSortDir, setIncidentSortDir] = useState<IncidentSortDirection>('desc');
   const bulkMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -554,6 +528,9 @@ export function AdminDashboard() {
       document.removeEventListener('keydown', onKeyDown);
     };
   }, [showCreateMenu, showIncidentFilters, showBulkMenu, showMonitorFilters]);
+  useEffect(() => {
+    setIncidentPage(0);
+  }, [incidentSearchTerm, incidentStatusFilter, incidentSort, incidentSortDir]);
   const [draggedGroup, setDraggedGroup] = useState<string | null>(null);
   const [dragOverGroup, setDragOverGroup] = useState<string | null>(null);
   const [serverLocalePatchSupported, setServerLocalePatchSupported] = useState(true);
@@ -595,7 +572,7 @@ export function AdminDashboard() {
     queryKey: ['admin-incidents', 'open'],
     queryFn: () => fetchAdminIncidents(200),
   });
-  const incidentListQuery = useInfiniteQuery({
+  const incidentListQuery = useQuery({
     queryKey: [
       'admin-incidents',
       'list',
@@ -604,19 +581,19 @@ export function AdminDashboard() {
         status: incidentStatusFilter || null,
         sort: incidentSort,
         dir: incidentSortDir,
+        page: incidentPage,
       },
     ],
-    queryFn: ({ pageParam }) =>
+    queryFn: () =>
       fetchAdminIncidents({
         limit: 50,
-        offset: pageParam,
+        offset: incidentPage * 50,
+        groupSimilar: true,
         sort: incidentSort,
         dir: incidentSortDir,
         ...(incidentSearchTerm ? { q: incidentSearchTerm } : {}),
         ...(incidentStatusFilter ? { status: incidentStatusFilter as Incident['status'] } : {}),
       }),
-    initialPageParam: 0,
-    getNextPageParam: (lastPage) => lastPage.next_offset ?? undefined,
     placeholderData: keepPreviousData,
     enabled: tab === 'incidents',
   });
@@ -1088,6 +1065,79 @@ export function AdminDashboard() {
       );
       void queryClient.invalidateQueries({ queryKey: ['admin-incidents'] });
     },
+    onError: (error) => {
+      setBulkNotice({
+        kind: 'error',
+        message: formatError(error) ?? t('admin_dashboard.incident_delete_failed'),
+      });
+    },
+  });
+  const acknowledgeIncidentSelectionMut = useMutation({
+    mutationFn: (incidentIds: number[]) => acknowledgeIncidents({ incident_ids: incidentIds }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-incidents'] });
+      setBulkNotice({ kind: 'success', message: t('admin_dashboard.incident_acknowledged') });
+    },
+    onError: (error) => {
+      setBulkNotice({
+        kind: 'error',
+        message: formatError(error) ?? t('admin_dashboard.incident_acknowledge_failed'),
+      });
+    },
+  });
+  const resolveIncidentSelectionMut = useMutation({
+    mutationFn: async (incidentIds: number[]) => {
+      for (const id of incidentIds) await resolveIncident(id, {});
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-incidents'] });
+      setBulkNotice({ kind: 'success', message: t('admin_dashboard.incident_resolved_selected') });
+    },
+    onError: (error) => {
+      setBulkNotice({
+        kind: 'error',
+        message: formatError(error) ?? t('admin_dashboard.incident_resolve_selected_failed'),
+      });
+    },
+  });
+  const groupSimilarIncidentsMut = useMutation({
+    mutationFn: (incidentIds: number[]) => groupSimilarIncidents({ incident_ids: incidentIds }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-incidents'] });
+      setBulkNotice({ kind: 'success', message: t('admin_dashboard.incident_grouped_similar') });
+    },
+    onError: (error) => {
+      setBulkNotice({
+        kind: 'error',
+        message: formatError(error) ?? t('admin_dashboard.incident_group_similar_failed'),
+      });
+    },
+  });
+  const ungroupSimilarIncidentsMut = useMutation({
+    mutationFn: ungroupSimilarIncidents,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-incidents'] });
+      setBulkNotice({ kind: 'success', message: t('admin_dashboard.incident_ungrouped') });
+    },
+    onError: (error) => {
+      setBulkNotice({
+        kind: 'error',
+        message: formatError(error) ?? t('admin_dashboard.incident_ungroup_failed'),
+      });
+    },
+  });
+  const removeSimilarIncidentGroupMut = useMutation({
+    mutationFn: deleteSimilarIncidentGroup,
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['admin-incidents'] });
+      setBulkNotice({ kind: 'success', message: t('admin_dashboard.incident_group_removed') });
+    },
+    onError: (error) => {
+      setBulkNotice({
+        kind: 'error',
+        message: formatError(error) ?? t('admin_dashboard.incident_remove_group_failed'),
+      });
+    },
   });
 
   const createMaintenanceMut = useMutation({
@@ -1537,11 +1587,36 @@ export function AdminDashboard() {
 
   const selectedMonitorIdSet = useMemo(() => new Set(selectedMonitorIds), [selectedMonitorIds]);
 
-  const incidentList = useMemo(
-    () => incidentListQuery.data?.pages.flatMap((page) => page.incidents) ?? [],
-    [incidentListQuery.data?.pages],
-  );
+  const incidentList = incidentListQuery.data?.incidents ?? [];
+  const incidentTotalCount = incidentListQuery.data?.total_count ?? 0;
+  const incidentPageCount = Math.ceil(incidentTotalCount / 50);
+  const incidentPageTokens = useMemo<Array<number | null>>(() => {
+    if (incidentPageCount <= 7) {
+      return Array.from({ length: incidentPageCount }, (_, index) => index);
+    }
+    const candidates = [
+      0,
+      1,
+      incidentPage - 1,
+      incidentPage,
+      incidentPage + 1,
+      incidentPageCount - 2,
+      incidentPageCount - 1,
+    ].filter((page) => page >= 0 && page < incidentPageCount);
+    const pages = [...new Set(candidates)].sort((a, b) => a - b);
+    return pages.flatMap((page, index) => {
+      if (index === 0) return [page];
+      const previous = pages[index - 1];
+      return previous !== undefined && page - previous > 1 ? [null, page] : [page];
+    });
+  }, [incidentPage, incidentPageCount]);
 
+  useEffect(() => {
+    if (incidentPageCount === 0 && incidentPage !== 0) setIncidentPage(0);
+    else if (incidentPageCount > 0 && incidentPage >= incidentPageCount) {
+      setIncidentPage(incidentPageCount - 1);
+    }
+  }, [incidentPage, incidentPageCount]);
   const visibleMonitorIds = useMemo(
     () => filteredMonitors.map((monitor) => monitor.id),
     [filteredMonitors],
@@ -1927,7 +2002,34 @@ export function AdminDashboard() {
   ) : null;
 
   return (
-    <AdminShell active="dashboard" layout="sidebar" dashboardTab={tab}>
+    <AdminShell
+      active="dashboard"
+      layout="sidebar"
+      dashboardTab={tab}
+      workspaceHeader={
+        modal.type === 'create-monitor' ? (
+          <AdminBreadcrumbs
+            items={[
+              { label: t('admin_dashboard.tab.monitors'), to: ADMIN_PATH },
+              {
+                label:
+                  modal.initialType === 'heartbeat'
+                    ? t('heartbeats.create')
+                    : t('admin_dashboard.create_monitor'),
+              },
+            ]}
+          />
+        ) : modal.type === 'edit-monitor' ? (
+          <AdminBreadcrumbs
+            items={[
+              { label: t('admin_dashboard.tab.monitors'), to: ADMIN_PATH },
+              { label: modal.monitor.name },
+              { label: t('monitor_detail.configure') },
+            ]}
+          />
+        ) : null
+      }
+    >
       <main
         className={cn(
           'mx-auto px-5 pb-8',
@@ -3280,14 +3382,15 @@ export function AdminDashboard() {
 
               {incidentListQuery.isLoading ? (
                 <SkeletonRows
-                  className="ui-panel overflow-hidden"
+                  className="ui-incident-list overflow-hidden"
                   rows={4}
                   rowClassName="ui-incident-row ui-incident-grid"
                   cells={[
+                    'w-4',
                     'w-56',
                     'hidden w-32 lg:block',
-                    'hidden w-20 lg:block',
                     'w-16',
+                    'hidden w-24 sm:block',
                     'ml-auto h-5 w-5',
                   ]}
                 />
@@ -3318,204 +3421,134 @@ export function AdminDashboard() {
                   />
                 </div>
               ) : (
-                <div className="ui-incident-list">
-                  <div className="ui-incident-table-head ui-incident-grid">
-                    <span className="flex items-center gap-1">
-                      {t('admin_dashboard.incident_col_incident')}
-                      <IncidentSortButton
-                        label={t('admin_dashboard.incident_col_incident')}
-                        active={incidentSort === 'title'}
-                        dir={incidentSortDir}
-                        onClick={() => {
-                          setIncidentSort('title');
-                          setIncidentSortDir((previous) =>
-                            incidentSort === 'title' && previous === 'asc' ? 'desc' : 'asc',
-                          );
-                        }}
-                      />
-                    </span>
-                    <span className="ui-incident-monitors">{t('common.monitors')}</span>
-                    <span>{t('common.state')}</span>
-                    <span className="flex items-center justify-end gap-1 pr-0.5">
-                      {t('admin_dashboard.incident_col_length')}
-                      <IncidentSortButton
-                        label={t('admin_dashboard.incident_col_length')}
-                        active={incidentSort === 'length'}
-                        dir={incidentSortDir}
-                        onClick={() => {
-                          setIncidentSort('length');
-                          setIncidentSortDir((previous) =>
-                            incidentSort === 'length' && previous === 'desc' ? 'asc' : 'desc',
-                          );
-                        }}
-                      />
-                    </span>
-                    <span aria-hidden />
-                  </div>
-                  <div className="divide-y divide-line">
-                    {incidentList.map((incident) => {
-                      const monitorNames = incident.monitor_ids
-                        .map((id) => formatMonitorDisplayNameById(id, monitorNameById))
-                        .join(', ');
-                      const ongoing = incident.status !== 'resolved';
-                      return (
-                        <div
-                          key={incident.id}
-                          role="button"
-                          tabIndex={0}
-                          onClick={() => navigate(adminIncidentDetailPath(incident.id))}
-                          onKeyDown={(event) => {
-                            if (
-                              event.target === event.currentTarget &&
-                              (event.key === 'Enter' || event.key === ' ')
-                            ) {
-                              event.preventDefault();
-                              navigate(adminIncidentDetailPath(incident.id));
-                            }
-                          }}
-                          className="ui-incident-row ui-incident-grid cursor-pointer"
-                        >
-                          <div className="flex min-w-0 items-start gap-3">
-                            <span
-                              className={cn(
-                                'ui-incident-row-status',
-                                !ongoing && 'ui-incident-row-status-resolved',
-                              )}
-                              aria-hidden
-                            >
-                              <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth={1.5}
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  d={
-                                    ongoing
-                                      ? 'M12 9v3.75m0 3h.008M20.618 5.984A15.557 15.557 0 0 1 12 2.25a15.557 15.557 0 0 1-8.618 3.734A15.58 15.58 0 0 0 3 9.75c0 6.116 3.52 11.154 9 12.75 5.48-1.596 9-6.634 9-12.75 0-1.293-.132-2.554-.382-3.766Z'
-                                      : 'm9 12.75 2.25 2.25L15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'
-                                  }
-                                />
-                              </svg>
-                            </span>
-                            <div className="min-w-0">
-                              <div className="ui-incident-name truncate" title={incident.title}>
-                                {incident.title}
-                              </div>
-                              <div
-                                className="ui-incident-row-state truncate text-ink-2"
-                                title={incident.message ?? undefined}
-                              >
-                                {incident.message || incidentImpactLabel(incident.impact, t)}
-                              </div>
-                              <div className="ui-incident-row-meta">
-                                {incident.resolved_at === null
-                                  ? t('admin_dashboard.incident_started_relative', {
-                                      value: formatRelativeTime(incident.started_at, locale),
-                                    })
-                                  : t('admin_dashboard.incident_resolved_relative', {
-                                      value: formatRelativeTime(incident.resolved_at, locale),
-                                    })}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="ui-incident-monitors truncate" title={monitorNames}>
-                            {monitorNames || '-'}
-                          </div>
-
-                          <div className="min-w-0">
-                            <span className={ongoing ? 'text-status-down' : 'text-status-up'}>
-                              {incidentStatusLabel(incident.status, t)}
-                            </span>
-                            <div className="ui-incident-meta">
-                              {incidentImpactLabel(incident.impact, t)}
-                            </div>
-                          </div>
-
-                          <div className="ui-incident-length">
-                            {incident.resolved_at === null
-                              ? t('admin_dashboard.incident_ongoing')
-                              : formatDuration(incident.resolved_at - incident.started_at)}
-                          </div>
-
-                          <div
-                            className="flex justify-end"
-                            onClick={(event) => event.stopPropagation()}
-                          >
-                            <RowMenu label={t('admin_dashboard.incident_actions')}>
-                              {(close) => (
-                                <>
-                                  <MenuItem
-                                    icon="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10"
-                                    disabled={
-                                      incident.status === 'resolved' || deleteIncidentMut.isPending
-                                    }
-                                    onClick={() => {
-                                      close();
-                                      addIncidentUpdateMut.reset();
-                                      setModal({ type: 'add-incident-update', incident });
-                                    }}
-                                  >
-                                    {t('common.update')}
-                                  </MenuItem>
-                                  <MenuItem
-                                    icon="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
-                                    disabled={
-                                      incident.status === 'resolved' || deleteIncidentMut.isPending
-                                    }
-                                    onClick={() => {
-                                      close();
-                                      resolveIncidentMut.reset();
-                                      setModal({ type: 'resolve-incident', incident });
-                                    }}
-                                  >
-                                    {t('resolve_incident.resolve')}
-                                  </MenuItem>
-                                  <MenuItem
-                                    icon="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0"
-                                    tone="danger"
-                                    disabled={deleteIncidentMut.isPending}
-                                    onClick={() => {
-                                      close();
-                                      if (confirm(`${t('common.delete')} "${incident.title}"?`)) {
-                                        deleteIncidentMut.mutate(incident.id);
-                                      }
-                                    }}
-                                  >
-                                    {t('common.delete')}
-                                  </MenuItem>
-                                </>
-                              )}
-                            </RowMenu>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                <AdminIncidentList
+                  incidents={incidentList}
+                  monitorNameById={monitorNameById}
+                  locale={locale}
+                  sort={incidentSort}
+                  sortDirection={incidentSortDir}
+                  selectionKey={`${incidentSearchTerm}|${incidentStatusFilter}|${incidentSort}|${incidentSortDir}|${incidentPage}`}
+                  onSortChange={setIncidentSort}
+                  onSortDirectionChange={setIncidentSortDir}
+                  onOpen={(id) => navigate(adminIncidentDetailPath(id))}
+                  onOpenGroup={(id) => navigate(adminSimilarIncidentsPath(id))}
+                  onUpdate={(incident) => {
+                    addIncidentUpdateMut.reset();
+                    setModal({ type: 'add-incident-update', incident });
+                  }}
+                  onResolve={(incident) => {
+                    resolveIncidentMut.reset();
+                    setModal({ type: 'resolve-incident', incident });
+                  }}
+                  onDelete={async (id) => {
+                    await deleteIncidentMut.mutateAsync(id);
+                  }}
+                  onAcknowledge={async (ids) => {
+                    await acknowledgeIncidentSelectionMut.mutateAsync(ids);
+                  }}
+                  onResolveSelected={async (ids) => {
+                    await resolveIncidentSelectionMut.mutateAsync(ids);
+                  }}
+                  onGroupSimilar={async (ids) => {
+                    await groupSimilarIncidentsMut.mutateAsync(ids);
+                  }}
+                  onUngroup={async (id) => {
+                    await ungroupSimilarIncidentsMut.mutateAsync(id);
+                  }}
+                  onRemoveGroup={async (id) => {
+                    await removeSimilarIncidentGroupMut.mutateAsync(id);
+                  }}
+                  onCopyLinks={async (ids) => {
+                    try {
+                      const links = ids
+                        .map(
+                          (id) => new URL(adminIncidentDetailPath(id), window.location.origin).href,
+                        )
+                        .join('\n');
+                      await navigator.clipboard.writeText(links);
+                      setBulkNotice({
+                        kind: 'success',
+                        message: t('admin_dashboard.incident_links_copied'),
+                      });
+                    } catch (error) {
+                      setBulkNotice({
+                        kind: 'error',
+                        message:
+                          formatError(error) ?? t('admin_dashboard.incident_copy_links_failed'),
+                      });
+                    }
+                  }}
+                />
               )}
 
-              {incidentList.length > 0 &&
-              (incidentListQuery.hasNextPage || incidentListQuery.isFetchNextPageError) ? (
-                <div className="flex justify-center">
-                  <Button
-                    variant="secondary"
-                    disabled={incidentListQuery.isFetchingNextPage}
-                    aria-busy={incidentListQuery.isFetchingNextPage}
-                    onClick={() => void incidentListQuery.fetchNextPage()}
+              {incidentPageCount > 1 ? (
+                <nav
+                  className="ui-incident-pagination"
+                  aria-label={t('admin_dashboard.incident_pagination')}
+                >
+                  <button
+                    type="button"
+                    className="ui-incident-page-button"
+                    aria-label={t('admin_dashboard.incident_page_previous')}
+                    disabled={incidentPage === 0}
+                    onClick={() => setIncidentPage((page) => Math.max(0, page - 1))}
                   >
-                    {incidentListQuery.isFetchingNextPage
-                      ? t('common.loading_ellipsis')
-                      : incidentListQuery.isFetchNextPageError
-                        ? t('common.retry')
-                        : t('common.load_more')}
-                  </Button>
-                </div>
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.7}
+                      aria-hidden
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m14 6-6 6 6 6" />
+                    </svg>
+                  </button>
+                  {incidentPageTokens.map((page, index) =>
+                    page === null ? (
+                      <span
+                        key={`ellipsis-${index}`}
+                        className="ui-incident-page-ellipsis"
+                        aria-hidden
+                      >
+                        …
+                      </span>
+                    ) : (
+                      <button
+                        key={page}
+                        type="button"
+                        className="ui-incident-page-button"
+                        aria-label={t('admin_dashboard.incident_page_of', {
+                          current: page + 1,
+                          total: incidentPageCount,
+                        })}
+                        aria-current={page === incidentPage ? 'page' : undefined}
+                        data-active={page === incidentPage}
+                        onClick={() => setIncidentPage(page)}
+                      >
+                        {page + 1}
+                      </button>
+                    ),
+                  )}
+                  <button
+                    type="button"
+                    className="ui-incident-page-button"
+                    aria-label={t('admin_dashboard.incident_page_next')}
+                    disabled={incidentPage >= incidentPageCount - 1}
+                    onClick={() =>
+                      setIncidentPage((page) => Math.min(incidentPageCount - 1, page + 1))
+                    }
+                  >
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.7}
+                      aria-hidden
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="m10 6 6 6-6 6" />
+                    </svg>
+                  </button>
+                </nav>
               ) : null}
             </div>
           )}
@@ -3967,6 +4000,7 @@ export function AdminDashboard() {
                 {modal.type === 'create-monitor' && (
                   <MonitorForm
                     variant="page"
+                    showBreadcrumb={false}
                     onSubmit={(data) => createMonitorMut.mutate(data)}
                     onCancel={closeModal}
                     isLoading={createMonitorMut.isPending}
@@ -3980,6 +4014,7 @@ export function AdminDashboard() {
                 {modal.type === 'edit-monitor' && (
                   <MonitorForm
                     variant="page"
+                    showBreadcrumb={false}
                     monitor={modal.monitor}
                     onSubmit={(data) => updateMonitorMut.mutate({ id: modal.monitor.id, data })}
                     onCancel={closeModal}

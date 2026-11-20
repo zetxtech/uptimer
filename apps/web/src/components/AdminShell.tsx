@@ -156,12 +156,14 @@ export function AdminShell({
   layout = 'topbar',
   children,
   dashboardTab,
+  workspaceHeader,
 }: {
   active: AdminNavKey;
   tabs?: ReactNode;
   layout?: 'topbar' | 'sidebar';
   children?: ReactNode;
   dashboardTab?: 'monitors' | 'notifications' | 'incidents' | 'maintenance' | 'settings';
+  workspaceHeader?: ReactNode;
 }) {
   const { t } = useI18n();
   const { logout } = useAuth();
@@ -223,10 +225,9 @@ export function AdminShell({
         </aside>
 
         <div className="ui-admin-workspace min-h-screen min-w-0 md:ml-[17rem]">
-          <div
-            className="ui-admin-workspace-topbar sticky top-0 z-30 hidden md:block"
-            aria-hidden
-          />
+          <div className="ui-admin-workspace-topbar sticky top-0 z-30 hidden items-center pl-12 pr-6 md:flex">
+            {workspaceHeader}
+          </div>
           <header className="ui-topbar sticky top-0 z-40 md:hidden">
             <div className="flex h-12 items-center justify-between px-4">
               <Link to={ADMIN_PATH} className="flex items-center gap-2">
@@ -299,6 +300,7 @@ export function AdminShell({
                 </nav>
               ) : null}
             </div>
+            {workspaceHeader ? <div className="px-4 pb-2">{workspaceHeader}</div> : null}
           </header>
           <div key={pathname} className="ui-page-enter">
             {children}
@@ -394,6 +396,50 @@ export function AdminPageHeader({
         </div>
       ) : null}
     </div>
+  );
+}
+
+export function AdminBreadcrumbs({ items }: { items: Array<{ label: string; to?: string }> }) {
+  const { t } = useI18n();
+  if (items.length === 0) return null;
+
+  return (
+    <nav aria-label={t('admin_dashboard.breadcrumb')} className="flex min-w-0 items-center gap-2">
+      {items.map((item, index) => (
+        <span key={`${item.label}-${index}`} className="flex min-w-0 items-center gap-3">
+          {index > 0 ? (
+            <svg
+              className="h-3.5 w-3.5 shrink-0 text-ink-3"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              aria-hidden
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="m9 18 6-6-6-6" />
+            </svg>
+          ) : null}
+          {item.to && index < items.length - 1 ? (
+            <Link
+              to={item.to}
+              className="truncate text-[13px] text-ink-2 transition-colors hover:text-accent"
+            >
+              {item.label}
+            </Link>
+          ) : (
+            <span
+              aria-current={index === items.length - 1 ? 'page' : undefined}
+              className={cn(
+                'truncate text-[13px]',
+                index === items.length - 1 ? 'font-medium text-ink' : 'text-ink-2',
+              )}
+            >
+              {item.label}
+            </span>
+          )}
+        </span>
+      ))}
+    </nav>
   );
 }
 

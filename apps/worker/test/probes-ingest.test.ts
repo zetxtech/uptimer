@@ -151,7 +151,7 @@ describe('handleProbeIngest', () => {
         },
       },
       {
-        match: (sql) => sql.includes('from monitor_probe_state s') && sql.includes('join probes p'),
+        match: (sql) => sql.includes('cross join probes p') && sql.includes('left join monitor_probe_state s'),
         all: () => [
           {
             monitor_id: 1,
@@ -281,7 +281,7 @@ describe('handleProbeIngest', () => {
         },
       },
       {
-        match: (sql) => sql.includes('from monitor_probe_state s') && sql.includes('join probes p'),
+        match: (sql) => sql.includes('cross join probes p') && sql.includes('left join monitor_probe_state s'),
         all: () => [
           {
             // The region state above is what the aggregate reads back.

@@ -36,6 +36,7 @@ export const ADMIN_HEARTBEATS_PATH = `${ADMIN_PATH}/heartbeats`;
 export const ADMIN_REPORTING_PATH = `${ADMIN_PATH}/reporting`;
 export const ADMIN_MONITOR_DETAIL_ROUTE = `${ADMIN_PATH}/monitors/:id`;
 export const ADMIN_INCIDENT_DETAIL_ROUTE = `${ADMIN_PATH}/incidents/:id`;
+export const ADMIN_SIMILAR_INCIDENTS_ROUTE = `${ADMIN_PATH}/similar-incidents/:id`;
 export const ADMIN_EVENT_DETAIL_ROUTE = `${ADMIN_PATH}/events/:id`;
 
 export function adminMonitorDetailPath(monitorId: number): string {
@@ -44,6 +45,10 @@ export function adminMonitorDetailPath(monitorId: number): string {
 
 export function adminIncidentDetailPath(incidentId: number): string {
   return `${ADMIN_PATH}/incidents/${incidentId}`;
+}
+
+export function adminSimilarIncidentsPath(groupId: number): string {
+  return `${ADMIN_PATH}/similar-incidents/${groupId}`;
 }
 
 export function adminEventDetailPath(eventId: number): string {

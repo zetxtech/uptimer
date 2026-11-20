@@ -60,6 +60,8 @@ import { attachmentNamesSchema, updateAttachmentsSchema } from '../schemas/attac
 import {
   createIncidentInputSchema,
   createIncidentUpdateInputSchema,
+  groupSimilarIncidentsInputSchema,
+  incidentSelectionInputSchema,
   resolveIncidentInputSchema,
 } from '../schemas/incidents';
 import {
@@ -340,9 +342,12 @@ function monitorRowToApi(
     keep_cookies: row.keepCookies,
     metadata,
     heartbeat_token: row.heartbeatToken ?? null,
+    last_heartbeat_at: row.lastHeartbeatAt ?? null,
     heartbeat_grace_sec: row.heartbeatGraceSec ?? null,
     failures_to_down_from_up: row.failuresToDownFromUp ?? null,
     successes_to_up_from_down: row.successesToUpFromDown ?? null,
+    confirmation_period_sec: row.confirmationPeriodSec ?? null,
+    recovery_period_sec: row.recoveryPeriodSec ?? null,
     created_at: row.createdAt,
     updated_at: row.updatedAt,
 
@@ -732,6 +737,8 @@ adminRoutes.post('/monitors', async (c) => {
       heartbeatGraceSec: input.type === 'heartbeat' ? (input.heartbeat_grace_sec ?? null) : null,
       failuresToDownFromUp: input.failures_to_down_from_up ?? null,
       successesToUpFromDown: input.successes_to_up_from_down ?? null,
+      confirmationPeriodSec: input.confirmation_period_sec ?? null,
+      recoveryPeriodSec: input.recovery_period_sec ?? null,
       createdAt: now,
       updatedAt: now,
     })
@@ -927,6 +934,14 @@ adminRoutes.patch('/monitors/:id', async (c) => {
         input.successes_to_up_from_down !== undefined
           ? input.successes_to_up_from_down
           : existing.successesToUpFromDown,
+      confirmationPeriodSec:
+        input.confirmation_period_sec !== undefined
+          ? input.confirmation_period_sec
+          : existing.confirmationPeriodSec,
+      recoveryPeriodSec:
+        input.recovery_period_sec !== undefined
+          ? input.recovery_period_sec
+          : existing.recoveryPeriodSec,
       updatedAt: now,
     })
     .where(eq(monitors.id, id))
@@ -1314,7 +1329,9 @@ adminRoutes.post('/monitors/:id/pause', async (c) => {
           status = 'paused',
           last_changed_at = ?2,
           consecutive_failures = 0,
-          consecutive_successes = 0
+          consecutive_successes = 0,
+          failure_started_at = NULL,
+          recovery_started_at = NULL
       `,
     ).bind(id, now),
 
@@ -1370,7 +1387,9 @@ adminRoutes.post('/monitors/:id/resume', async (c) => {
         status = 'unknown',
         last_changed_at = ?2,
         consecutive_failures = 0,
-        consecutive_successes = 0
+        consecutive_successes = 0,
+        failure_started_at = NULL,
+        recovery_started_at = NULL
     `,
   )
     .bind(id, now)
@@ -1731,6 +1750,9 @@ type IncidentRow = {
   message: string | null;
   started_at: number;
   resolved_at: number | null;
+  acknowledged_at: number | null;
+  similar_group_id: number | null;
+  outage_id?: number | null;
 };
 
 type IncidentUpdateRow = {
@@ -1797,6 +1819,9 @@ function incidentRowToApi(
     message: row.message,
     started_at: row.started_at,
     resolved_at: row.resolved_at,
+    acknowledged_at: row.acknowledged_at,
+    similar_group_id: row.similar_group_id,
+    outage_id: row.outage_id ?? null,
     monitor_ids: monitorIds,
     updates: updates.map(incidentUpdateRowToApi),
   };
@@ -2687,6 +2712,12 @@ adminRoutes.get('/incidents', async (c) => {
     .enum(['investigating', 'identified', 'monitoring', 'resolved'])
     .optional()
     .parse(c.req.query('status'));
+  const similarGroupId = z.coerce
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .parse(c.req.query('similar_group_id'));
   const q = z
     .string()
     .trim()
@@ -2713,6 +2744,10 @@ adminRoutes.get('/incidents', async (c) => {
     bindings.push(status);
     filters.push(`status = ?${bindings.length}`);
   }
+  if (similarGroupId !== undefined) {
+    bindings.push(similarGroupId);
+    filters.push(`similar_group_id = ?${bindings.length}`);
+  }
   if (q) {
     bindings.push(`%${q}%`);
     const p = `?${bindings.length}`;
@@ -2725,7 +2760,13 @@ adminRoutes.get('/incidents', async (c) => {
     );
   }
   const where = filters.length > 0 ? `WHERE ${filters.join(' AND ')}` : '';
-  bindings.push(limit + 1, offset);
+  const groupSimilar = z.enum(['0', '1']).optional().default('0').parse(c.req.query('group_similar')) === '1';
+  const totalCountSql = groupSimilar
+    ? `SELECT COUNT(DISTINCT COALESCE(similar_group_id, id)) AS total_count FROM incidents ${where}`
+    : `SELECT COUNT(*) AS total_count FROM incidents ${where}`;
+  const countRow = await c.env.DB.prepare(totalCountSql)
+    .bind(...bindings)
+    .first<{ total_count: number }>();
 
   const direction = dir === 'asc' ? 'ASC' : 'DESC';
   const orderBy =
@@ -2737,20 +2778,54 @@ adminRoutes.get('/incidents', async (c) => {
           ? `(COALESCE(resolved_at, CAST(strftime('%s','now') AS INTEGER)) - started_at) ${direction}, id DESC`
           : `CASE WHEN status != 'resolved' THEN 0 ELSE 1 END, started_at DESC, id DESC`;
 
-  const { results: incidentRows } = await c.env.DB.prepare(
-    `
-      SELECT id, title, status, impact, message, started_at, resolved_at
-      FROM incidents
-      ${where}
-      ORDER BY ${orderBy}
-      LIMIT ?${bindings.length - 1} OFFSET ?${bindings.length}
-    `,
-  )
-    .bind(...bindings)
-    .all<IncidentRow>();
-
-  const rows = incidentRows ?? [];
-  const incidentsList = rows.slice(0, limit);
+  let incidentsList: IncidentRow[];
+  if (groupSimilar) {
+    const groupOrderBy =
+      sort === 'title'
+        ? `MIN(title COLLATE NOCASE) ${direction}, MAX(id) DESC`
+        : sort === 'started_at'
+          ? `MAX(started_at) ${direction}, MAX(id) DESC`
+          : sort === 'length'
+            ? `MAX(COALESCE(resolved_at, CAST(strftime('%s','now') AS INTEGER)) - started_at) ${direction}, MAX(id) DESC`
+            : `MIN(CASE WHEN status != 'resolved' THEN 0 ELSE 1 END), MAX(started_at) DESC, MAX(id) DESC`;
+    const { results: groupRows } = await c.env.DB.prepare(
+      `SELECT COALESCE(similar_group_id, id) AS group_id
+       FROM incidents ${where}
+       GROUP BY COALESCE(similar_group_id, id)
+       ORDER BY ${groupOrderBy}
+       LIMIT ?${bindings.length + 1} OFFSET ?${bindings.length + 2}`,
+    ).bind(...bindings, limit, offset).all<{ group_id: number }>();
+    const groupIds = (groupRows ?? []).map((row) => row.group_id);
+    if (groupIds.length === 0) {
+      incidentsList = [];
+    } else {
+      const placeholders = buildNumberedPlaceholders(groupIds.length);
+      const { results: allMembers } = await c.env.DB.prepare(
+        `SELECT id, title, status, impact, message, started_at, resolved_at,
+                acknowledged_at, similar_group_id, outage_id
+         FROM incidents
+         WHERE COALESCE(similar_group_id, id) IN (${placeholders})
+         ORDER BY started_at DESC, id DESC`,
+      ).bind(...groupIds).all<IncidentRow>();
+      const byGroup = new Map<number, IncidentRow[]>();
+      for (const incident of allMembers ?? []) {
+        const key = incident.similar_group_id ?? incident.id;
+        const rows = byGroup.get(key);
+        if (rows) rows.push(incident);
+        else byGroup.set(key, [incident]);
+      }
+      incidentsList = groupIds.flatMap((id) => byGroup.get(id) ?? []);
+    }
+  } else {
+    const { results: incidentRows } = await c.env.DB.prepare(
+      `SELECT id, title, status, impact, message, started_at, resolved_at,
+              acknowledged_at, similar_group_id, outage_id
+       FROM incidents ${where}
+       ORDER BY ${orderBy}
+       LIMIT ?${bindings.length + 1} OFFSET ?${bindings.length + 2}`,
+    ).bind(...bindings, limit + 1, offset).all<IncidentRow>();
+    incidentsList = (incidentRows ?? []).slice(0, limit);
+  }
   const monitorIdsByIncidentId = await listIncidentMonitorIdsByIncidentId(
     c.env.DB,
     incidentsList.map((r) => r.id),
@@ -2768,7 +2843,8 @@ adminRoutes.get('/incidents', async (c) => {
         monitorIdsByIncidentId.get(r.id) ?? [],
       ),
     ),
-    next_offset: rows.length > limit ? offset + limit : null,
+    next_offset: offset + limit < Number(countRow?.total_count ?? 0) ? offset + limit : null,
+    total_count: Number(countRow?.total_count ?? 0),
   });
 });
 
@@ -2776,7 +2852,8 @@ adminRoutes.get('/incidents/:id', async (c) => {
   const id = z.coerce.number().int().positive().parse(c.req.param('id'));
   const row = await c.env.DB.prepare(
     `
-      SELECT id, title, status, impact, message, started_at, resolved_at
+      SELECT id, title, status, impact, message, started_at, resolved_at,
+             acknowledged_at, similar_group_id, outage_id
       FROM incidents
       WHERE id = ?1
     `,
@@ -2808,6 +2885,149 @@ adminRoutes.get('/incidents/:id', async (c) => {
   });
 });
 
+async function ensureIncidentIdsExist(db: D1Database, incidentIds: number[]): Promise<void> {
+  const found = new Set<number>();
+  for (const ids of chunkPositiveIntegerIds(incidentIds, 90)) {
+    const placeholders = buildNumberedPlaceholders(ids.length);
+    const { results } = await db
+      .prepare(`SELECT id FROM incidents WHERE id IN (${placeholders})`)
+      .bind(...ids)
+      .all<{ id: number }>();
+    for (const row of results ?? []) found.add(row.id);
+  }
+  if (found.size !== incidentIds.length) {
+    throw new AppError(404, 'NOT_FOUND', 'One or more incidents were not found');
+  }
+}
+
+adminRoutes.post('/incidents/acknowledge', async (c) => {
+  const rawBody = await c.req.json().catch(() => {
+    throw new AppError(400, 'INVALID_ARGUMENT', 'Invalid JSON body');
+  });
+  const input = incidentSelectionInputSchema.parse(rawBody);
+  const incidentIds = normalizeIdList(input.incident_ids);
+  await ensureIncidentIdsExist(c.env.DB, incidentIds);
+
+  const acknowledgedAt = Math.floor(Date.now() / 1000);
+  await c.env.DB.batch(
+    chunkPositiveIntegerIds(incidentIds, 90).map((ids) => {
+      const placeholders = buildNumberedPlaceholders(ids.length, 2);
+      return c.env.DB.prepare(
+        `UPDATE incidents
+           SET acknowledged_at = COALESCE(acknowledged_at, ?1)
+           WHERE id IN (${placeholders}) AND resolved_at IS NULL`,
+      ).bind(acknowledgedAt, ...ids);
+    }),
+  );
+
+  return c.json({ acknowledged_at: acknowledgedAt, incident_ids: incidentIds });
+});
+
+adminRoutes.post('/incidents/group-similar', async (c) => {
+  const rawBody = await c.req.json().catch(() => {
+    throw new AppError(400, 'INVALID_ARGUMENT', 'Invalid JSON body');
+  });
+  const input = groupSimilarIncidentsInputSchema.parse(rawBody);
+  const incidentIds = normalizeIdList(input.incident_ids);
+  if (incidentIds.length < 2) {
+    throw new AppError(400, 'INVALID_ARGUMENT', 'Select at least two distinct incidents');
+  }
+  await ensureIncidentIdsExist(c.env.DB, incidentIds);
+
+  const roots = new Set<number>();
+  for (const ids of chunkPositiveIntegerIds(incidentIds, 90)) {
+    const placeholders = buildNumberedPlaceholders(ids.length);
+    const { results } = await c.env.DB.prepare(
+      `SELECT id, similar_group_id FROM incidents WHERE id IN (${placeholders})`,
+    )
+      .bind(...ids)
+      .all<{ id: number; similar_group_id: number | null }>();
+    for (const row of results ?? []) roots.add(row.similar_group_id ?? row.id);
+  }
+
+  const similarGroupId = Math.min(...roots);
+  const groupedIds = new Set(incidentIds);
+  for (const ids of chunkPositiveIntegerIds([...roots], 40)) {
+    const selectedPlaceholders = buildNumberedPlaceholders(ids.length);
+    const groupPlaceholders = buildNumberedPlaceholders(ids.length, ids.length + 1);
+    const { results } = await c.env.DB.prepare(
+      `SELECT id FROM incidents
+         WHERE id IN (${selectedPlaceholders}) OR similar_group_id IN (${groupPlaceholders})`,
+    )
+      .bind(...ids, ...ids)
+      .all<{ id: number }>();
+    for (const row of results ?? []) groupedIds.add(row.id);
+  }
+
+  const orderedIncidentIds = [...groupedIds].sort((a, b) => a - b);
+  await c.env.DB.batch(
+    chunkPositiveIntegerIds(orderedIncidentIds, 90).map((ids) => {
+      const placeholders = buildNumberedPlaceholders(ids.length, 2);
+      return c.env.DB.prepare(
+        `UPDATE incidents SET similar_group_id = ?1 WHERE id IN (${placeholders})`,
+      ).bind(similarGroupId, ...ids);
+    }),
+  );
+
+  return c.json({ similar_group_id: similarGroupId, incident_ids: orderedIncidentIds });
+});
+
+adminRoutes.post('/incidents/:id/ungroup', async (c) => {
+  const id = z.coerce.number().int().positive().parse(c.req.param('id'));
+  const incident = await c.env.DB.prepare(
+    'SELECT id, similar_group_id FROM incidents WHERE id = ?1',
+  )
+    .bind(id)
+    .first<{ id: number; similar_group_id: number | null }>();
+  if (!incident) throw new AppError(404, 'NOT_FOUND', 'Incident not found');
+
+  const groupId = incident.similar_group_id ?? incident.id;
+  const { results } = await c.env.DB.prepare(
+    'SELECT id FROM incidents WHERE id = ?1 OR similar_group_id = ?1 ORDER BY id',
+  )
+    .bind(groupId)
+    .all<{ id: number }>();
+  const incidentIds = (results ?? []).map((row) => row.id);
+
+  await c.env.DB.prepare(
+    'UPDATE incidents SET similar_group_id = NULL WHERE id = ?1 OR similar_group_id = ?1',
+  )
+    .bind(groupId)
+    .run();
+
+  return c.json({ incident_ids: incidentIds });
+});
+
+adminRoutes.delete('/incidents/similar-groups/:id', async (c) => {
+  const groupId = z.coerce.number().int().positive().parse(c.req.param('id'));
+  const { results } = await c.env.DB.prepare(
+    'SELECT id FROM incidents WHERE id = ?1 OR similar_group_id = ?1 ORDER BY id',
+  )
+    .bind(groupId)
+    .all<{ id: number }>();
+  const incidentIds = (results ?? []).map((row) => row.id);
+  if (incidentIds.length < 2) {
+    throw new AppError(404, 'NOT_FOUND', 'Similar incident group not found');
+  }
+
+  for (const ids of chunkPositiveIntegerIds(incidentIds, 80)) {
+    const placeholders = buildNumberedPlaceholders(ids.length);
+    await c.env.DB.batch([
+      c.env.DB.prepare(`DELETE FROM incident_updates WHERE incident_id IN (${placeholders})`).bind(
+        ...ids,
+      ),
+      c.env.DB.prepare(`DELETE FROM incident_monitors WHERE incident_id IN (${placeholders})`).bind(
+        ...ids,
+      ),
+      c.env.DB.prepare(`DELETE FROM incidents WHERE id IN (${placeholders})`).bind(...ids),
+    ]);
+  }
+
+  await bumpHomepageIncidentGuardVersion(c.env.DB);
+  queuePublicHomepageSnapshotRefresh(c);
+  return c.json({ deleted: true, incident_ids: incidentIds });
+});
+
 adminRoutes.post('/incidents', async (c) => {
   const rawBody = await c.req.json().catch(() => {
     throw new AppError(400, 'INVALID_ARGUMENT', 'Invalid JSON body');
@@ -2827,7 +3047,8 @@ adminRoutes.post('/incidents', async (c) => {
     `
       INSERT INTO incidents (title, status, impact, message, started_at, resolved_at)
       VALUES (?1, ?2, ?3, ?4, ?5, NULL)
-      RETURNING id, title, status, impact, message, started_at, resolved_at
+      RETURNING id, title, status, impact, message, started_at, resolved_at,
+                acknowledged_at, similar_group_id
     `,
   )
     .bind(input.title, input.status, input.impact, input.message ?? null, startedAt)
@@ -2891,7 +3112,8 @@ adminRoutes.post('/incidents/:id/updates', async (c) => {
 
   const existing = await c.env.DB.prepare(
     `
-      SELECT id, title, status, impact, message, started_at, resolved_at
+      SELECT id, title, status, impact, message, started_at, resolved_at,
+             acknowledged_at, similar_group_id
       FROM incidents
       WHERE id = ?1
     `,
@@ -2938,7 +3160,8 @@ adminRoutes.post('/incidents/:id/updates', async (c) => {
 
   const incidentRow = await c.env.DB.prepare(
     `
-      SELECT id, title, status, impact, message, started_at, resolved_at
+      SELECT id, title, status, impact, message, started_at, resolved_at,
+             acknowledged_at, similar_group_id
       FROM incidents
       WHERE id = ?1
     `,
@@ -3019,7 +3242,8 @@ adminRoutes.patch('/incidents/:id/resolve', async (c) => {
 
   const existing = await c.env.DB.prepare(
     `
-      SELECT id, title, status, impact, message, started_at, resolved_at
+      SELECT id, title, status, impact, message, started_at, resolved_at,
+             acknowledged_at, similar_group_id
       FROM incidents
       WHERE id = ?1
     `,
@@ -3068,7 +3292,8 @@ adminRoutes.patch('/incidents/:id/resolve', async (c) => {
 
   const incidentRow = await c.env.DB.prepare(
     `
-      SELECT id, title, status, impact, message, started_at, resolved_at
+      SELECT id, title, status, impact, message, started_at, resolved_at,
+             acknowledged_at, similar_group_id
       FROM incidents
       WHERE id = ?1
     `,
@@ -3121,7 +3346,8 @@ adminRoutes.delete('/incidents/:id', async (c) => {
 
   const existing = await c.env.DB.prepare(
     `
-      SELECT id, title, status, impact, message, started_at, resolved_at
+      SELECT id, title, status, impact, message, started_at, resolved_at,
+             acknowledged_at, similar_group_id
       FROM incidents
       WHERE id = ?1
     `,
@@ -3153,6 +3379,21 @@ adminRoutes.delete('/incidents/:id', async (c) => {
       `,
     ).bind(id),
   ]);
+
+  if (existing.similar_group_id !== null) {
+    const { results: remainingMembers } = await c.env.DB.prepare(
+      'SELECT id FROM incidents WHERE similar_group_id = ?1',
+    )
+      .bind(existing.similar_group_id)
+      .all<{ id: number }>();
+    if ((remainingMembers ?? []).length === 1) {
+      await c.env.DB.prepare(
+        'UPDATE incidents SET similar_group_id = NULL WHERE similar_group_id = ?1',
+      )
+        .bind(existing.similar_group_id)
+        .run();
+    }
+  }
 
   await bumpHomepageIncidentGuardVersion(c.env.DB);
   queuePublicHomepageSnapshotRefresh(c);

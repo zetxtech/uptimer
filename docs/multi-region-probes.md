@@ -36,10 +36,11 @@ monitor is explicitly switched.
 ## Aggregation
 
 - Operator states (`paused`, `maintenance`) are never overridden.
-- Any fresh required probe reporting `up` keeps the monitor `up`.
-- `down` requires **all** required probes to report a fresh `down`.
-- Mixed `down` / `unknown` without any `up` becomes `unknown` (regional issue, not global outage).
-- Stale required probes keep the established state instead of flapping.
+- Enabled, compatible required probes drive the global state; optional probe success cannot mask required failures.
+- At least three failed required probes confirm `down` when three or more are configured. With one or two required probes, all must fail.
+- Probes that have never reported still count as required locations, preventing a partial rollout from creating false positives.
+- Without a failure quorum, a fresh successful required probe reports `up`.
+- Stale required probes keep the established state instead of flapping when there is no failure quorum or successful required probe.
 - Freshness is `max(3 × interval_sec, 300s)`, capped at one hour.
 - Outages and notifications follow global transitions only.
 

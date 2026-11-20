@@ -162,9 +162,12 @@ describe('admin single-resource reads', () => {
         expiry_checked_at: null,
         keep_cookies: false,
         heartbeat_token: null,
+        last_heartbeat_at: null,
         heartbeat_grace_sec: null,
         failures_to_down_from_up: 3,
         successes_to_up_from_down: 4,
+        confirmation_period_sec: null,
+        recovery_period_sec: null,
         created_at: 1700000000,
         updated_at: 1700000100,
         status: 'down',
@@ -239,6 +242,9 @@ describe('admin single-resource reads', () => {
         message: 'Recovered',
         started_at: 1700000001,
         resolved_at: 1700000101,
+        acknowledged_at: null,
+        similar_group_id: null,
+        outage_id: null,
         monitor_ids: [1, 2],
         updates: [
           {
@@ -404,7 +410,7 @@ describe('admin single-resource reads', () => {
 
     const empty = await app.request('/incidents?monitor_id=999&limit=1');
     expect(empty.status).toBe(200);
-    expect(await empty.json()).toEqual({ incidents: [], next_offset: null });
+    expect(await empty.json()).toEqual({ incidents: [], next_offset: null, total_count: 0 });
   });
 
   it.each([

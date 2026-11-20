@@ -21,7 +21,7 @@ Each name above corresponds to `.html` and `.json` files. `INDEX.md` gives exact
 
 See `monitors-bulk-operations.md` for the selection toolbar, complete bulk-action menu, and two inspected configuration dialogs. That record was captured on 2026-11-12 and does not cover every bulk action or page.
 
-Additional live notes: `heartbeat-create.md`, `incidents-list.md` and `reporting-overview.md`. Each distinguishes inspected states from outstanding checks.
+Additional live notes: `heartbeat-create.md`, `incidents-list.md` and `reporting-overview.md`. `incidents-list.md` also includes user-provided 2026-11-17 screenshots for the framed list and selection states that are absent from the older default-state JSON capture. Each record distinguishes observed states from outstanding checks.
 
 ## Remaining work
 

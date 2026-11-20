@@ -242,17 +242,17 @@ function toHttpInit(
   config: HttpCheckConfig,
   method: HttpCheckConfig['method'],
   body: string | null,
-  redirect: RequestRedirect,
   cookieHeader: string | null,
+  includeOriginalHeaders: boolean,
 ): RequestInit {
-  const headers = new Headers(config.headers ?? undefined);
+  const headers = new Headers(includeOriginalHeaders ? (config.headers ?? undefined) : undefined);
   if (!headers.has('user-agent')) headers.set('User-Agent', USER_AGENT);
   if (cookieHeader) headers.set('Cookie', cookieHeader);
 
   const init: RequestInit = {
     method,
     headers,
-    redirect,
+    redirect: 'manual',
     cache: 'no-store',
     cf: { cacheTtlByStatus: { '100-599': -1 } },
   };
@@ -260,52 +260,44 @@ function toHttpInit(
   return init;
 }
 
+/** Resolve every redirect explicitly so each destination and its credentials are independently checked. */
 async function performRequest(config: HttpCheckConfig): Promise<PerformedRequest> {
-  const init = toHttpInit(
-    config,
-    config.method,
-    config.body,
-    config.followRedirects ? 'follow' : 'manual',
-    null,
-  );
-  const res = await fetchWithTimeout(config.url, config.timeoutMs, init);
-  return { res, effectiveUrl: res.url, redirectCount: res.redirected ? 1 : 0 };
-}
-
-/**
- * Follows redirects hop by hop while carrying cookies, because the runtime has no cookie jar.
- * Cookies stay scoped to the host that set them, and a redirect that lands on another host does
- * not receive them.
- */
-async function performRequestWithCookies(config: HttpCheckConfig): Promise<PerformedRequest> {
   const jar = new Map<string, { value: string; host: string }>();
   let currentUrl = config.url;
   let method = config.method;
   let body = config.body;
   let hops = 0;
+  let includeOriginalHeaders = true;
+  const started = performance.now();
 
   for (;;) {
     const host = new URL(currentUrl).hostname;
     const cookieHeader =
-      jar.size === 0
-        ? null
-        : [...jar.entries()]
+      config.keepCookies && jar.size > 0
+        ? [...jar.entries()]
             .filter(([, cookie]) => cookie.host === host)
             .map(([name, cookie]) => `${name}=${cookie.value}`)
-            .join('; ');
+            .join('; ')
+        : null;
 
-    const init = toHttpInit(config, method, body, 'manual', cookieHeader || null);
-    const res = await fetchWithTimeout(currentUrl, config.timeoutMs, init);
+    const remainingMs = Math.ceil(config.timeoutMs - (performance.now() - started));
+    if (remainingMs <= 0) {
+      throw new DOMException('Request timed out', 'AbortError');
+    }
+    const init = toHttpInit(config, method, body, cookieHeader || null, includeOriginalHeaders);
+    const res = await fetchWithTimeout(currentUrl, remainingMs, init);
 
-    for (const raw of readSetCookieHeaders(res)) {
-      const cookie = parseSetCookie(raw);
-      if (!cookie) continue;
-      if (cookie.removed) jar.delete(cookie.name);
-      else jar.set(cookie.name, { value: cookie.value, host });
+    if (config.keepCookies) {
+      for (const raw of readSetCookieHeaders(res)) {
+        const cookie = parseSetCookie(raw);
+        if (!cookie) continue;
+        if (cookie.removed) jar.delete(cookie.name);
+        else jar.set(cookie.name, { value: cookie.value, host });
+      }
     }
 
     const location = res.headers.get('location');
-    if (res.status < 300 || res.status >= 400 || !location) {
+    if (!config.followRedirects || res.status < 300 || res.status >= 400 || !location) {
       return { res, effectiveUrl: currentUrl, redirectCount: hops };
     }
 
@@ -313,21 +305,21 @@ async function performRequestWithCookies(config: HttpCheckConfig): Promise<Perfo
     try {
       nextUrl = new URL(location, currentUrl);
     } catch {
-      res.body?.cancel();
+      void res.body?.cancel().catch(() => undefined);
       throw new Error('Invalid redirect location');
     }
-    if (nextUrl.protocol !== 'http:' && nextUrl.protocol !== 'https:') {
-      res.body?.cancel();
-      throw new Error(`Redirect to unsupported protocol: ${nextUrl.protocol}`);
+    const targetError = validateHttpTarget(nextUrl.toString());
+    if (targetError) {
+      void res.body?.cancel().catch(() => undefined);
+      throw new Error(`Redirect target is not allowed: ${targetError}`);
     }
 
     hops += 1;
     if (hops > MAX_REDIRECT_HOPS) {
-      res.body?.cancel();
+      void res.body?.cancel().catch(() => undefined);
       throw new Error(`Too many redirects (> ${MAX_REDIRECT_HOPS})`);
     }
 
-    // 303 always switches to GET; 301/302 do for methods with a body, matching browsers.
     if (
       res.status === 303 ||
       ((res.status === 301 || res.status === 302) && method !== 'GET' && method !== 'HEAD')
@@ -336,7 +328,17 @@ async function performRequestWithCookies(config: HttpCheckConfig): Promise<Perfo
       body = null;
     }
 
-    res.body?.cancel();
+    if (new URL(currentUrl).origin !== nextUrl.origin) {
+      // A redirect must not forward credentials, custom headers or an unsafe request body
+      // to another origin, including when it redirects back to the original origin.
+      if (method !== 'GET' && method !== 'HEAD') {
+        void res.body?.cancel().catch(() => undefined);
+        throw new Error('Cross-origin redirect with a request body or unsafe method is not allowed');
+      }
+      includeOriginalHeaders = false;
+    }
+
+    void res.body?.cancel().catch(() => undefined);
     currentUrl = nextUrl.toString();
   }
 }
@@ -348,10 +350,7 @@ async function attemptHttpCheck(
   const started = performance.now();
 
   try {
-    const performed =
-      config.keepCookies && config.followRedirects
-        ? await performRequestWithCookies(config)
-        : await performRequest(config);
+    const performed = await performRequest(config);
     const res = performed.res;
 
     const ttfbMs = Math.round(performance.now() - started);

@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
-import { adminMonitorDetailPath } from '../app/adminPaths';
+import { ADMIN_HEARTBEATS_PATH, adminMonitorDetailPath } from '../app/adminPaths';
 import { useApplyServerLocaleSetting } from '../app/useApplyServerLocaleSetting';
 import { useI18n } from '../app/I18nContext';
 import { ApiError, createMonitor, fetchAllAdminMonitors, fetchAdminSettings } from '../api/client';
 import type { AdminMonitor } from '../api/types';
-import { AdminShell } from '../components/AdminShell';
+import { AdminBreadcrumbs, AdminShell } from '../components/AdminShell';
 import { MonitorForm } from '../components/MonitorForm';
 import { Button, SkeletonRows, Toast, ToastStack, cn } from '../components/ui';
 import { statusLabel } from '../i18n/labels';
@@ -79,9 +79,21 @@ export function AdminHeartbeats() {
 
   if (creating) {
     return (
-      <AdminShell active="heartbeats" layout="sidebar">
+      <AdminShell
+        active="heartbeats"
+        layout="sidebar"
+        workspaceHeader={
+          <AdminBreadcrumbs
+            items={[
+              { label: t('heartbeats.title'), to: ADMIN_HEARTBEATS_PATH },
+              { label: t('heartbeats.create') },
+            ]}
+          />
+        }
+      >
         <MonitorForm
           variant="page"
+          showBreadcrumb={false}
           initialType="heartbeat"
           isLoading={createMut.isPending}
           error={createMut.error ? formatError(createMut.error) : undefined}
@@ -273,15 +285,17 @@ export function AdminHeartbeats() {
                       {formatIntervalLabel(monitor.interval_sec)}
                     </div>
                     <div className="text-[13px] text-ink-2">
-                      {monitor.last_checked_at === null
+                      {monitor.last_heartbeat_at === null
                         ? t('heartbeats.never')
-                        : formatRelativeTime(monitor.last_checked_at, locale)}
+                        : formatRelativeTime(monitor.last_heartbeat_at, locale)}
                     </div>
                     <div className="flex justify-end">
                       <span
                         className={cn('ui-heartbeat-state', `ui-monitor-state-${monitor.status}`)}
                       >
-                        {statusLabel(monitor.status, t)}
+                        {monitor.status !== 'paused' && monitor.last_heartbeat_at === null
+                          ? t('heartbeats.pending')
+                          : statusLabel(monitor.status, t)}
                       </span>
                     </div>
                   </div>

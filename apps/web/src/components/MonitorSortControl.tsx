@@ -56,7 +56,6 @@ export function MonitorSortControl({
   }, [open]);
 
   const modes: Array<[MonitorSortMode, string]> = [
-    ['configured', t('admin_dashboard.monitor_sort_mode_configured')],
     ['name', t('common.name')],
     ['created_at', t('admin_dashboard.monitor_sort_mode_created_time')],
     ['updated_at', t('admin_dashboard.monitor_sort_mode_updated_time')],

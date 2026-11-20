@@ -73,12 +73,15 @@ export const monitors = sqliteTable(
     keepCookies: integer('keep_cookies', { mode: 'boolean' }).notNull().default(false),
     // Heartbeat monitors authenticate their ping with this token; NULL for probed monitors.
     heartbeatToken: text('heartbeat_token'),
+    lastHeartbeatAt: integer('last_heartbeat_at'),
     // Extra silence allowed beyond interval_sec before a heartbeat monitor turns down.
     // NULL keeps the default policy (two missed intervals, at least five minutes).
     heartbeatGraceSec: integer('heartbeat_grace_sec'),
     // NULL falls back to the site-wide state machine defaults from settings.
     failuresToDownFromUp: integer('failures_to_down_from_up'),
     successesToUpFromDown: integer('successes_to_up_from_down'),
+    confirmationPeriodSec: integer('confirmation_period_sec'),
+    recoveryPeriodSec: integer('recovery_period_sec'),
     createdAt: integer('created_at')
       .notNull()
       .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
@@ -105,6 +108,8 @@ export const monitorState = sqliteTable('monitor_state', {
   lastError: text('last_error'),
   consecutiveFailures: integer('consecutive_failures').notNull().default(0),
   consecutiveSuccesses: integer('consecutive_successes').notNull().default(0),
+  failureStartedAt: integer('failure_started_at'),
+  recoveryStartedAt: integer('recovery_started_at'),
 });
 
 export const monitorMetadata = sqliteTable(
@@ -203,17 +208,26 @@ export const outageUpdates = sqliteTable(
   }),
 );
 
-export const incidents = sqliteTable('incidents', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  title: text('title').notNull(),
-  status: text('status').$type<IncidentStatus>().notNull(),
-  impact: text('impact').$type<IncidentImpact>().notNull().default('minor'),
-  message: text('message'),
-  startedAt: integer('started_at')
-    .notNull()
-    .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
-  resolvedAt: integer('resolved_at'),
-});
+export const incidents = sqliteTable(
+  'incidents',
+  {
+    id: integer('id').primaryKey({ autoIncrement: true }),
+    title: text('title').notNull(),
+    status: text('status').$type<IncidentStatus>().notNull(),
+    impact: text('impact').$type<IncidentImpact>().notNull().default('minor'),
+    message: text('message'),
+    startedAt: integer('started_at')
+      .notNull()
+      .default(sql`(CAST(strftime('%s','now') AS INTEGER))`),
+    resolvedAt: integer('resolved_at'),
+    acknowledgedAt: integer('acknowledged_at'),
+    similarGroupId: integer('similar_group_id'),
+    outageId: integer('outage_id'),
+  },
+  (t) => ({
+    similarGroupIdx: index('idx_incidents_similar_group_id').on(t.similarGroupId),
+  }),
+);
 
 export const incidentUpdates = sqliteTable(
   'incident_updates',
@@ -387,6 +401,8 @@ export const monitorProbeState = sqliteTable(
     lastError: text('last_error'),
     consecutiveFailures: integer('consecutive_failures').notNull().default(0),
     consecutiveSuccesses: integer('consecutive_successes').notNull().default(0),
+    failureStartedAt: integer('failure_started_at'),
+    recoveryStartedAt: integer('recovery_started_at'),
   },
   (t) => ({
     pk: primaryKey({ columns: [t.monitorId, t.probeId] }),

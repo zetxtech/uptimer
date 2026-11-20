@@ -88,9 +88,9 @@ export function BulkConfigureDialog({
       case 'frequency':
         return interval ? { interval_sec: Number(interval) } : {};
       case 'confirmation':
-        return confirmation ? { failures_to_down_from_up: Number(confirmation) } : {};
+        return confirmation.trim() ? { confirmation_period_sec: Number(confirmation) } : {};
       case 'recovery':
-        return recovery ? { successes_to_up_from_down: Number(recovery) } : {};
+        return recovery.trim() ? { recovery_period_sec: Number(recovery) } : {};
       case 'request': {
         const patch: PatchMonitorInput = {};
         if (method) patch.http_method = method;
@@ -216,32 +216,26 @@ export function BulkConfigureDialog({
               t('admin_dashboard.bulk_frequency'),
             )
           : null}
-        {property === 'confirmation'
-          ? select(
-              confirmation,
-              setConfirmation,
-              [
-                ['1', '1'],
-                ['2', '2'],
-                ['3', '3'],
-                ['5', '5'],
-              ],
-              t('admin_dashboard.bulk_confirmation'),
-            )
-          : null}
-        {property === 'recovery'
-          ? select(
-              recovery,
-              setRecovery,
-              [
-                ['1', '1'],
-                ['2', '2'],
-                ['3', '3'],
-                ['5', '5'],
-              ],
-              t('admin_dashboard.bulk_recovery'),
-            )
-          : null}
+        {property === 'confirmation' || property === 'recovery' ? (
+          <label className="block text-[12px] font-medium text-ink-2">
+            {title}
+            <input
+              type="number"
+              min={0}
+              max={86400}
+              step={1}
+              value={property === 'confirmation' ? confirmation : recovery}
+              onChange={(event) =>
+                (property === 'confirmation' ? setConfirmation : setRecovery)(event.target.value)
+              }
+              placeholder={t('admin_dashboard.bulk_keep')}
+              className="ui-input mt-1.5"
+            />
+            <span className="mt-1 block text-[12px] text-ink-3">
+              {t('monitor_form.unit_seconds')}
+            </span>
+          </label>
+        ) : null}
         {property === 'ssl' ? (
           <>
             {select(ssl, setSsl, toggleOption, t('admin_dashboard.bulk_ssl'))}

@@ -34,6 +34,9 @@ export interface Incident {
   message: string | null;
   started_at: number;
   resolved_at: number | null;
+  acknowledged_at?: number | null;
+  similar_group_id?: number | null;
+  outage_id?: number | null;
   monitor_ids: number[];
   updates: IncidentUpdate[];
 }
@@ -243,7 +246,7 @@ export interface UptimeResponse {
   uptime_pct: number;
 }
 
-export type AnalyticsRange = '24h' | '7d' | '30d' | '90d';
+export type AnalyticsRange = '1h' | '24h' | '7d' | '30d' | '90d';
 export type AnalyticsOverviewRange = '24h' | '7d';
 
 export interface AnalyticsOverviewResponse {
@@ -460,9 +463,12 @@ export interface AdminMonitor {
   expiry_checked_at: number | null;
   keep_cookies: boolean;
   heartbeat_token: string | null;
+  last_heartbeat_at: number | null;
   heartbeat_grace_sec: number | null;
   failures_to_down_from_up: number | null;
   successes_to_up_from_down: number | null;
+  confirmation_period_sec: number | null;
+  recovery_period_sec: number | null;
   created_at: number;
   updated_at: number;
 
@@ -509,6 +515,8 @@ export interface CreateMonitorInput {
   heartbeat_grace_sec?: number | null;
   failures_to_down_from_up?: number | null;
   successes_to_up_from_down?: number | null;
+  confirmation_period_sec?: number | null;
+  recovery_period_sec?: number | null;
 }
 
 export interface PatchMonitorInput {
@@ -544,6 +552,8 @@ export interface PatchMonitorInput {
   heartbeat_grace_sec?: number | null;
   failures_to_down_from_up?: number | null;
   successes_to_up_from_down?: number | null;
+  confirmation_period_sec?: number | null;
+  recovery_period_sec?: number | null;
 }
 
 export interface AdminProbe {
@@ -845,6 +855,7 @@ export interface PublicMaintenanceWindowsResponse {
 export interface AdminIncidentsResponse {
   incidents: Incident[];
   next_offset: number | null;
+  total_count: number;
 }
 
 export interface FetchAdminIncidentsOptions {
@@ -853,6 +864,8 @@ export interface FetchAdminIncidentsOptions {
   q?: string;
   status?: IncidentStatus;
   monitorId?: number;
+  similarGroupId?: number;
+  groupSimilar?: boolean;
   /** Column sort; `default` keeps ongoing incidents on top. */
   sort?: 'default' | 'title' | 'started_at' | 'length';
   dir?: 'asc' | 'desc';
@@ -875,6 +888,15 @@ export interface CreateIncidentUpdateInput {
 
 export interface ResolveIncidentInput {
   message?: string;
+}
+
+export interface IncidentSelectionInput {
+  incident_ids: number[];
+}
+
+export interface SimilarIncidentGroupResult {
+  similar_group_id: number;
+  incident_ids: number[];
 }
 
 export interface CreateMaintenanceWindowInput {

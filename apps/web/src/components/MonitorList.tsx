@@ -73,9 +73,11 @@ type MonitorListProps = {
 export function RowMenu({
   label,
   children,
+  buttonClassName = 'h-7 w-7',
 }: {
   label: string;
   children: (close: () => void) => ReactNode;
+  buttonClassName?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
@@ -108,7 +110,7 @@ export function RowMenu({
         aria-expanded={open}
         aria-label={label}
         title={label}
-        className="ui-icon-btn ui-monitor-row-menu-button h-7 w-7"
+        className={cn('ui-icon-btn ui-monitor-row-menu-button', buttonClassName)}
       >
         <svg
           className="h-4 w-4"

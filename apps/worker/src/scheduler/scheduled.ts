@@ -63,7 +63,7 @@ const BATCH_EXECUTION_LOCK_RENEW_MIN_REMAINING_SECONDS = 5 * 60;
 const CHECK_CONCURRENCY = 5;
 const D1_MAX_SQL_VARIABLES = 100;
 const CHECK_RESULT_BINDINGS_PER_ROW = 13;
-const MONITOR_STATE_BINDINGS_PER_ROW = 8;
+const MONITOR_STATE_BINDINGS_PER_ROW = 10;
 const PERSIST_BATCH_SIZE = Math.max(
   1,
   Math.floor(
@@ -823,6 +823,7 @@ export type DueMonitorRow = {
   display_url: string | null;
   interval_sec: number;
   heartbeat_grace_sec: number | null;
+  last_heartbeat_at: number | null;
   created_at: number;
   timeout_ms: number;
   http_method: string | null;
@@ -838,6 +839,8 @@ export type DueMonitorRow = {
   response_forbidden_keyword_mode: HttpResponseMatchMode | null;
   failures_to_down_from_up: number | null;
   successes_to_up_from_down: number | null;
+  confirmation_period_sec?: number | null;
+  recovery_period_sec?: number | null;
   notification_channel_ids_json: string | null;
   state_status: string | null;
   state_last_error: string | null;
@@ -845,6 +848,8 @@ export type DueMonitorRow = {
   last_changed_at: number | null;
   consecutive_failures: number | null;
   consecutive_successes: number | null;
+  failure_started_at?: number | null;
+  recovery_started_at?: number | null;
 };
 
 async function getHttpCheckModule() {
@@ -946,6 +951,7 @@ const LIST_DUE_MONITORS_SQL = `
     m.display_url,
     m.interval_sec,
     m.heartbeat_grace_sec,
+    m.last_heartbeat_at,
     m.created_at,
     m.timeout_ms,
     m.http_method,
@@ -961,6 +967,8 @@ const LIST_DUE_MONITORS_SQL = `
     m.response_forbidden_keyword_mode,
     m.failures_to_down_from_up,
     m.successes_to_up_from_down,
+    m.confirmation_period_sec,
+    m.recovery_period_sec,
     m.notification_channel_ids_json,
     s.status AS state_status,
     s.last_error AS state_last_error,
@@ -968,6 +976,7 @@ const LIST_DUE_MONITORS_SQL = `
     s.last_changed_at,
     s.consecutive_failures,
     s.consecutive_successes
+    ,s.failure_started_at, s.recovery_started_at
   FROM monitors m
   LEFT JOIN monitor_state s ON s.monitor_id = m.id
   WHERE m.is_active = 1
@@ -1122,6 +1131,7 @@ export async function listMonitorRowsByIds(
         m.display_url,
         m.interval_sec,
         m.heartbeat_grace_sec,
+        m.last_heartbeat_at,
         m.created_at,
         m.timeout_ms,
         m.http_method,
@@ -1137,6 +1147,8 @@ export async function listMonitorRowsByIds(
         m.response_forbidden_keyword_mode,
         m.failures_to_down_from_up,
         m.successes_to_up_from_down,
+        m.confirmation_period_sec,
+        m.recovery_period_sec,
         m.notification_channel_ids_json,
         s.status AS state_status,
         s.last_error AS state_last_error,
@@ -1144,6 +1156,7 @@ export async function listMonitorRowsByIds(
         s.last_changed_at,
         s.consecutive_failures,
         s.consecutive_successes
+        ,s.failure_started_at, s.recovery_started_at
       FROM monitors m
       LEFT JOIN monitor_state s ON s.monitor_id = m.id
       WHERE m.is_active = 1
@@ -1472,7 +1485,9 @@ function getUpsertMonitorStateStatement(
       last_latency_ms,
       last_error,
       consecutive_failures,
-      consecutive_successes
+      consecutive_successes,
+      failure_started_at,
+      recovery_started_at
     ) VALUES ${buildNumberedTuplePlaceholders(rowCount, MONITOR_STATE_BINDINGS_PER_ROW)}
     ON CONFLICT(monitor_id) DO UPDATE SET
       status = excluded.status,
@@ -1481,7 +1496,9 @@ function getUpsertMonitorStateStatement(
       last_latency_ms = excluded.last_latency_ms,
       last_error = excluded.last_error,
       consecutive_failures = excluded.consecutive_failures,
-      consecutive_successes = excluded.consecutive_successes
+      consecutive_successes = excluded.consecutive_successes,
+      failure_started_at = excluded.failure_started_at,
+      recovery_started_at = excluded.recovery_started_at
     WHERE monitor_state.last_checked_at IS NULL
       OR excluded.last_checked_at >= monitor_state.last_checked_at
   `);
@@ -1521,6 +1538,8 @@ function toMonitorStateBindings(completed: CompletedDueMonitor): unknown[] {
     stateLastError,
     next.consecutiveFailures,
     next.consecutiveSuccesses,
+    next.failureStartedAt ?? null,
+    next.recoveryStartedAt ?? null,
   ];
 }
 
@@ -1622,6 +1641,8 @@ async function runDueMonitor(
           lastChangedAt: row.last_changed_at,
           consecutiveFailures: row.consecutive_failures ?? 0,
           consecutiveSuccesses: row.consecutive_successes ?? 0,
+          failureStartedAt: row.failure_started_at ?? null,
+          recoveryStartedAt: row.recovery_started_at ?? null,
         };
 
   let outcome: CheckOutcome;
@@ -1631,18 +1652,20 @@ async function runDueMonitor(
       // Heartbeat monitors are driven by pings, not probes: this run only decides whether the
       // silence since the last ping exceeded the grace window.
       const graceSec = heartbeatGraceSeconds(row.interval_sec, row.heartbeat_grace_sec);
-      const lastSeen = row.last_checked_at;
-      const silentFor = lastSeen === null ? Number.POSITIVE_INFINITY : checkedAt - lastSeen;
+      const lastSeen = row.last_heartbeat_at;
+      const silentFor = lastSeen === null ? 0 : checkedAt - lastSeen;
       outcome =
-        silentFor <= graceSec
-          ? { status: 'up', latencyMs: null, httpStatus: null, error: null, attempts: 1 }
-          : {
-              status: 'down',
-              latencyMs: null,
-              httpStatus: null,
-              error: `No heartbeat received for ${Math.max(0, Math.round(silentFor))}s`,
-              attempts: 1,
-            };
+        lastSeen === null
+          ? { status: 'unknown', latencyMs: null, httpStatus: null, error: null, attempts: 1 }
+          : silentFor <= graceSec
+            ? { status: 'up', latencyMs: null, httpStatus: null, error: null, attempts: 1 }
+            : {
+                status: 'down',
+                latencyMs: null,
+                httpStatus: null,
+                error: `No heartbeat received for ${Math.max(0, Math.round(silentFor))}s`,
+                attempts: 1,
+              };
     } else if (row.type === 'http') {
       const httpMethod = toHttpMethod(row.http_method);
       if (!httpMethod) {
@@ -1735,6 +1758,8 @@ async function runDueMonitor(
       : resolveStateMachineConfig(stateMachineConfig, {
           failuresToDownFromUp: row.failures_to_down_from_up,
           successesToUpFromDown: row.successes_to_up_from_down,
+          confirmationPeriodSec: row.confirmation_period_sec ?? null,
+          recoveryPeriodSec: row.recovery_period_sec ?? null,
         });
   const { next, outageAction } = computeNextState(prev, outcome, checkedAt, stateConfig);
   const stateLastError = computeStateLastError(next.status, outcome, row.state_last_error);

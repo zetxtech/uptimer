@@ -1,4 +1,8 @@
 const FLAGS: Record<string, string> = {
+  US: '🇺🇸',
+  EU: '🇪🇺',
+  AU: '🇦🇺',
+  EUROPE: '🇪🇺',
   LAX: '🇺🇸',
   SFO: '🇺🇸',
   SEA: '🇺🇸',

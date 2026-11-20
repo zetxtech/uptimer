@@ -103,6 +103,68 @@ describe('monitor/http cookie handling', () => {
     expect(methods).toEqual(['POST', 'GET']);
   });
 
+  it('removes credentials on a cross-origin redirect and counts every hop', async () => {
+    const calls: Array<{ url: string; authorization: string | null; apiKey: string | null }> = [];
+    globalThis.fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      const headers = new Headers(init?.headers);
+      calls.push({
+        url,
+        authorization: headers.get('authorization'),
+        apiKey: headers.get('x-api-key'),
+      });
+      if (calls.length === 1) {
+        return new Response(null, { status: 302, headers: { location: '/second' } });
+      }
+      if (calls.length === 2) {
+        return new Response(null, {
+          status: 302,
+          headers: { location: 'https://other.example.net/final' },
+        });
+      }
+      return new Response('ok', { status: 200 });
+    }) as unknown as typeof fetch;
+
+    const outcome = await runHttpCheck({
+      ...BASE_CONFIG,
+      keepCookies: false,
+      headers: { Authorization: 'Basic private', 'X-API-Key': 'secret' },
+    });
+    expect(outcome.status).toBe('up');
+    expect(outcome.detail?.redirectCount).toBe(2);
+    expect(outcome.detail?.effectiveUrl).toBe('https://other.example.net/final');
+    expect(calls[1]?.authorization).toBe('Basic private');
+    expect(calls[2]?.authorization).toBeNull();
+    expect(calls[2]?.apiKey).toBeNull();
+  });
+
+  it('rejects redirects to local or reserved IP addresses', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(null, {
+        status: 302,
+        headers: { location: 'http://127.0.0.1/admin' },
+      }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const outcome = await runHttpCheck(BASE_CONFIG);
+    expect(outcome.status).toBe('down');
+    expect(outcome.error).toMatch(/Redirect target is not allowed/i);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it('rejects preserving a POST body on a cross-origin 307 redirect', async () => {
+    const fetchMock = vi.fn(async () =>
+      new Response(null, {
+        status: 307,
+        headers: { location: 'https://other.example.net/collect' },
+      }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const outcome = await runHttpCheck({ ...BASE_CONFIG, method: 'POST', body: 'sensitive=yes' });
+    expect(outcome.status).toBe('down');
+    expect(outcome.error).toMatch(/Cross-origin redirect/i);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
   it('gives up on redirect loops', async () => {
     globalThis.fetch = vi.fn(async () => {
       return new Response(null, { status: 302, headers: { location: '/again' } });

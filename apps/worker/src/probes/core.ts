@@ -31,7 +31,7 @@ const CHECK_RESULT_BINDINGS_PER_ROW = 8;
 const CHECK_RESULT_BATCH_SIZE = Math.max(1, Math.floor(100 / CHECK_RESULT_BINDINGS_PER_ROW));
 const PROBE_RESULT_BINDINGS_PER_ROW = 9;
 const PROBE_RESULT_BATCH_SIZE = Math.max(1, Math.floor(100 / PROBE_RESULT_BINDINGS_PER_ROW));
-const PROBE_STATE_BINDINGS_PER_ROW = 9;
+const PROBE_STATE_BINDINGS_PER_ROW = 11;
 const PROBE_STATE_BATCH_SIZE = Math.max(1, Math.floor(100 / PROBE_STATE_BINDINGS_PER_ROW));
 const MAX_STATEMENTS_PER_BATCH = 50;
 
@@ -51,6 +51,8 @@ type IngestMonitorRow = {
   state_consecutive_successes: number | null;
   failures_to_down_from_up: number | null;
   successes_to_up_from_down: number | null;
+  confirmation_period_sec: number | null;
+  recovery_period_sec: number | null;
   notification_channel_ids_json: string | null;
 };
 
@@ -63,6 +65,8 @@ type ProbeStateRow = {
   last_error: string | null;
   consecutive_failures: number;
   consecutive_successes: number;
+  failure_started_at: number | null;
+  recovery_started_at: number | null;
 };
 
 type AggregateStateRow = {
@@ -290,6 +294,8 @@ async function loadIngestMonitors(db: D1Database, ids: number[]): Promise<Ingest
         m.interval_sec,
         m.failures_to_down_from_up,
         m.successes_to_up_from_down,
+        m.confirmation_period_sec,
+        m.recovery_period_sec,
         m.notification_channel_ids_json,
         s.status AS state_status,
         s.last_checked_at AS state_last_checked_at,
@@ -328,7 +334,9 @@ async function loadProbeStates(
         last_latency_ms,
         last_error,
         consecutive_failures,
-        consecutive_successes
+        consecutive_successes,
+        failure_started_at,
+        recovery_started_at
       FROM monitor_probe_state
       WHERE probe_id = ?1
         AND monitor_id IN (${buildPlaceholders(ids.length, 2)})
@@ -344,12 +352,17 @@ async function loadAggregateStates(db: D1Database, ids: number[]): Promise<Aggre
   const { results } = await db
     .prepare(
       `
-      SELECT s.monitor_id, s.probe_id, s.status, s.last_checked_at, s.last_latency_ms,
-             s.last_error, p.is_required
-      FROM monitor_probe_state s
-      JOIN probes p ON p.id = s.probe_id
+      SELECT m.id AS monitor_id, p.id AS probe_id,
+             COALESCE(s.status, 'unknown') AS status,
+             s.last_checked_at, s.last_latency_ms, s.last_error, p.is_required
+      FROM monitors m
+      CROSS JOIN probes p
+      LEFT JOIN monitor_probe_state s
+        ON s.probe_id = p.id AND s.monitor_id = m.id
       WHERE p.is_enabled = 1
-        AND s.monitor_id IN (${buildPlaceholders(ids.length)})
+        AND m.is_active = 1 AND m.probe_mode = 'multi_region'
+        AND (m.type = 'http' OR p.kind != 'edgeone')
+        AND m.id IN (${buildPlaceholders(ids.length)})
     `,
     )
     .bind(...ids)
@@ -491,6 +504,8 @@ function buildProbeStateStatement(
       update.next.status === 'up' ? null : update.outcome.error,
       update.next.consecutiveFailures,
       update.next.consecutiveSuccesses,
+      update.next.failureStartedAt ?? null,
+      update.next.recoveryStartedAt ?? null,
     );
   }
 
@@ -506,7 +521,9 @@ function buildProbeStateStatement(
         last_latency_ms,
         last_error,
         consecutive_failures,
-        consecutive_successes
+        consecutive_successes,
+        failure_started_at,
+        recovery_started_at
       ) VALUES ${tuples}
       ON CONFLICT(monitor_id, probe_id) DO UPDATE SET
         status = excluded.status,
@@ -515,7 +532,9 @@ function buildProbeStateStatement(
         last_latency_ms = excluded.last_latency_ms,
         last_error = excluded.last_error,
         consecutive_failures = excluded.consecutive_failures,
-        consecutive_successes = excluded.consecutive_successes
+        consecutive_successes = excluded.consecutive_successes,
+        failure_started_at = excluded.failure_started_at,
+        recovery_started_at = excluded.recovery_started_at
       WHERE monitor_probe_state.last_checked_at IS NULL
          OR excluded.last_checked_at >= monitor_probe_state.last_checked_at
     `,
@@ -746,6 +765,8 @@ export async function ingestProbeBatch(input: {
             lastChangedAt: prevRow?.last_changed_at ?? null,
             consecutiveFailures: prevRow?.consecutive_failures ?? 0,
             consecutiveSuccesses: prevRow?.consecutive_successes ?? 0,
+            failureStartedAt: prevRow?.failure_started_at ?? null,
+            recoveryStartedAt: prevRow?.recovery_started_at ?? null,
           };
 
     const outcome = toCheckOutcome(result);
@@ -761,6 +782,8 @@ export async function ingestProbeBatch(input: {
         {
           failuresToDownFromUp: monitor.failures_to_down_from_up,
           successesToUpFromDown: monitor.successes_to_up_from_down,
+          confirmationPeriodSec: monitor.confirmation_period_sec ?? null,
+          recoveryPeriodSec: monitor.recovery_period_sec ?? null,
         },
       ),
     );

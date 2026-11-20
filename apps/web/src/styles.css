@@ -432,6 +432,13 @@ a {
   -moz-appearance: none;
 }
 
+.ui-native-select {
+  appearance: auto;
+  -webkit-appearance: auto;
+  -moz-appearance: auto;
+  padding-right: 12px;
+}
+
 /* Custom dropdown (replaces the native select popup) */
 .ui-select-trigger {
   display: flex;
@@ -589,6 +596,46 @@ a {
 }
 
 /* Inputs keep the reference's 13 px control text inside page editors too. */
+
+.ui-form-collapse-row {
+  height: 31px;
+  padding: 0 8px;
+  border-radius: 8px;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--color-text-secondary);
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.ui-form-collapse-row:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.ui-monitor-escalation-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ui-monitor-escalation-option {
+  display: flex;
+  min-height: 58px;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-card);
+  cursor: pointer;
+}
+
+.ui-monitor-escalation-option[data-selected='true'] {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 6%, var(--color-card));
+}
 
 /* Reference-style submit failure banner: soft status tint, round icon, bold title. */
 .ui-form-banner {
@@ -1079,6 +1126,14 @@ button,
   border-color: var(--color-accent);
   background-color: var(--color-accent);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M2.6 6.4 4.8 8.6 9.4 3.9'/%3E%3C/svg%3E");
+  background-size: 0.75rem 0.75rem;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+.ui-checkbox:indeterminate {
+  border-color: var(--color-accent);
+  background-color: var(--color-accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='white' stroke-width='2' stroke-linecap='round'%3E%3Cpath d='M2.5 6h7'/%3E%3C/svg%3E");
   background-size: 0.75rem 0.75rem;
   background-position: center;
   background-repeat: no-repeat;
@@ -1924,6 +1979,15 @@ button,
   flex: 0 0 auto;
   align-items: center;
   gap: 4px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+.ui-group-head:hover .ui-group-head-actions,
+.ui-group-head:focus-within .ui-group-head-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .ui-group-head-actions .ui-icon-btn {
@@ -2209,7 +2273,7 @@ button,
   color: var(--color-text-primary);
 }
 
-/* Six-dot grip: permanent part of the group header. */
+/* The grip and controls keep their layout space and appear on group hover. */
 .ui-monitor-grip {
   display: inline-grid;
   width: 14px;
@@ -2217,6 +2281,15 @@ button,
   flex: 0 0 auto;
   place-items: center;
   color: var(--color-text-muted);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
+}
+
+.ui-group-head:hover .ui-monitor-grip,
+.ui-group-head:focus-within .ui-monitor-grip {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .ui-monitor-grip svg {
@@ -2289,6 +2362,47 @@ button,
   font-size: 11px;
   line-height: 1;
   color: var(--color-text-muted);
+}
+
+.ui-chart-region-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.ui-chart-region-select {
+  width: auto;
+  min-width: 136px;
+  border: 0;
+  background: var(--color-bg-secondary);
+  box-shadow: none;
+  color: var(--color-text-secondary);
+  padding-right: 28px;
+}
+
+.ui-chart-region-select:hover {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.ui-chart-region-select:focus {
+  box-shadow: var(--focus-ring);
+}
+
+.ui-chart-region-flag {
+  position: absolute;
+  left: 8px;
+  z-index: 1;
+  display: grid;
+  width: 20px;
+  height: 14px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 2px;
+  font-size: 13px;
+  line-height: 1;
+  pointer-events: none;
 }
 
 /* Reference range switch: 64 px segments sharing 1 px borders, square inner edges. */
@@ -2433,38 +2547,73 @@ button,
 
 .ui-incident-grid {
   display: grid;
-  grid-template-columns: minmax(0, 2.1fr) minmax(0, 1.1fr) 9.5rem 7.5rem 2.5rem;
+  grid-template-columns: 1.25rem minmax(0, 2fr) minmax(0, 1fr) 8rem 8rem 1.75rem;
   align-items: center;
   gap: 12px;
   padding: 11px 16px;
 }
 
+.ui-incident-grid-no-selection {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) 8rem 8rem 1.75rem;
+}
+
+.ui-incident-grid-no-selection .ui-incident-select-cell {
+  display: none;
+}
+
 @media (max-width: 1023px) {
   .ui-incident-grid {
-    grid-template-columns: minmax(0, 1fr) 7.5rem 2.5rem;
+    grid-template-columns: 1.25rem minmax(0, 1fr) 7rem 7.5rem 1.75rem;
   }
 
-  .ui-incident-monitors,
-  .ui-incident-grid > *:nth-child(3) {
+  .ui-incident-grid-no-selection {
+    grid-template-columns: minmax(0, 1fr) 7rem 7.5rem 1.75rem;
+  }
+
+  .ui-incident-monitors {
     display: none;
   }
 }
 
 .ui-incident-list {
-  /* Bare list surface: the reference rows sit on the canvas with only a header rule. */
-  background: transparent;
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-card);
+  box-shadow: var(--shadow-card);
 }
 
 .ui-incident-table-head {
-  height: 37px;
+  height: 42px;
   padding-top: 0;
   padding-bottom: 0;
   border-bottom: 1px solid var(--color-border);
   font-size: 13px;
   color: var(--color-text-secondary);
+}
+
+.ui-incident-select-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ui-incident-header-label {
+  font-weight: 500;
+  color: var(--color-text-primary);
+}
+
+.ui-incident-breadcrumb {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--color-bg-secondary);
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1;
 }
 
 /* Reference column headers carry a 26 × 26 sort control. */
@@ -2477,10 +2626,6 @@ button,
 
 .ui-incident-sort-button[aria-pressed='true'] {
   color: var(--color-text-primary);
-}
-
-.ui-incident-table-head > *:first-child {
-  font-weight: 500;
 }
 
 .ui-incident-row {
@@ -2516,10 +2661,41 @@ button,
 }
 
 .ui-incident-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   margin-top: 6px;
   font-size: 11px;
   line-height: 17px;
   color: var(--color-text-muted);
+}
+
+.ui-incident-group-counts {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.ui-incident-group-count {
+  display: inline-flex;
+  min-height: 18px;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.ui-incident-group-count-active {
+  color: var(--color-down);
+  background: color-mix(in srgb, var(--color-down) 12%, transparent);
+}
+
+.ui-incident-group-count-resolved {
+  color: var(--color-text-secondary);
+  background: var(--color-bg-secondary);
 }
 
 .ui-incident-row-state {
@@ -2552,10 +2728,14 @@ button,
 
 @media (max-width: 639px) {
   .ui-incident-grid {
-    grid-template-columns: minmax(0, 1fr) 4.5rem 26px;
+    grid-template-columns: 1.25rem minmax(0, 1fr) 4.5rem 6rem 26px;
     gap: 8px;
     padding-right: 8px;
     padding-left: 8px;
+  }
+
+  .ui-incident-grid-no-selection {
+    grid-template-columns: minmax(0, 1fr) 4.5rem 6rem 26px;
   }
 }
 
@@ -2569,6 +2749,156 @@ button,
   font-size: 13px;
   font-variant-numeric: tabular-nums;
   color: var(--color-text-secondary);
+}
+
+.ui-incident-acknowledged {
+  color: var(--color-text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.ui-incident-acknowledged-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--color-text-secondary);
+}
+
+.ui-incident-acknowledged-value svg {
+  width: 14px;
+  height: 14px;
+  color: var(--color-up);
+}
+
+.ui-incident-bulk-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 20px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 52px;
+  padding: 8px 10px;
+  transform: translateX(-50%);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: var(--color-card);
+  box-shadow: var(--shadow-panel);
+}
+
+.ui-incident-bulk-count {
+  padding: 0 10px 0 4px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.ui-incident-bulk-action {
+  display: inline-flex;
+  height: 34px;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.ui-incident-bulk-action:hover:not(:disabled) {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.ui-incident-bulk-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ui-incident-bulk-close {
+  display: inline-flex;
+  width: 30px;
+  height: 30px;
+  align-items: center;
+  justify-content: center;
+  margin-left: 2px;
+  border-radius: 7px;
+  color: var(--color-text-muted);
+}
+
+.ui-incident-bulk-close:hover:not(:disabled) {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.ui-incident-bulk-close svg {
+  width: 15px;
+  height: 15px;
+}
+
+.ui-incident-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: -24px;
+}
+
+.ui-incident-page-button {
+  display: inline-flex;
+  width: 26px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  transition:
+    background-color 0.12s ease,
+    color 0.12s ease;
+}
+
+.ui-incident-page-button:hover:not(:disabled),
+.ui-incident-page-button[data-active='true'] {
+  background: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
+
+.ui-incident-page-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.ui-incident-page-button svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ui-incident-page-ellipsis {
+  display: inline-flex;
+  width: 20px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-muted);
+  font-size: 13px;
+}
+
+@media (max-width: 767px) {
+  .ui-incident-bulk-bar {
+    right: 12px;
+    left: 12px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    transform: none;
+  }
 }
 
 .ui-incident-status {
@@ -2701,6 +3031,11 @@ button,
 }
 
 /* Automatic monitor events (outages): event | monitor | duration | state */
+.ui-event-timeline-point {
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 5%);
+}
+
 .ui-event-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 10rem 8rem;

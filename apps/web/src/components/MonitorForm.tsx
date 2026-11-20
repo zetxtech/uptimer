@@ -88,6 +88,7 @@ type CommonProps = {
   actionPending?: boolean;
   /** Layout of the form shell: modal dialog or full page surface. */
   variant?: 'modal' | 'page';
+  showBreadcrumb?: boolean;
   isLoading?: boolean;
   error?: string | undefined;
   groupOptions?: string[];
@@ -111,6 +112,7 @@ type EditProps = CommonProps & {
 
 const inputClass = INPUT_CLASS;
 const selectClass = SELECT_CLASS;
+const nativeSelectClass = cn(SELECT_CLASS, 'ui-native-select');
 const textareaClass = TEXTAREA_CLASS;
 type TranslateFn = ReturnType<typeof useI18n>['t'];
 
@@ -542,7 +544,7 @@ function parseOptionalThresholdInput(
   if (!/^\d+$/.test(trimmed)) return { ok: false };
 
   const n = Number.parseInt(trimmed, 10);
-  if (!Number.isFinite(n) || n < 1 || n > 10) return { ok: false };
+  if (!Number.isFinite(n) || n < 0 || n > 86_400) return { ok: false };
 
   return { ok: true, value: n };
 }
@@ -594,6 +596,10 @@ export function MonitorForm(props: CreateProps | EditProps) {
   const formId = useId();
   const monitor = props.monitor;
   const isPage = props.variant === 'page';
+  const showBreadcrumb = props.showBreadcrumb ?? true;
+  const heartbeatStandalone = props.initialType === 'heartbeat' || monitor?.type === 'heartbeat';
+  const initialIntervalSec =
+    monitor?.interval_sec ?? (props.initialType === 'heartbeat' ? 86_400 : 60);
   const groupOptions = useMemo(
     () =>
       [
@@ -615,9 +621,9 @@ export function MonitorForm(props: CreateProps | EditProps) {
   const [type, setType] = useState<MonitorType>(monitor?.type ?? props.initialType ?? 'http');
   const [target, setTarget] = useState(monitor?.target ?? '');
   const [displayUrl, setDisplayUrl] = useState(monitor?.display_url ?? '');
-  const [intervalInput, setIntervalInput] = useState(String(monitor?.interval_sec ?? 60));
+  const [intervalInput, setIntervalInput] = useState(String(initialIntervalSec));
   const [heartbeatUnit, setHeartbeatUnit] = useState<HeartbeatUnit>(() =>
-    heartbeatUnitFor(monitor?.interval_sec ?? 60),
+    heartbeatUnitFor(initialIntervalSec),
   );
   const [heartbeatGraceInput, setHeartbeatGraceInput] = useState(
     monitor?.heartbeat_grace_sec === null || monitor?.heartbeat_grace_sec === undefined
@@ -628,15 +634,15 @@ export function MonitorForm(props: CreateProps | EditProps) {
     heartbeatUnitFor(monitor?.heartbeat_grace_sec ?? 300),
   );
   const [timeoutInput, setTimeoutInput] = useState(String(monitor?.timeout_ms ?? 10000));
-  const [failuresToDownInput, setFailuresToDownInput] = useState(
-    monitor?.failures_to_down_from_up === null || monitor?.failures_to_down_from_up === undefined
-      ? ''
-      : String(monitor.failures_to_down_from_up),
+  const [failuresToDownInput, setFailuresToDownInput] = useState(() =>
+    String(monitor?.confirmation_period_sec ??
+      (Math.max(1, monitor?.failures_to_down_from_up ??
+        props.stateThresholdDefaults?.failuresToDownFromUp ?? 2) - 1) * initialIntervalSec),
   );
-  const [successesToUpInput, setSuccessesToUpInput] = useState(
-    monitor?.successes_to_up_from_down === null || monitor?.successes_to_up_from_down === undefined
-      ? ''
-      : String(monitor.successes_to_up_from_down),
+  const [successesToUpInput, setSuccessesToUpInput] = useState(() =>
+    String(monitor?.recovery_period_sec ??
+      (Math.max(1, monitor?.successes_to_up_from_down ??
+        props.stateThresholdDefaults?.successesToUpFromDown ?? 2) - 1) * initialIntervalSec),
   );
   const [httpMethod, setHttpMethod] = useState<HttpMethod>(
     toHttpMethod(monitor?.http_method ?? 'GET'),
@@ -664,9 +670,18 @@ export function MonitorForm(props: CreateProps | EditProps) {
       (!monitor.show_on_status_page ||
         (monitor.display_url ?? '').length > 0 ||
         (monitor.group_name ?? '').length > 0 ||
+        monitor.group_sort_order !== 0 ||
+        monitor.sort_order !== 0 ||
         monitor.maintenance_window !== null ||
+        monitor.failures_to_down_from_up !== null ||
+        monitor.successes_to_up_from_down !== null ||
+        monitor.ssl_expiry_enabled ||
+        monitor.domain_expiry_enabled ||
+        monitor.keep_cookies ||
         (monitor.type === 'http' &&
-          (!monitor.follow_redirects ||
+          (monitor.http_method !== 'GET' ||
+            monitor.timeout_ms !== 10000 ||
+            !monitor.follow_redirects ||
             Object.keys(monitor.http_headers_json ?? {}).length > 0 ||
             (monitor.http_body ?? '').length > 0 ||
             (monitor.expected_status_json ?? null) !== null ||
@@ -674,6 +689,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
             (monitor.response_keyword ?? '').length > 0 ||
             (monitor.response_forbidden_keyword ?? '').length > 0))),
   );
+  const [showMetadata, setShowMetadata] = useState(() => (monitor?.metadata?.length ?? 0) > 0);
 
   const [headerRows, setHeaderRows] = useState<KeyValueRow[]>(() => initialHeaderRows(monitor));
   const [authUsername, setAuthUsername] = useState(() => initialBasicAuth(monitor)?.username ?? '');
@@ -925,11 +941,9 @@ export function MonitorForm(props: CreateProps | EditProps) {
         ? httpHeadersParse.error
         : !maintenanceParse.ok
           ? maintenanceParse.error
-          : !metadataParse.ok
-            ? metadataParse.error
-            : !advancedHttpValid
-              ? t('monitor_form.advanced_errors')
-              : undefined;
+          : !advancedHttpValid
+            ? t('monitor_form.advanced_errors')
+            : undefined;
 
   const derivedName = monitorNameFromTarget(target);
 
@@ -1006,11 +1020,11 @@ export function MonitorForm(props: CreateProps | EditProps) {
       // Opening the collapsed section is what makes the offending field reachable.
       if (
         (type === 'http' && (!httpHeadersParse.ok || !advancedHttpValid)) ||
-        !maintenanceParse.ok ||
-        !metadataParse.ok
+        !maintenanceParse.ok
       ) {
         setShowAdvanced(true);
       }
+      if (!metadataParse.ok) setShowMetadata(true);
       return;
     }
 
@@ -1029,8 +1043,8 @@ export function MonitorForm(props: CreateProps | EditProps) {
       timeout_ms: timeoutMs,
       display_url: displayUrlParse.ok ? displayUrlParse.value : null,
       ...(type === 'heartbeat' ? { heartbeat_grace_sec: heartbeatGraceSec } : {}),
-      failures_to_down_from_up: failuresToDown,
-      successes_to_up_from_down: successesToUp,
+      confirmation_period_sec: failuresToDown,
+      recovery_period_sec: successesToUp,
       notification_channel_ids: notificationChannelIds,
       maintenance_window: maintenanceWindow,
       metadata,
@@ -1148,7 +1162,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
           isPage ? 'ui-form-page max-w-[1040px] px-5 pb-8 pt-10 md:pt-14' : 'px-5 py-5 sm:px-6',
         )}
       >
-        {isPage && (
+        {isPage && showBreadcrumb ? (
           <nav className="flex items-center gap-1 text-[13px] text-ink-2">
             <button
               type="button"
@@ -1172,7 +1186,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
               </>
             ) : null}
           </nav>
-        )}
+        ) : null}
 
         <h1 className={cn('ui-page-title', isPage ? 'mt-5' : 'mt-1')}>
           {monitor && isPage
@@ -1285,28 +1299,34 @@ export function MonitorForm(props: CreateProps | EditProps) {
         <div className="mt-10 space-y-8 min-[900px]:space-y-10">
           <FormGroup
             label={t('monitor_form.section_target')}
-            description={t('monitor_form.section_target_hint')}
+            description={
+              type === 'heartbeat'
+                ? t('monitor_form.subtitle_heartbeat')
+                : t('monitor_form.section_target_hint')
+            }
             first
             last
           >
-            <FormField htmlFor={`${formId}-kind`} label={t('monitor_form.alert_when')}>
-              <Select
-                id={`${formId}-kind`}
-                value={kind}
-                onChange={(next) => selectKind(next as CheckKind)}
-                disabled={!!monitor}
-                className={selectClass}
-              >
-                <option value="url_down">{t('monitor_form.kind_url_down')}</option>
-                <option value="url_status">{t('monitor_form.kind_url_status')}</option>
-                <option value="url_lacks_keyword">
-                  {t('monitor_form.kind_url_lacks_keyword')}
-                </option>
-                <option value="url_has_keyword">{t('monitor_form.kind_url_has_keyword')}</option>
-                <option value="host_ping">{t('monitor_form.kind_host_ping')}</option>
-                <option value="heartbeat">{t('monitor_form.kind_heartbeat')}</option>
-              </Select>
-            </FormField>
+            {!heartbeatStandalone ? (
+              <FormField htmlFor={`${formId}-kind`} label={t('monitor_form.alert_when')}>
+                <select
+                  id={`${formId}-kind`}
+                  value={kind}
+                  onChange={(event) => selectKind(event.target.value as CheckKind)}
+                  disabled={!!monitor}
+                  className={cn(nativeSelectClass, 'max-w-[280px]')}
+                >
+                  <option value="url_down">{t('monitor_form.kind_url_down')}</option>
+                  <option value="url_lacks_keyword">
+                    {t('monitor_form.kind_url_lacks_keyword')}
+                  </option>
+                  <option value="url_has_keyword">{t('monitor_form.kind_url_has_keyword')}</option>
+                  <option value="url_status">{t('monitor_form.kind_url_status')}</option>
+                  <option value="host_ping">{t('monitor_form.kind_host_ping')}</option>
+                  <option value="heartbeat">{t('monitor_form.kind_heartbeat')}</option>
+                </select>
+              </FormField>
+            ) : null}
 
             {type === 'http' ? (
               <>
@@ -1420,6 +1440,23 @@ export function MonitorForm(props: CreateProps | EditProps) {
               </FormField>
             ) : (
               <>
+                <FormField
+                  htmlFor={`${formId}-name`}
+                  label={t('monitor_form.heartbeat_name')}
+                  error={
+                    attempted && name.trim().length === 0 ? t('monitor_form.issue_name') : undefined
+                  }
+                >
+                  <input
+                    id={`${formId}-name`}
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={t('monitor_form.name_placeholder')}
+                    className={inputClass}
+                  />
+                </FormField>
+
                 <div className="flex flex-col sm:flex-row sm:items-center">
                   <div className="flex-1">
                     <label
@@ -1448,12 +1485,12 @@ export function MonitorForm(props: CreateProps | EditProps) {
                       />
                     </div>
                     <div className="w-fit min-w-[120px]">
-                      <Select
+                      <select
                         id={`${formId}-interval-unit`}
                         value={heartbeatUnit}
-                        onChange={(next) => {
+                        onChange={(event) => {
                           const shown = Number(intervalInput) / heartbeatUnitSeconds;
-                          const nextUnit = next as HeartbeatUnit;
+                          const nextUnit = event.target.value as HeartbeatUnit;
                           setHeartbeatUnit(nextUnit);
                           const nextSeconds =
                             HEARTBEAT_UNITS.find((unit) => unit.id === nextUnit)?.seconds ?? 1;
@@ -1461,7 +1498,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
                             String(Math.round((Number.isFinite(shown) ? shown : 1) * nextSeconds)),
                           );
                         }}
-                        className={selectClass}
+                        className={nativeSelectClass}
                         aria-label={t('monitor_form.heartbeat_every')}
                       >
                         {HEARTBEAT_UNITS.map((unit) => (
@@ -1469,7 +1506,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
                             {t(unit.label)}
                           </option>
                         ))}
-                      </Select>
+                      </select>
                     </div>
                     {attempted && !intervalValid && (
                       <p className="ui-error mt-0 whitespace-nowrap">
@@ -1513,12 +1550,12 @@ export function MonitorForm(props: CreateProps | EditProps) {
                       />
                     </div>
                     <div className="w-fit min-w-[120px]">
-                      <Select
+                      <select
                         id={`${formId}-grace-unit`}
                         value={heartbeatGraceUnit}
-                        onChange={(next) => {
+                        onChange={(event) => {
                           const shown = Number(heartbeatGraceInput) / heartbeatGraceUnitSeconds;
-                          const nextUnit = next as HeartbeatUnit;
+                          const nextUnit = event.target.value as HeartbeatUnit;
                           setHeartbeatGraceUnit(nextUnit);
                           const nextSeconds =
                             HEARTBEAT_UNITS.find((unit) => unit.id === nextUnit)?.seconds ?? 1;
@@ -1526,7 +1563,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
                             String(Math.round((Number.isFinite(shown) ? shown : 1) * nextSeconds)),
                           );
                         }}
-                        className={selectClass}
+                        className={nativeSelectClass}
                         aria-label={t('monitor_form.heartbeat_grace')}
                       >
                         {HEARTBEAT_UNITS.map((unit) => (
@@ -1534,7 +1571,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
                             {t(unit.label)}
                           </option>
                         ))}
-                      </Select>
+                      </select>
                     </div>
                   </div>
                 </div>
@@ -1552,8 +1589,11 @@ export function MonitorForm(props: CreateProps | EditProps) {
             first
             last
           >
-            <div className="space-y-3">
-              <label className="flex cursor-pointer items-start gap-2.5">
+            <div className="ui-monitor-escalation-options">
+              <label
+                className="ui-monitor-escalation-option"
+                data-selected={escalationMode === 'all'}
+              >
                 <input
                   type="radio"
                   name={`${formId}-escalation`}
@@ -1565,13 +1605,16 @@ export function MonitorForm(props: CreateProps | EditProps) {
                   <span className="block text-[14px] font-medium leading-5 text-ink">
                     {t('monitor_form.escalation_all_channels')}
                   </span>
-                  <span className="mt-0.5 block text-[13px] leading-5 text-ink-2">
+                  <span className="mt-0.5 block text-[12px] leading-[18px] text-ink-2">
                     {t('monitor_form.escalation_all_channels_help')}
                   </span>
                 </span>
               </label>
 
-              <label className="flex cursor-pointer items-start gap-2.5">
+              <label
+                className="ui-monitor-escalation-option"
+                data-selected={escalationMode === 'selected'}
+              >
                 <input
                   type="radio"
                   name={`${formId}-escalation`}
@@ -1583,7 +1626,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
                   <span className="block text-[14px] font-medium leading-5 text-ink">
                     {t('monitor_form.escalation_selected_channels')}
                   </span>
-                  <span className="mt-0.5 block text-[13px] leading-5 text-ink-2">
+                  <span className="mt-0.5 block text-[12px] leading-[18px] text-ink-2">
                     {t('monitor_form.escalation_selected_channels_help')}
                   </span>
                 </span>
@@ -1631,10 +1674,13 @@ export function MonitorForm(props: CreateProps | EditProps) {
               </div>
             ) : null}
           </FormGroup>
+        </div>
 
+        <div className="mt-10 space-y-2">
           <FormCollapse
             id={`${formId}-advanced`}
             title={t('monitor_form.section_advanced')}
+            compact
             open={showAdvanced}
             onToggle={() => setShowAdvanced((previous) => !previous)}
             error={advancedError}
@@ -1646,25 +1692,27 @@ export function MonitorForm(props: CreateProps | EditProps) {
                 first
                 last={false}
               >
-                <FormField
-                  htmlFor={`${formId}-name`}
-                  label={t('monitor_form.monitor_name')}
-                  help={t('monitor_form.monitor_name_help')}
-                  error={
-                    attempted && name.trim().length === 0 && derivedName.length === 0
-                      ? t('monitor_form.issue_name')
-                      : undefined
-                  }
-                >
-                  <input
-                    id={`${formId}-name`}
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder={t('monitor_form.name_placeholder')}
-                    className={inputClass}
-                  />
-                </FormField>
+                {type === 'heartbeat' ? null : (
+                  <FormField
+                    htmlFor={`${formId}-name`}
+                    label={t('monitor_form.monitor_name')}
+                    help={t('monitor_form.monitor_name_help')}
+                    error={
+                      attempted && name.trim().length === 0 && derivedName.length === 0
+                        ? t('monitor_form.issue_name')
+                        : undefined
+                    }
+                  >
+                    <input
+                      id={`${formId}-name`}
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder={t('monitor_form.name_placeholder')}
+                      className={inputClass}
+                    />
+                  </FormField>
+                )}
 
                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-x-8">
                   <FormField
@@ -1675,12 +1723,12 @@ export function MonitorForm(props: CreateProps | EditProps) {
                     <input
                       id={`${formId}-failures-to-down`}
                       type="number"
-                      min={1}
-                      max={10}
+                      min={0}
+                      max={86400}
                       value={failuresToDownInput}
                       onChange={(e) => setFailuresToDownInput(e.target.value)}
                       placeholder={thresholdPlaceholder(
-                        props.stateThresholdDefaults?.failuresToDownFromUp,
+                        Math.max(0, ((props.stateThresholdDefaults?.failuresToDownFromUp ?? 2) - 1) * intervalSec),
                       )}
                       className={cn(inputClass, 'font-mono tabular-nums')}
                     />
@@ -1694,12 +1742,12 @@ export function MonitorForm(props: CreateProps | EditProps) {
                     <input
                       id={`${formId}-successes-to-up`}
                       type="number"
-                      min={1}
-                      max={10}
+                      min={0}
+                      max={86400}
                       value={successesToUpInput}
                       onChange={(e) => setSuccessesToUpInput(e.target.value)}
                       placeholder={thresholdPlaceholder(
-                        props.stateThresholdDefaults?.successesToUpFromDown,
+                        Math.max(0, ((props.stateThresholdDefaults?.successesToUpFromDown ?? 2) - 1) * intervalSec),
                       )}
                       className={cn(inputClass, 'font-mono tabular-nums')}
                     />
@@ -1794,10 +1842,10 @@ export function MonitorForm(props: CreateProps | EditProps) {
                   {sslExpiryEnabled ? (
                     <label className="block max-w-[280px] text-[12px] font-medium text-ink-2">
                       {t('monitor_form.expiry_alert_days')}
-                      <Select
+                      <select
                         value={sslAlertDays}
-                        onChange={setSslAlertDays}
-                        className={cn(selectClass, 'mt-1.5')}
+                        onChange={(event) => setSslAlertDays(event.target.value)}
+                        className={cn(nativeSelectClass, 'mt-1.5 max-w-[280px]')}
                         aria-label={t('monitor_form.expiry_alert_days')}
                       >
                         <option value="">{t('monitor_form.expiry_alert_days_default')}</option>
@@ -1806,7 +1854,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
                             {t('monitor_form.expiry_alert_days_value', { days })}
                           </option>
                         ))}
-                      </Select>
+                      </select>
                     </label>
                   ) : null}
                   {sslExpiryEnabled && monitor ? (
@@ -1839,10 +1887,10 @@ export function MonitorForm(props: CreateProps | EditProps) {
                   {domainExpiryEnabled ? (
                     <label className="block max-w-[280px] text-[12px] font-medium text-ink-2">
                       {t('monitor_form.expiry_alert_days')}
-                      <Select
+                      <select
                         value={domainAlertDays}
-                        onChange={setDomainAlertDays}
-                        className={cn(selectClass, 'mt-1.5')}
+                        onChange={(event) => setDomainAlertDays(event.target.value)}
+                        className={cn(nativeSelectClass, 'mt-1.5 max-w-[280px]')}
                         aria-label={t('monitor_form.expiry_alert_days')}
                       >
                         <option value="">{t('monitor_form.expiry_alert_days_default')}</option>
@@ -1851,7 +1899,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
                             {t('monitor_form.expiry_alert_days_value', { days })}
                           </option>
                         ))}
-                      </Select>
+                      </select>
                     </label>
                   ) : null}
                   {domainExpiryEnabled && monitor ? (
@@ -1908,11 +1956,11 @@ export function MonitorForm(props: CreateProps | EditProps) {
                         label={t('monitor_form.method')}
                         help={t('monitor_form.method_help')}
                       >
-                        <Select
+                        <select
                           id={`${formId}-method`}
                           value={httpMethod}
-                          onChange={(next) => setHttpMethod(toHttpMethod(next))}
-                          className={selectClass}
+                          onChange={(event) => setHttpMethod(toHttpMethod(event.target.value))}
+                          className={nativeSelectClass}
                         >
                           <option value="GET">GET</option>
                           <option value="POST">POST</option>
@@ -1920,7 +1968,7 @@ export function MonitorForm(props: CreateProps | EditProps) {
                           <option value="PATCH">PATCH</option>
                           <option value="DELETE">DELETE</option>
                           <option value="HEAD">HEAD</option>
-                        </Select>
+                        </select>
                       </FormField>
 
                       <FormField
@@ -2106,15 +2154,17 @@ export function MonitorForm(props: CreateProps | EditProps) {
                         htmlFor={`${formId}-required-mode`}
                         label={t('monitor_form.match_mode')}
                       >
-                        <Select
+                        <select
                           id={`${formId}-required-mode`}
                           value={responseKeywordMode}
-                          onChange={(next) => setResponseKeywordMode(next as HttpResponseMatchMode)}
-                          className={selectClass}
+                          onChange={(event) =>
+                            setResponseKeywordMode(event.target.value as HttpResponseMatchMode)
+                          }
+                          className={nativeSelectClass}
                         >
                           <option value="contains">{t('monitor_form.match_mode_contains')}</option>
                           <option value="regex">{t('monitor_form.match_mode_regex')}</option>
-                        </Select>
+                        </select>
                       </FormField>
                     </div>
 
@@ -2146,17 +2196,19 @@ export function MonitorForm(props: CreateProps | EditProps) {
                         htmlFor={`${formId}-forbidden-mode`}
                         label={t('monitor_form.match_mode')}
                       >
-                        <Select
+                        <select
                           id={`${formId}-forbidden-mode`}
                           value={responseForbiddenKeywordMode}
-                          onChange={(next) =>
-                            setResponseForbiddenKeywordMode(next as HttpResponseMatchMode)
+                          onChange={(event) =>
+                            setResponseForbiddenKeywordMode(
+                              event.target.value as HttpResponseMatchMode,
+                            )
                           }
-                          className={selectClass}
+                          className={nativeSelectClass}
                         >
                           <option value="contains">{t('monitor_form.match_mode_contains')}</option>
                           <option value="regex">{t('monitor_form.match_mode_regex')}</option>
-                        </Select>
+                        </select>
                       </FormField>
                     </div>
 
@@ -2354,25 +2406,6 @@ export function MonitorForm(props: CreateProps | EditProps) {
               ) : null}
 
               <FormGroup
-                label={t('monitor_form.section_metadata')}
-                description={t('monitor_form.metadata_hint')}
-                first={false}
-                last={false}
-              >
-                <div>
-                  <KeyValueRows
-                    rows={metadataRows}
-                    onChange={setMetadataRows}
-                    nameLabel={t('monitor_form.metadata_name')}
-                    valueLabel={t('monitor_form.metadata_value')}
-                    addLabel={t('monitor_form.add_metadata')}
-                    removeLabel={t('monitor_form.remove_row')}
-                  />
-                  {metadataParse.ok ? null : <p className="ui-error">{metadataParse.error}</p>}
-                </div>
-              </FormGroup>
-
-              <FormGroup
                 label={t('monitor_form.grouping_section')}
                 description={t('monitor_form.grouping_hint')}
                 first={false}
@@ -2433,6 +2466,30 @@ export function MonitorForm(props: CreateProps | EditProps) {
                   </FormField>
                 </div>
               </FormGroup>
+            </div>
+          </FormCollapse>
+
+          <FormCollapse
+            id={`${formId}-metadata`}
+            title={t('monitor_form.section_metadata')}
+            compact
+            open={showMetadata}
+            onToggle={() => setShowMetadata((previous) => !previous)}
+            error={metadataParse.ok ? undefined : metadataParse.error}
+          >
+            <div className="rounded-xl border border-line bg-surface p-6">
+              <p className="mb-5 text-[14px] leading-[21.7px] text-ink-2">
+                {t('monitor_form.metadata_hint')}
+              </p>
+              <KeyValueRows
+                rows={metadataRows}
+                onChange={setMetadataRows}
+                nameLabel={t('monitor_form.metadata_name')}
+                valueLabel={t('monitor_form.metadata_value')}
+                addLabel={t('monitor_form.add_metadata')}
+                removeLabel={t('monitor_form.remove_row')}
+              />
+              {metadataParse.ok ? null : <p className="ui-error">{metadataParse.error}</p>}
             </div>
           </FormCollapse>
         </div>
