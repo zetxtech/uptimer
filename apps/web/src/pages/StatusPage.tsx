@@ -291,28 +291,48 @@ function IncidentDetail({
 }
 
 function StatusPageSkeleton() {
+  const { t } = useI18n();
+
   return (
     <div className="min-h-screen bg-surface">
       <PublicStatusHeader />
-      <main className="ui-public-container py-10 sm:py-14" aria-busy="true">
-        <div className="ui-skeleton h-9 w-3/4 rounded sm:w-1/2" />
-        <div className="ui-skeleton mt-3 h-4 w-44 rounded" />
-        <div className="mt-12 divide-y divide-line-soft">
-          {Array.from({ length: 4 }).map((_, idx) => (
-            <div key={idx} className="py-6">
-              <div className="mb-3 flex justify-between">
-                <div className="ui-skeleton h-4 w-32 rounded" />
-                <div className="ui-skeleton h-4 w-14 rounded" />
+      <main
+        className="ui-public-container break-words pb-12 sm:pb-16"
+        aria-busy="true"
+        aria-label={t('common.loading')}
+      >
+        <section className="flex flex-col items-center pb-12 pt-16 text-center sm:pt-20">
+          <div className="ui-skeleton h-10 w-10 rounded-full" />
+          <div className="ui-skeleton mt-2 h-[34px] w-64 max-w-[85%] rounded" />
+          <div className="ui-skeleton mt-3 h-[16px] w-48 max-w-[70%] rounded" />
+        </section>
+
+        <section className="overflow-hidden rounded-xl border border-line bg-surface">
+          <div className="flex min-h-12 items-center justify-between bg-surface-2 px-4 py-3 sm:px-5">
+            <div className="ui-skeleton h-4 w-28 rounded" />
+            <div className="ui-skeleton h-3 w-16 rounded" />
+          </div>
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div
+              key={index}
+              className="border-b border-line-soft px-4 py-3.5 sm:px-5 sm:py-4"
+            >
+              <div className="mb-2.5 flex items-center justify-between gap-3">
+                <div className="ui-skeleton h-[16px] w-44 max-w-[65%] rounded" />
+                <div className="ui-skeleton h-[13px] w-20 rounded" />
               </div>
-              <div className="ui-skeleton h-5 rounded" />
-              <div className="mt-2 flex justify-between">
-                <div className="ui-skeleton h-3 w-16 rounded" />
-                <div className="ui-skeleton h-3 w-10 rounded" />
+              <div data-bar-count="60" className="ui-public-uptime-history flex h-[19px] gap-[2px] sm:h-[20px]">
+                {Array.from({ length: 60 }).map((_, bar) => (
+                  <div key={bar} className="ui-skeleton h-full min-w-0 flex-1 rounded-[2px]" />
+                ))}
               </div>
-              <div className="ui-skeleton mt-3 h-3 w-12 rounded" />
             </div>
           ))}
-        </div>
+          <div className="flex justify-between px-4 pb-3 pt-2 sm:px-5">
+            <div className="ui-skeleton h-3 w-16 rounded" />
+            <div className="ui-skeleton h-3 w-10 rounded" />
+          </div>
+        </section>
       </main>
     </div>
   );

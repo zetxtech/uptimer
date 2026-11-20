@@ -18,6 +18,7 @@ declare global {
 
 const LS_PUBLIC_HOMEPAGE_KEY = 'uptimer_public_homepage_snapshot_v2';
 const LS_PUBLIC_STATUS_KEY = 'uptimer_public_status_snapshot_v1';
+const MAX_BOOTSTRAP_CACHE_AGE_MS = 30_000;
 
 type PersistedHomepageCache = {
   at: number;
@@ -47,7 +48,12 @@ function readPersistedHomepageCache(): PublicHomepageResponse | null {
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object') return null;
 
-    const value = (parsed as { value?: unknown }).value;
+    const payload = parsed as { at?: unknown; value?: unknown };
+    if (typeof payload.at !== 'number' || !Number.isFinite(payload.at)) return null;
+    if (payload.at > Date.now() || Date.now() - payload.at > MAX_BOOTSTRAP_CACHE_AGE_MS) {
+      return null;
+    }
+    const value = payload.value;
     if (!value || typeof value !== 'object') return null;
     if (typeof (value as { generated_at?: unknown }).generated_at !== 'number') return null;
     return value as PublicHomepageResponse;
@@ -63,10 +69,14 @@ function readPersistedStatusCache(): StatusResponse | null {
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object') return null;
 
-    const value = (parsed as { value?: unknown }).value;
+    const payload = parsed as { at?: unknown; value?: unknown };
+    if (typeof payload.at !== 'number' || !Number.isFinite(payload.at)) return null;
+    if (payload.at > Date.now() || Date.now() - payload.at > MAX_BOOTSTRAP_CACHE_AGE_MS) {
+      return null;
+    }
+    const value = payload.value;
     if (!value || typeof value !== 'object') return null;
 
-    // Minimal shape check.
     if (typeof (value as { generated_at?: unknown }).generated_at !== 'number') return null;
 
     return value as StatusResponse;
@@ -172,7 +182,9 @@ if (seedHomepage) {
     typeof seedHomepage.generated_at === 'number' ? seedHomepage.generated_at * 1000 : Date.now();
 
   queryClient.setQueryData<PublicHomepageResponse>(['homepage'], seedHomepage, { updatedAt });
-  writePersistedHomepageCache(seedHomepage);
+  if (initialHomepage) {
+    writePersistedHomepageCache(initialHomepage);
+  }
 }
 
 function PreloadCleanup() {
