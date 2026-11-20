@@ -14,10 +14,14 @@ import {
 import type { Incident, IncidentSummary, Outage, PublicHomepageResponse } from '../api/types';
 import { DayDowntimeModal } from '../components/DayDowntimeModal';
 import { Markdown } from '../components/Markdown';
-import { MonitorCard } from '../components/MonitorCard';
+import {
+  AVAILABILITY_BARS,
+  MOBILE_AVAILABILITY_BARS,
+  MonitorCard,
+} from '../components/MonitorCard';
 import { PublicDialog } from '../components/PublicDialog';
 import { PublicStatusHeader } from '../components/PublicStatusHeader';
-import { incidentImpactLabel, incidentStatusLabel, statusLabel } from '../i18n/labels';
+import { incidentImpactLabel, incidentStatusLabel } from '../i18n/labels';
 import { formatDateTime, getBrowserTimeZone } from '../utils/datetime';
 import { Badge, Card } from '../components/ui';
 
@@ -300,7 +304,7 @@ function StatusPageSkeleton() {
                 <div className="ui-skeleton h-4 w-32 rounded" />
                 <div className="ui-skeleton h-4 w-14 rounded" />
               </div>
-              <div className="ui-skeleton h-8 rounded" />
+              <div className="ui-skeleton h-5 rounded" />
               <div className="mt-2 flex justify-between">
                 <div className="ui-skeleton h-3 w-16 rounded" />
                 <div className="ui-skeleton h-3 w-10 rounded" />
@@ -577,53 +581,60 @@ export function StatusPage() {
         {/* Monitors */}
         <section>
           <h2 className="sr-only">{t('status_page.services')}</h2>
-          <div className="rounded-xl border border-line bg-surface px-3 py-2">
-            {groupedMonitors.map((group) => {
-              const groupStatus =
-                (['down', 'maintenance', 'unknown', 'paused', 'up'] as const).find((status) =>
-                  group.monitors.some((monitor) => monitor.status === status),
-                ) ?? 'unknown';
-              return (
-                <details
-                  key={group.name}
-                  open
-                  className="ui-public-group border-t border-line-soft first:border-t-0"
-                >
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded px-3 py-3 text-[13px] font-medium text-ink hover:bg-surface-2 sm:px-4 [&::-webkit-details-marker]:hidden">
-                    <span className="min-w-0 truncate">
+          <div className="overflow-hidden rounded-xl border border-line bg-surface">
+            {groupedMonitors.map((group) => (
+              <details
+                key={group.name}
+                open
+                className="ui-public-group border-t border-line-soft first:border-t-0"
+              >
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 bg-surface-2 px-4 py-3 text-[13px] font-medium text-ink transition-colors hover:bg-surface-2 sm:px-5 [&::-webkit-details-marker]:hidden">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <svg
+                      className="ui-public-group-chevron h-4 w-4 shrink-0 text-ink-3 transition-transform"
+                      viewBox="0 0 20 20"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.5}
+                      aria-hidden
+                    >
+                      <path d="m6 8 4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    <span className="truncate">
                       {group.name === t('status_page.group_ungrouped') ? siteTitle : group.name}
                     </span>
-                    <span className="flex shrink-0 items-center gap-3">
-                      <Badge variant={groupStatus}>{statusLabel(groupStatus, t)}</Badge>
-                      <svg
-                        className="ui-public-group-chevron h-4 w-4 text-ink-3"
-                        viewBox="0 0 20 20"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={1.5}
-                        aria-hidden
-                      >
-                        <path d="m6 8 4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
-                    </span>
-                  </summary>
-                  <div className="min-w-0 px-2 sm:px-3">
-                    {group.monitors.map((monitor) => (
-                      <MonitorCard
-                        key={monitor.id}
-                        monitor={monitor}
-                        ratingLevel={data.uptime_rating_level}
-                        timeZone={timeZone}
-                        onSelect={() => setSelectedMonitorId(monitor.id)}
-                        onDayClick={(dayStartAt) =>
-                          setSelectedDay({ monitorId: monitor.id, dayStartAt })
-                        }
-                      />
-                    ))}
-                  </div>
-                </details>
-              );
-            })}
+                  </span>
+                  <span className="shrink-0 text-[11px] font-normal text-ink-3">
+                    {group.monitors.length} {t('status_page.services')}
+                  </span>
+                </summary>
+                <div className="min-w-0">
+                  {group.monitors.map((monitor) => (
+                    <MonitorCard
+                      key={monitor.id}
+                      monitor={monitor}
+                      ratingLevel={data.uptime_rating_level}
+                      timeZone={timeZone}
+                      onSelect={() => setSelectedMonitorId(monitor.id)}
+                      onDayClick={(dayStartAt) =>
+                        setSelectedDay({ monitorId: monitor.id, dayStartAt })
+                      }
+                    />
+                  ))}
+                  {group.monitors.length > 0 && (
+                    <div className="flex items-center justify-between px-4 pb-3 pt-2 text-[11px] text-ink-3 sm:px-5">
+                      <span className="sm:hidden">
+                        {t('monitor_card.range_start', { count: MOBILE_AVAILABILITY_BARS })}
+                      </span>
+                      <span className="hidden sm:inline">
+                        {t('monitor_card.range_start', { count: AVAILABILITY_BARS })}
+                      </span>
+                      <span>{t('monitor_card.range_end')}</span>
+                    </div>
+                  )}
+                </div>
+              </details>
+            ))}
           </div>
           {data.monitors.length === 0 && (
             <Card className="p-8 text-center">

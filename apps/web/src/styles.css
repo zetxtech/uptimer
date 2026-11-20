@@ -208,6 +208,16 @@ body {
   transform: rotate(180deg);
 }
 
+.ui-public-uptime-history > * {
+  min-width: 0;
+}
+
+@media (max-width: 639px) {
+  .ui-public-uptime-history[data-bar-count='60'] > :nth-child(-n + 30) {
+    display: none;
+  }
+}
+
 @media (max-width: 639px) {
   .ui-public-title {
     font-size: 20px;

@@ -157,7 +157,7 @@ function Tooltip({
 
   return (
     <div
-      className="fixed z-50 px-3 py-2 text-xs bg-surface dark:bg-surface-2 text-white rounded-lg shadow-lg pointer-events-none animate-fade-in"
+      className="pointer-events-none fixed z-50 min-w-[168px] animate-fade-in rounded-lg bg-ink px-3 py-2.5 text-xs text-surface shadow-lg"
       style={{
         left: position.x,
         top: position.y,
@@ -172,15 +172,15 @@ function Tooltip({
           {t('uptime.uptime')}
         </span>
       </div>
-      <div className="mt-1 text-ink-2">
+      <div className="mt-1 opacity-75">
         {t('uptime.downtime')}: {formatSec(day.downtime_sec)}
       </div>
       {day.unknown_sec > 0 && (
-        <div className="text-ink-2">
+        <div className="opacity-75">
           {t('uptime.unknown')}: {formatSec(day.unknown_sec)}
         </div>
       )}
-      <div className="absolute left-1/2 -bottom-1 -translate-x-1/2 w-2 h-2 bg-surface dark:bg-surface-2 rotate-45" />
+      <div className="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-ink" />
     </div>
   );
 }
@@ -258,12 +258,18 @@ export function UptimeBar30d({
   return (
     <>
       {variant === 'block' ? (
-        <div data-bar-chart className={cn('flex w-full items-stretch', blockClassName ?? 'h-8')}>
+        <div
+          data-bar-chart
+          data-bar-count={slotCount}
+          className={cn(
+            'ui-public-uptime-history flex w-full items-stretch gap-[2px]',
+            blockClassName ?? 'h-5',
+          )}
+        >
           {slots.map((slot, index) => {
             const day = slot.day;
             const blockClass = cn(
-              'mr-px h-full flex-1 first:rounded-l-[4px] last:mr-0 last:rounded-r-[4px]',
-              'rounded-[1px] transition-opacity',
+              'min-w-0 flex-1 rounded-[2px] transition-opacity duration-150',
               day && day.uptime_pct !== null
                 ? getUptimeBgClasses(getUptimeTier(day.uptime_pct, ratingLevel))
                 : 'bg-surface-2',
@@ -274,7 +280,7 @@ export function UptimeBar30d({
                 key={`day-${day.day_start_at}-${index}`}
                 type="button"
                 aria-label={`${t('uptime.aria_prefix')}: ${formatDay(day.day_start_at, timeZone, locale)}`}
-                className={cn(blockClass, 'hover:opacity-70 focus:outline-none')}
+                className={cn(blockClass, 'hover:opacity-75 focus-visible:relative focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink')}
                 onMouseEnter={(event) => showTooltip(day, index, event.currentTarget)}
                 onFocus={(event) => showTooltip(day, index, event.currentTarget)}
                 onBlur={() => setTooltip((current) => (current?.index === index ? null : current))}
