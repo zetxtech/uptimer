@@ -215,7 +215,7 @@ export function MonitorCard({
       {detailsOpen && (
         <div
           id={detailsId}
-          className="mt-3 space-y-4 rounded-lg border border-line-soft bg-surface-2 p-3 text-sm sm:p-4"
+          className="mt-3 space-y-3 rounded-lg border border-line-soft bg-surface-2 px-3 py-3 text-sm sm:px-4"
         >
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-2">
             <div className="flex flex-wrap items-center gap-2">
@@ -253,9 +253,10 @@ export function MonitorCard({
               strip={heartbeatStrip}
               maxBars={HEARTBEAT_BARS}
               density="compact"
+              bare
             />
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line-soft pt-3">
             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs tabular-nums text-ink-2">
               <span>
                 {t('monitor_card.fast')} {formatLatency(latencyStats.fastestMs)}

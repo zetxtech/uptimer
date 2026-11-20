@@ -32,7 +32,6 @@ type DisplaySlot = {
   heartbeat: DisplayHeartbeat | null;
 };
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
 
 function decodeStatusCode(code: string | undefined): CheckStatus {
   switch (code) {
@@ -152,35 +151,6 @@ function tooltipDotClass(status: CheckStatus): string {
   }
 }
 
-function buildSvgDataUri(
-  slots: DisplaySlot[],
-  compact: boolean,
-  scale: LatencyScale | null,
-): string {
-  const height = compact ? 20 : 24;
-  const barWidth = compact ? 4 : 6;
-  const gap = compact ? 2 : 3;
-  const width = slots.length === 0 ? barWidth : slots.length * barWidth + (slots.length - 1) * gap;
-
-  const rects = slots
-    .map((slot, index) => {
-      const x = index * (barWidth + gap);
-      if (!slot.heartbeat) {
-        const emptyHeight = compact ? height * 0.46 : height * 0.48;
-        const y = height - emptyHeight;
-        return `<rect x="${x}" y="${y.toFixed(2)}" width="${barWidth}" height="${emptyHeight.toFixed(2)}" rx="1" fill="transparent"/>`;
-      }
-
-      const barHeight = (height * getBarHeightPct(slot.heartbeat, scale, compact)) / 100;
-      const y = height - barHeight;
-      return `<rect x="${x}" y="${y.toFixed(2)}" width="${barWidth}" height="${barHeight.toFixed(2)}" rx="1" fill="${heartbeatFill(slot.heartbeat.status)}"/>`;
-    })
-    .join('');
-
-  const svg = `<svg xmlns="${SVG_NS}" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none">${rects}</svg>`;
-  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`;
-}
-
 function formatTime(timestamp: number, locale: string): string {
   return new Date(timestamp * 1000).toLocaleString(locale);
 }
@@ -254,7 +224,7 @@ function Tooltip({
 
   return (
     <div
-      className="fixed z-50 px-3 py-2 text-xs bg-surface dark:bg-surface-2 text-white rounded-lg shadow-lg pointer-events-none animate-fade-in"
+      className="pointer-events-none fixed z-50 animate-fade-in rounded-lg bg-ink px-3 py-2 text-xs text-surface shadow-lg"
       style={{
         left: position.x,
         top: position.y,
@@ -270,15 +240,15 @@ function Tooltip({
         <span className={`w-2 h-2 rounded-full ${tooltipDotClass(heartbeat.status)}`} />
         <span>{statusLabel(heartbeat.status, t)}</span>
         {heartbeat.latency_ms !== null && (
-          <span className="text-ink-3 dark:text-ink-2">• {heartbeat.latency_ms}ms</span>
+          <span className="opacity-75">• {heartbeat.latency_ms}ms</span>
         )}
       </div>
       {heartbeat.sample_count > 1 && (
-        <div className="mt-1 text-ink-2">
+        <div className="mt-1 opacity-75">
           {t('heartbeat.sample_checks', { count: heartbeat.sample_count })}
         </div>
       )}
-      <div className="absolute left-1/2 -bottom-1 -translate-x-1/2 w-2 h-2 bg-surface dark:bg-surface-2 rotate-45" />
+      <div className="absolute -bottom-1 left-1/2 h-2 w-2 -translate-x-1/2 rotate-45 bg-ink" />
     </div>
   );
 }
@@ -314,16 +284,12 @@ export function HeartbeatBar({
   const latencyScale = useMemo(() => buildLatencyScale(displayHeartbeats), [displayHeartbeats]);
   const slots = useMemo<DisplaySlot[]>(
     () => [
-      ...displayHeartbeats.map((heartbeat) => ({ heartbeat })),
       ...Array.from({ length: Math.max(0, slotCount - displayHeartbeats.length) }, () => ({
         heartbeat: null,
       })),
+      ...displayHeartbeats.map((heartbeat) => ({ heartbeat })),
     ],
     [displayHeartbeats, slotCount],
-  );
-  const backgroundImage = useMemo(
-    () => buildSvgDataUri(slots, compact, latencyScale),
-    [compact, latencyScale, slots],
   );
 
   const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -362,18 +328,28 @@ export function HeartbeatBar({
             count: Math.min(sourceHeartbeats.length, slotCount),
           })}
           className={cn(
-            'relative h-full w-full',
-            bare ? 'rounded-[2px]' : 'rounded-lg bg-surface-2',
+            'relative flex h-full w-full items-end gap-[2px]',
+            bare ? 'rounded-[2px]' : 'rounded-lg',
           )}
-          style={{
-            backgroundImage,
-            backgroundPosition: 'center',
-            backgroundRepeat: 'no-repeat',
-            backgroundSize: '100% 100%',
-          }}
           onMouseMove={handleMouseMove}
           onMouseLeave={() => setTooltip(null)}
-        />
+        >
+          {slots.map((slot, index) => (
+            <span
+              key={index}
+              aria-hidden="true"
+              className="pointer-events-none min-w-0 flex-1 rounded-[2px]"
+              style={{
+                height: slot.heartbeat
+                  ? `${getBarHeightPct(slot.heartbeat, latencyScale, compact)}%`
+                  : '28%',
+                backgroundColor: slot.heartbeat
+                  ? heartbeatFill(slot.heartbeat.status)
+                  : 'color-mix(in srgb, var(--color-text-secondary) 22%, transparent)',
+              }}
+            />
+          ))}
+        </div>
         {tooltip && (
           <div
             key={`heartbeat-overlay-${tooltip.index}-${tooltip.heartbeat.from_checked_at}-${tooltip.heartbeat.to_checked_at}`}
