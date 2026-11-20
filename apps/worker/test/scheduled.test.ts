@@ -6,6 +6,11 @@ vi.mock('../src/monitor/http', () => ({
 vi.mock('../src/monitor/tcp', () => ({
   runTcpCheck: vi.fn(),
 }));
+vi.mock('../src/monitor/screenshot', () => ({
+  findOutageAwaitingScreenshot: vi.fn(),
+  markScreenshotAttempt: vi.fn(),
+  captureOutageScreenshot: vi.fn(),
+}));
 vi.mock('../src/scheduler/lock', () => ({
   acquireLease: vi.fn(),
   releaseLease: vi.fn(),
@@ -45,6 +50,11 @@ import type { Env } from '../src/env';
 import { runInternalHomepageRefreshCore } from '../src/internal/homepage-refresh-core';
 import { runHttpCheck } from '../src/monitor/http';
 import { runTcpCheck } from '../src/monitor/tcp';
+import {
+  captureOutageScreenshot,
+  findOutageAwaitingScreenshot,
+  markScreenshotAttempt,
+} from '../src/monitor/screenshot';
 import { dispatchWebhookToChannels } from '../src/notify/webhook';
 import { computePublicHomepagePayload } from '../src/public/homepage';
 import { rebuildPublicMonitorRuntimeSnapshot } from '../src/public/monitor-runtime-bootstrap';
@@ -243,6 +253,9 @@ describe('scheduler/scheduled regression', () => {
       error: null,
       attempts: 1,
     });
+    vi.mocked(findOutageAwaitingScreenshot).mockResolvedValue(null);
+    vi.mocked(markScreenshotAttempt).mockResolvedValue(undefined);
+    vi.mocked(captureOutageScreenshot).mockResolvedValue(null);
     vi.mocked(runTcpCheck).mockResolvedValue({
       status: 'up',
       latencyMs: 12,
@@ -2114,6 +2127,54 @@ describe('scheduler/scheduled regression', () => {
     } finally {
       warnSpy.mockRestore();
     }
+  });
+
+  it('captures a pending outage screenshot when Browser Rendering is configured', async () => {
+    const env = createEnv({
+      dueRows: [
+        {
+          id: 314,
+          name: 'Screenshot target',
+          type: 'http',
+          target: 'https://example.com/health',
+          interval_sec: 60,
+          timeout_ms: 5000,
+          http_method: 'GET',
+          http_headers_json: null,
+          http_body: null,
+          expected_status_json: null,
+          forbidden_status_json: null,
+          response_keyword: null,
+          response_keyword_mode: null,
+          response_forbidden_keyword: null,
+          response_forbidden_keyword_mode: null,
+          state_status: 'up',
+          last_changed_at: 1700000000,
+          consecutive_failures: 0,
+          consecutive_successes: 3,
+        },
+      ],
+    });
+    Object.assign(env, { BROWSER: {} });
+    const pending = { outageId: 98, target: 'https://example.com/health' };
+    vi.mocked(findOutageAwaitingScreenshot).mockResolvedValue(pending);
+    vi.mocked(captureOutageScreenshot).mockResolvedValue({
+      outageId: pending.outageId,
+      contentType: 'image/jpeg',
+      width: 1280,
+      height: 800,
+      bytes: new Uint8Array([1]),
+      capturedAt: Math.floor(Date.now() / 1000),
+    });
+    const waitUntil = vi.fn();
+
+    await runScheduledTick(env, { waitUntil } as unknown as ExecutionContext);
+    expect(waitUntil).toHaveBeenCalledTimes(2);
+    await Promise.all(waitUntil.mock.calls.map(([promise]) => promise as Promise<unknown>));
+
+    expect(findOutageAwaitingScreenshot).toHaveBeenCalledWith(env);
+    expect(markScreenshotAttempt).toHaveBeenCalledWith(env, pending.outageId);
+    expect(captureOutageScreenshot).toHaveBeenCalledWith(env, pending);
   });
 
   it('processes due HTTP monitors and writes check/state rows', async () => {
