@@ -384,15 +384,25 @@ export default async function onRequest(context) {
     return jsonResponse({ error: { code: 'BAD_REQUEST', message: 'Missing request' } }, 400);
   }
 
+  if (request.method !== 'POST') {
+    return new Response(JSON.stringify({ error: { code: 'METHOD_NOT_ALLOWED', message: 'Use POST' } }), {
+      status: 405,
+      headers: { 'content-type': 'application/json; charset=utf-8', allow: 'POST' },
+    });
+  }
+
   const triggerSecret = readEnv(context, 'UPTIMER_PROBE_TRIGGER_SECRET');
-  if (triggerSecret) {
-    const provided = request.headers.get('x-uptimer-trigger') || '';
-    if (provided !== triggerSecret) {
-      return jsonResponse(
-        { error: { code: 'UNAUTHORIZED', message: 'Invalid trigger secret' } },
-        401,
-      );
-    }
+  if (!triggerSecret) {
+    return jsonResponse({
+      error: { code: 'NOT_CONFIGURED', message: 'UPTIMER_PROBE_TRIGGER_SECRET is required' },
+    }, 500);
+  }
+  const provided = request.headers.get('x-uptimer-trigger') || '';
+  if (provided !== triggerSecret) {
+    return jsonResponse(
+      { error: { code: 'UNAUTHORIZED', message: 'Invalid trigger secret' } },
+      401,
+    );
   }
 
   const apiBaseUrl = readEnv(context, 'UPTIMER_API_BASE_URL').replace(/\/+$/, '');
@@ -435,7 +445,7 @@ export default async function onRequest(context) {
   }
 
   const monitors = Array.isArray(config && config.monitors) ? config.monitors : [];
-  const maxPerRun = readIntEnv(context, 'UPTIMER_PROBE_MAX_MONITORS_PER_RUN', 64, 1, 200);
+  const maxPerRun = readIntEnv(context, 'UPTIMER_PROBE_MAX_MONITORS_PER_RUN', 64, 1, 64);
   const concurrency = readIntEnv(context, 'UPTIMER_PROBE_CONCURRENCY', 16, 1, 32);
   const slice = selectSlice(monitors, maxPerRun, nowMs);
 

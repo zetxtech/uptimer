@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>Uptimer · EdgeOne 国内探针</title>
+    <style>
+      :root { color-scheme: light; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+      * { box-sizing: border-box; }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 28px; background: linear-gradient(135deg,#f5f7fb,#eef3f8); color: #192338; }
+      main { width: min(100%, 560px); padding: clamp(28px, 5vw, 44px); background: #fff; border: 1px solid #e1e7f0; border-radius: 20px; box-shadow: 0 16px 50px rgb(22 42 71 / 8%); }
+      .logo { display: inline-flex; align-items: center; justify-content: center; width: 46px; height: 46px; border-radius: 13px; background: #1d4ed8; color: #fff; font-size: 23px; font-weight: 700; }
+      .eyebrow { margin: 22px 0 5px; color: #66758d; font-size: 12px; font-weight: 650; letter-spacing: .12em; }
+      h1 { font-size: clamp(24px, 4vw, 30px); font-weight: 720; letter-spacing: -.035em; margin: 0; }
+      p { color: #5c6980; font-size: 14px; line-height: 1.85; margin: 16px 0 24px; }
+      .item { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 15px 0; border-top: 1px solid #edf0f5; font-size: 13px; }
+      code { font: 12px ui-monospace, SFMono-Regular, Consolas, monospace; color: #234e9b; word-break: break-word; }
+      a { color: #205bd8; font-weight: 600; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .foot { margin-top: 26px; border-radius: 9px; background: #f1f5fb; padding: 14px; color: #66758d; font-size: 12px; line-height: 1.7; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="logo" aria-hidden="true">U</div>
+      <div class="eyebrow">UPTIMER / EDGEONE</div>
+      <h1>国内探测节点</h1>
+      <p>这是 Uptimer 的中国大陆 HTTP 监控探针。边缘函数负责检测目标站点，并将结果回传至 Uptimer。探针的在线状态与最新延迟请在 Uptimer 管理后台查看。</p>
+      <div class="item"><span>边缘函数健康检查</span><a href="/api/health">/api/health</a></div>
+      <div class="item"><span>探测触发端点</span><code>POST /api/probe</code></div>
+      <div class="foot">此页面仅表明静态站点已部署。健康检查用于确认边缘函数和环境配置；实际探测结果请以 Uptimer 后台为准。</div>
+    </main>
+  </body>
+</html>
