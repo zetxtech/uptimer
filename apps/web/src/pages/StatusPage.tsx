@@ -14,14 +14,10 @@ import {
 import type { Incident, IncidentSummary, Outage, PublicHomepageResponse } from '../api/types';
 import { DayDowntimeModal } from '../components/DayDowntimeModal';
 import { Markdown } from '../components/Markdown';
-import {
-  AVAILABILITY_BARS,
-  MOBILE_AVAILABILITY_BARS,
-  MonitorCard,
-} from '../components/MonitorCard';
+import { MonitorCard } from '../components/MonitorCard';
 import { PublicDialog } from '../components/PublicDialog';
 import { PublicStatusHeader } from '../components/PublicStatusHeader';
-import { incidentImpactLabel, incidentStatusLabel } from '../i18n/labels';
+import { incidentImpactLabel, incidentStatusLabel, statusLabel } from '../i18n/labels';
 import { formatDateTime, getBrowserTimeZone } from '../utils/datetime';
 import { Badge, Card } from '../components/ui';
 
@@ -291,47 +287,42 @@ function IncidentDetail({
 }
 
 function StatusPageSkeleton() {
-  const { t } = useI18n();
-
   return (
     <div className="min-h-screen bg-surface">
       <PublicStatusHeader />
-      <main
-        className="ui-public-container break-words pb-12 sm:pb-16"
-        aria-busy="true"
-        aria-label={t('common.loading')}
-      >
+      <main className="ui-public-container break-words pb-12 sm:pb-16" aria-busy="true">
         <section className="flex flex-col items-center pb-12 pt-16 text-center sm:pt-20">
           <div className="ui-skeleton h-10 w-10 rounded-full" />
           <div className="ui-skeleton mt-2 h-[34px] w-64 max-w-[85%] rounded" />
           <div className="ui-skeleton mt-3 h-[16px] w-48 max-w-[70%] rounded" />
         </section>
 
-        <section className="overflow-hidden rounded-xl border border-line bg-surface">
-          <div className="flex min-h-12 items-center justify-between bg-surface-2 px-4 py-3 sm:px-5">
-            <div className="ui-skeleton h-4 w-28 rounded" />
-            <div className="ui-skeleton h-3 w-16 rounded" />
+        <section className="rounded-xl border border-line bg-surface px-3 py-2">
+          <div className="flex items-center justify-between gap-3 rounded px-3 py-3 sm:px-4">
+            <div className="ui-skeleton h-4 w-32 rounded" />
+            <div className="ui-skeleton h-4 w-16 rounded-full" />
           </div>
-          {Array.from({ length: 6 }).map((_, index) => (
+          {Array.from({ length: 4 }).map((_, index) => (
             <div
               key={index}
-              className="border-b border-line-soft px-4 py-3.5 sm:px-5 sm:py-4"
+              className="min-w-0 border-b border-line-soft px-2 py-5 last:border-b-0 sm:px-3 sm:py-6"
             >
-              <div className="mb-2.5 flex items-center justify-between gap-3">
-                <div className="ui-skeleton h-[16px] w-44 max-w-[65%] rounded" />
-                <div className="ui-skeleton h-[13px] w-20 rounded" />
+              <div className="mb-3 flex items-center justify-between gap-4">
+                <div className="ui-skeleton h-4 w-40 max-w-[65%] rounded" />
+                <div className="ui-skeleton h-4 w-16 rounded" />
               </div>
               <div data-bar-count="60" className="ui-public-uptime-history flex h-[19px] gap-[2px] sm:h-[20px]">
                 {Array.from({ length: 60 }).map((_, bar) => (
                   <div key={bar} className="ui-skeleton h-full min-w-0 flex-1 rounded-[2px]" />
                 ))}
               </div>
+              <div className="mt-2 flex items-center justify-between">
+                <div className="ui-skeleton h-3 w-16 rounded" />
+                <div className="ui-skeleton h-3 w-10 rounded" />
+              </div>
+              <div className="ui-skeleton mt-3 h-3 w-12 rounded" />
             </div>
           ))}
-          <div className="flex justify-between px-4 pb-3 pt-2 sm:px-5">
-            <div className="ui-skeleton h-3 w-16 rounded" />
-            <div className="ui-skeleton h-3 w-10 rounded" />
-          </div>
         </section>
       </main>
     </div>
@@ -601,60 +592,53 @@ export function StatusPage() {
         {/* Monitors */}
         <section>
           <h2 className="sr-only">{t('status_page.services')}</h2>
-          <div className="overflow-hidden rounded-xl border border-line bg-surface">
-            {groupedMonitors.map((group) => (
-              <details
-                key={group.name}
-                open
-                className="ui-public-group border-t border-line-soft first:border-t-0"
-              >
-                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 bg-surface-2 px-4 py-3 text-[13px] font-medium text-ink transition-colors hover:bg-surface-2 sm:px-5 [&::-webkit-details-marker]:hidden">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <svg
-                      className="ui-public-group-chevron h-4 w-4 shrink-0 text-ink-3 transition-transform"
-                      viewBox="0 0 20 20"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={1.5}
-                      aria-hidden
-                    >
-                      <path d="m6 8 4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                    <span className="truncate">
+          <div className="rounded-xl border border-line bg-surface px-3 py-2">
+            {groupedMonitors.map((group) => {
+              const groupStatus =
+                (['down', 'maintenance', 'unknown', 'paused', 'up'] as const).find((status) =>
+                  group.monitors.some((monitor) => monitor.status === status),
+                ) ?? 'unknown';
+              return (
+                <details
+                  key={group.name}
+                  open
+                  className="ui-public-group border-t border-line-soft first:border-t-0"
+                >
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded px-3 py-3 text-[13px] font-medium text-ink hover:bg-surface-2 sm:px-4 [&::-webkit-details-marker]:hidden">
+                    <span className="min-w-0 truncate">
                       {group.name === t('status_page.group_ungrouped') ? siteTitle : group.name}
                     </span>
-                  </span>
-                  <span className="shrink-0 text-[11px] font-normal text-ink-3">
-                    {group.monitors.length} {t('status_page.services')}
-                  </span>
-                </summary>
-                <div className="min-w-0">
-                  {group.monitors.map((monitor) => (
-                    <MonitorCard
-                      key={monitor.id}
-                      monitor={monitor}
-                      ratingLevel={data.uptime_rating_level}
-                      timeZone={timeZone}
-                      onSelect={() => setSelectedMonitorId(monitor.id)}
-                      onDayClick={(dayStartAt) =>
-                        setSelectedDay({ monitorId: monitor.id, dayStartAt })
-                      }
-                    />
-                  ))}
-                  {group.monitors.length > 0 && (
-                    <div className="flex items-center justify-between px-4 pb-3 pt-2 text-[11px] text-ink-3 sm:px-5">
-                      <span className="sm:hidden">
-                        {t('monitor_card.range_start', { count: MOBILE_AVAILABILITY_BARS })}
-                      </span>
-                      <span className="hidden sm:inline">
-                        {t('monitor_card.range_start', { count: AVAILABILITY_BARS })}
-                      </span>
-                      <span>{t('monitor_card.range_end')}</span>
-                    </div>
-                  )}
-                </div>
-              </details>
-            ))}
+                    <span className="flex shrink-0 items-center gap-3">
+                      <Badge variant={groupStatus}>{statusLabel(groupStatus, t)}</Badge>
+                      <svg
+                        className="ui-public-group-chevron h-4 w-4 text-ink-3"
+                        viewBox="0 0 20 20"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth={1.5}
+                        aria-hidden
+                      >
+                        <path d="m6 8 4 4 4-4" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </span>
+                  </summary>
+                  <div className="min-w-0 px-2 sm:px-3">
+                    {group.monitors.map((monitor) => (
+                      <MonitorCard
+                        key={monitor.id}
+                        monitor={monitor}
+                        ratingLevel={data.uptime_rating_level}
+                        timeZone={timeZone}
+                        onSelect={() => setSelectedMonitorId(monitor.id)}
+                        onDayClick={(dayStartAt) =>
+                          setSelectedDay({ monitorId: monitor.id, dayStartAt })
+                        }
+                      />
+                    ))}
+                  </div>
+                </details>
+              );
+            })}
           </div>
           {data.monitors.length === 0 && (
             <Card className="p-8 text-center">

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 
 import type {
   HomepageHeartbeatStrip,
@@ -14,8 +14,8 @@ import { formatTime } from '../utils/datetime';
 import { formatLatency, formatPct } from '../utils/uptime';
 
 const HEARTBEAT_BARS = 60;
-export const AVAILABILITY_BARS = 60;
-export const MOBILE_AVAILABILITY_BARS = 30;
+const AVAILABILITY_BARS = 60;
+const MOBILE_AVAILABILITY_BARS = 30;
 
 type PublicMonitorLike = Pick<
   PublicMonitor,
@@ -132,20 +132,10 @@ export function MonitorCard({
     [heartbeatStrip, heartbeats],
   );
 
-  const [detailsOpen, setDetailsOpen] = useState(false);
-  const detailsId = `public-monitor-details-${monitor.id}`;
-  const statusTone = {
-    up: 'text-status-up',
-    down: 'text-status-down',
-    maintenance: 'text-status-maintenance',
-    paused: 'text-status-paused',
-    unknown: 'text-ink-3',
-  }[monitor.status];
-
   return (
-    <article className="group/monitor min-w-0 border-b border-line-soft px-4 py-3.5 last:border-b-0 sm:px-5 sm:py-4">
-      <div className="mb-2.5 flex min-w-0 items-center justify-between gap-3">
-        <h3 className="min-w-0 flex-1 text-[13px] font-medium text-ink sm:text-[14px]">
+    <article className="min-w-0 border-b border-line-soft py-5 last:border-b-0 sm:py-6">
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <h3 className="min-w-0 text-[14px] font-semibold text-ink">
           <button
             type="button"
             onClick={onSelect}
@@ -153,7 +143,7 @@ export function MonitorCard({
           >
             <span
               aria-hidden="true"
-              className={`h-2 w-2 shrink-0 rounded-full ${
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
                 {
                   up: 'bg-status-up',
                   down: 'bg-status-down',
@@ -164,66 +154,58 @@ export function MonitorCard({
               }`}
             />
             <span className="truncate">{monitor.name}</span>
+            <span className="sr-only">{statusLabel(monitor.status, t)}</span>
           </button>
         </h3>
-        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
-          <span
-            className="hidden text-[11px] tabular-nums text-ink-3 sm:inline"
-            title={t('monitor_card.uptime_title')}
-          >
-            {uptime30d ? formatPct(uptime30d.uptime_pct) : '—'}
+        <span
+          className="shrink-0 text-sm tabular-nums text-ink-2"
+          title={t('monitor_card.uptime_title')}
+        >
+          {uptime30d ? formatPct(uptime30d.uptime_pct) : '—'}
+        </span>
+      </div>
+
+      <div className="min-w-0">
+        <UptimeBar30d
+          variant="block"
+          days={uptimeDays}
+          strip={uptimeDayStrip}
+          ratingLevel={ratingLevel}
+          maxBars={AVAILABILITY_BARS}
+          timeZone={timeZone}
+          onDayClick={onDayClick}
+          fillMode="pad"
+          blockClassName="h-[19px] sm:h-[20px] [&_button:focus-visible]:relative [&_button:focus-visible]:z-10 [&_button:focus-visible]:ring-2 [&_button:focus-visible]:ring-ink [&_button:focus-visible]:ring-offset-2 [&_button:focus-visible]:ring-offset-surface"
+        />
+        <div className="mt-2 flex items-center justify-between text-xs text-ink-3">
+          <span className="sm:hidden">
+            {t('monitor_card.range_start', { count: MOBILE_AVAILABILITY_BARS })}
           </span>
-          <span className={`max-w-[105px] truncate text-[12px] font-medium ${statusTone}`}>
-            {statusLabel(monitor.status, t)}
+          <span className="hidden sm:inline">
+            {t('monitor_card.range_start', { count: AVAILABILITY_BARS })}
           </span>
-          <button
-            type="button"
-            onClick={() => setDetailsOpen((current) => !current)}
-            aria-label={t('incident_detail.details')}
-            aria-expanded={detailsOpen}
-            aria-controls={detailsOpen ? detailsId : undefined}
-            className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[8px] text-ink-3 transition-colors hover:bg-surface-2 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ink"
-          >
-            <svg
-              aria-hidden="true"
-              className="h-3.5 w-3.5"
-              viewBox="0 0 20 20"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth={1.5}
-              strokeLinecap="round"
-            >
-              <path d="M4.5 10h11" />
-              <path d="M10 4.5v11" className={detailsOpen ? 'opacity-0' : undefined} />
-            </svg>
-          </button>
+          <span>{t('monitor_card.range_end')}</span>
         </div>
       </div>
 
-      <UptimeBar30d
-        variant="block"
-        days={uptimeDays}
-        strip={uptimeDayStrip}
-        ratingLevel={ratingLevel}
-        maxBars={AVAILABILITY_BARS}
-        timeZone={timeZone}
-        onDayClick={onDayClick}
-        fillMode="pad"
-        blockClassName="h-[19px] sm:h-[20px]"
-      />
-
-      {detailsOpen && (
-        <div
-          id={detailsId}
-          className="mt-3 space-y-3 rounded-lg border border-line-soft bg-surface-2 px-3 py-3 text-sm sm:px-4"
-        >
+      <details className="group mt-3 text-sm">
+        <summary className="flex w-fit cursor-pointer list-none items-center gap-1 rounded text-xs text-ink-3 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink [&::-webkit-details-marker]:hidden">
+          {t('incident_detail.details')}
+          <svg
+            aria-hidden="true"
+            className="h-3 w-3 transition-transform group-open:rotate-180"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+          >
+            <path d="m4 6 4 4 4-4" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+        </summary>
+        <div className="mt-4 space-y-4 rounded-lg bg-surface-2 p-4">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-2">
             <div className="flex flex-wrap items-center gap-2">
               <span>{statusLabel(monitor.status, t)}</span>
               <span className="uppercase">{monitor.type}</span>
-              <span className="tabular-nums sm:hidden">
-                {uptime30d ? formatPct(uptime30d.uptime_pct) : '—'}
-              </span>
               {monitor.is_stale && (
                 <span className="text-status-paused">{t('monitor_card.stale')}</span>
               )}
@@ -256,7 +238,7 @@ export function MonitorCard({
               bare
             />
           </div>
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line-soft pt-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs tabular-nums text-ink-2">
               <span>
                 {t('monitor_card.fast')} {formatLatency(latencyStats.fastestMs)}
@@ -277,7 +259,7 @@ export function MonitorCard({
             </button>
           </div>
         </div>
-      )}
+      </details>
     </article>
   );
 }
